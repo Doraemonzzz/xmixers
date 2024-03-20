@@ -42,8 +42,8 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
     # Note that this is a string of words separated by whitespace, not a list.
-    keywords="pytorch pretrained models efficientnet mobilenetv3 mnasnet resnet vision transformer vit",
-    packages=find_packages(exclude=["convert", "tests", "results"]),
+    keywords="",
+    packages=find_packages(exclude=["tests", "results"]),
     include_package_data=True,
     install_requires=["torch >= 1.7"],
     python_requires=">=3.7",

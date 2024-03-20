@@ -13,3 +13,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
     - Linear RNN
     - Long Convolution
 - Channel Mixers
+
+# ToDo
+
+- [x] long_conv_1d_op.
