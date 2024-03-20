@@ -9,6 +9,8 @@ def long_conv_1d_op_naive(x, w, dim):
          w0, w1, ... , w(n-1), w0, w(-(n-1)), ... , w(-1) for non causal
     dim: i
     """
+    # other dtype have numeric error
+    assert w.dtype == torch.float32
     n = x.shape[dim]
     if w.shape[0] == n:  # causal situation
         w = torch.cat([w, torch.zeros_like(w).to(w)], dim=0)
@@ -42,6 +44,8 @@ def long_conv_1d_op(x, w, dim):
          w0, w1, ... , w(n-1), w0, w(-(n-1)), ... , w(-1) for non causal
     dim: i
     """
+    # other dtype have numeric error
+    assert w.dtype == torch.float32
     m = len(x.shape)
     if dim < 0:
         dim += m
