@@ -16,4 +16,8 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 
 # ToDo
 
+## Ops
 - [x] long_conv_1d_op.
+
+## Token Mixers
+- [x] Gtu.
