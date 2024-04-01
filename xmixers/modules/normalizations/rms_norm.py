@@ -1,19 +1,18 @@
-# https://github.com/bzhangGo/rmsnorm/blob/master/rmsnorm_torch.py
-# https://github.com/bzhangGo/zero/blob/master/modules/rela.py
+"""
+SimpleRMSNorm in https://arxiv.org/abs/2307.14995
+RMSNorm in https://arxiv.org/pdf/1910.07467.pdf
+GatedRMSNorm in https://arxiv.org/pdf/2104.07012.pdf
+
+Reference:
+https://github.com/bzhangGo/rmsnorm/blob/master/rmsnorm_torch.py
+https://github.com/bzhangGo/zero/blob/master/modules/rela.py
+"""
 import torch
 import torch.nn as nn
 
 
 class SimpleRMSNorm(nn.Module):
-    def __init__(self, d, p=-1.0, eps=1e-8, bias=False):
-        """
-            Root Mean Square Layer Normalization
-        :param d: model size
-        :param p: partial RMSNorm, valid value [0, 1], default -1.0 (disabled)
-        :param eps:  epsilon value, default 1e-8
-        :param bias: whether use bias term for RMSNorm, disabled by
-            default because RMSNorm doesn't enforce re-centering invariance.
-        """
+    def __init__(self, d: int, eps: float = 1e-8) -> None:
         super(SimpleRMSNorm, self).__init__()
         self.eps = eps
         self.d = d
@@ -29,7 +28,9 @@ class SimpleRMSNorm(nn.Module):
 
 
 class RMSNorm(nn.Module):
-    def __init__(self, d, p=-1.0, eps=1e-8, bias=False):
+    def __init__(
+        self, d: int, p: float = -1.0, eps: float = 1e-8, bias: bool = False
+    ) -> None:
         """
             Root Mean Square Layer Normalization
         :param d: model size
@@ -73,14 +74,7 @@ class RMSNorm(nn.Module):
 
 
 class GatedRMSNorm(nn.Module):
-    def __init__(self, d, eps=1e-8, bias=False):
-        """
-            Root Mean Square Layer Normalization
-        :param d: model size
-        :param eps:  epsilon value, default 1e-8
-        :param bias: whether use bias term for RMSNorm, disabled by
-            default because RMSNorm doesn't enforce re-centering invariance.
-        """
+    def __init__(self, d: int, eps: float = 1e-8, bias: bool = False) -> None:
         super(GatedRMSNorm, self).__init__()
 
         self.eps = eps

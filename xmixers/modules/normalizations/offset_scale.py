@@ -1,9 +1,13 @@
+"""
+Offset scale: y = gamma * x + beta
+"""
+
 import torch
 import torch.nn as nn
 
 
 class OffsetScale(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim: int) -> None:
         super().__init__()
         self.gamma = nn.Parameter(torch.ones(dim))
         self.beta = nn.Parameter(torch.zeros(dim))

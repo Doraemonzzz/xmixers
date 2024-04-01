@@ -40,7 +40,7 @@ class ActLayer(nn.Module):
     def __init__(
         self,
         activation: str,
-    ):
+    ) -> None:
         super().__init__()
         self.activation = activation
         self.f = get_activation_fn(activation)

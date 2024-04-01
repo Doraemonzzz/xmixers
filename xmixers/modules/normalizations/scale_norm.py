@@ -1,9 +1,13 @@
+"""
+ScaleNorm in https://arxiv.org/pdf/2202.10447.pdf
+"""
+
 import torch
 from torch import nn
 
 
 class ScaleNorm(nn.Module):
-    def __init__(self, d, eps=1e-5):
+    def __init__(self, d: int, eps: bool = 1e-5) -> None:
         super().__init__()
         self.d = d
         self.eps = eps
