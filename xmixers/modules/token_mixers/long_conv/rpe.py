@@ -1,3 +1,7 @@
+"""
+Relative Position Encoder in https://arxiv.org/pdf/2305.04749.pdf
+"""
+
 import torch
 import torch.nn as nn
 
@@ -7,14 +11,16 @@ from xmixers.utils import ActLayer, get_norm_fn, print_params
 class Rpe(nn.Module):
     def __init__(
         self,
-        in_dim,
-        feature_dim,
-        out_dim,
-        activation="silu",
-        bias=False,
-        rpe_layers=3,
-        norm_type="layernorm",
-    ):
+        in_dim: int,
+        feature_dim: int,
+        out_dim: int,
+        activation: str = "silu",
+        bias: bool = False,
+        rpe_layers: int = 3,
+        norm_type: str = "layernorm",
+        *args,
+        **kwargs,
+    ) -> None:
         super().__init__()
         # get local varables
         params = locals()

@@ -1,3 +1,7 @@
+"""
+Toeplitz Neural Operator in https://arxiv.org/pdf/2305.04749.pdf
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,18 +15,19 @@ from .rpe import Rpe
 class Tno(nn.Module):
     def __init__(
         self,
-        in_dim,
-        feature_dim,
-        out_dim,
-        activation="silu",
-        bias=False,
-        rpe_layers=3,
-        norm_type="layernorm",
-        use_decay=True,
-        causal=True,
-        dim=1,
+        in_dim: int,
+        feature_dim: int,
+        out_dim: int,
+        activation: str = "silu",
+        bias: bool = False,
+        rpe_layers: int = 3,
+        norm_type: str = "layernorm",
+        use_decay: bool = True,
+        causal: bool = True,
+        dim: int = 1,
+        *args,
         **kwargs,
-    ):
+    ) -> None:
         super().__init__()
         # get local varables
         params = locals()

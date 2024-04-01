@@ -1,3 +1,12 @@
+"""
+Gated Toeplitz Unit in https://arxiv.org/pdf/2305.04749.pdf
+Add support for multi dimension.
+For example, if the input dim is (h, w, d),
+then the output is g * (tno1(x) + tno2(x)).
+"""
+
+from typing import List
+
 import torch.nn as nn
 
 from xmixers.utils import get_activation_fn
@@ -8,19 +17,20 @@ from .tno import Tno
 class Gtu(nn.Module):
     def __init__(
         self,
-        embed_dim,
-        expand_ratio=1,
-        bias=False,
-        activation="silu",
-        causal=False,
-        norm_type="layernorm",
-        use_decay=True,
-        in_dim=1,
-        feature_dim=32,
-        rpe_layers=3,
-        dims=[1],
+        embed_dim: int,
+        expand_ratio: int = 1,
+        bias: bool = False,
+        activation: str = "silu",
+        causal: bool = False,
+        norm_type: str = "layernorm",
+        use_decay: bool = True,
+        in_dim: int = 1,
+        feature_dim: int = 32,
+        rpe_layers: int = 3,
+        dims: List[int] = [1],
+        *args,
         **kwargs,
-    ):
+    ) -> None:
         super().__init__()
         self.embed_dim = embed_dim
         self.expand_ratio = expand_ratio
