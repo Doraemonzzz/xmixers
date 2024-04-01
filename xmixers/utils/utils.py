@@ -3,17 +3,8 @@ import math
 import os
 import sys
 
-import torch
 import torch.distributed as dist
-import torch.nn.functional as F
 from torch import nn
-
-from xmixers.modules.normalizations import (
-    GatedRMSNorm,
-    RMSNorm,
-    ScaleNorm,
-    SimpleRMSNorm,
-)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -24,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger("print_config")
 
 
-def is_dist_avail_and_initialized():
+def is_dist_avail_and_initialized() -> bool:
     if not dist.is_available():
         return False
     if not dist.is_initialized():
@@ -32,28 +23,28 @@ def is_dist_avail_and_initialized():
     return True
 
 
-def get_world_size():
+def get_world_size() -> int:
     if not is_dist_avail_and_initialized():
         return 1
     return dist.get_world_size()
 
 
-def get_rank():
+def get_rank() -> int:
     if not is_dist_avail_and_initialized():
         return 0
     return dist.get_rank()
 
 
-def is_main_process():
+def is_main_process() -> bool:
     return get_rank() == 0
 
 
-def logging_info(string):
+def logging_info(string: str) -> None:
     if is_main_process():
         logger.info(string)
 
 
-def print_params(**kwargs):
+def print_params(**kwargs) -> None:
     if is_main_process():
         logger.info(f"start print config of {kwargs['__class__']}")
         for key in kwargs:
@@ -63,7 +54,7 @@ def print_params(**kwargs):
         logger.info(f"end print config of {kwargs['__class__']}")
 
 
-def print_config(config):
+def print_config(config) -> None:
     if is_main_process():
         logger.info(f"start print config of {config['__class__']}")
         for key in config:
@@ -73,7 +64,7 @@ def print_config(config):
         logger.info(f"end print config of {config['__class__']}")
 
 
-def print_module(module):
+def print_module(module: nn.Module) -> None:
     named_modules = set()
     for p in module.named_modules():
         named_modules.update([p[0]])
@@ -98,62 +89,5 @@ def print_module(module):
     return string_repr.rstrip("\n")
 
 
-def get_activation_fn(activation):
-    logger.info(f"activation: {activation}")
-    if activation == "gelu":
-        return F.gelu
-    elif activation == "relu":
-        return F.relu
-    elif activation == "elu":
-        return F.elu
-    elif activation == "sigmoid":
-        return F.sigmoid
-    elif activation == "exp":
-        return torch.exp
-    elif activation == "leak":
-        return F.leaky_relu
-    elif activation == "1+elu":
-
-        def f(x):
-            return 1 + F.elu(x)
-
-        return f
-    elif activation == "2+elu":
-
-        def f(x):
-            return 2 + F.elu(x)
-
-        return f
-    elif activation == "silu":
-        return F.silu
-    else:
-        return lambda x: x
-
-
-class ActLayer(nn.Module):
-    def __init__(
-        self,
-        activation,
-    ):
-        super().__init__()
-        self.f = get_activation_fn(activation)
-
-    def forward(self, x):
-        return self.f(x)
-
-
-def get_norm_fn(norm_type):
-    if norm_type == "rmsnorm":
-        return RMSNorm
-    elif norm_type == "gatedrmsnorm":
-        return GatedRMSNorm
-    elif norm_type == "simplermsnorm":
-        return SimpleRMSNorm
-    elif norm_type == "scalenorm":
-        return ScaleNorm
-    else:
-        return nn.LayerNorm
-
-
-def next_power_of_2(n):
+def next_power_of_2(n: int) -> int:
     return 2 ** (math.ceil(math.log(n, 2)))
