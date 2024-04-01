@@ -1,7 +1,7 @@
 import torch
 
 
-def long_conv_1d_op_naive(x, w, dim):
+def long_conv_1d_op_naive(x: torch.Tensor, w: torch.Tensor, dim: int) -> torch.Tensor:
     """
     x:   b, n1, ... nk, d
     w:   ni, d
@@ -36,7 +36,7 @@ def long_conv_1d_op_naive(x, w, dim):
     return y
 
 
-def long_conv_1d_op(x, w, dim):
+def long_conv_1d_op(x: torch.Tensor, w: torch.Tensor, dim: int) -> torch.Tensor:
     """
     x:   b, n1, ... nk, d
     w:   ni, d
