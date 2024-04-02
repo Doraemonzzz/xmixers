@@ -1,12 +1,12 @@
 # coding=utf-8
 """ Tnn configuration"""
 
+from typing import List
+
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
-
-LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class TnnConfig(PretrainedConfig):
@@ -21,19 +21,25 @@ class TnnConfig(PretrainedConfig):
         vocab_size: int = 50272,
         use_cache: bool = True,
         init_std: float = 0.02,
-        # model config
-        decoder_embed_dim: int = 1024,
-        expand_ratio: int = 2,
-        decoder_layers: int = 24,
+        ##### model config
+        # gtu config
+        embed_dim: int = 768,
+        expand_ratio: int = 1,
+        bias: bool = False,
+        gtu_activation: str = "silu",
+        causal: bool = True,
+        norm_type: str = "layernorm",
+        use_decay: bool = True,
+        in_dim: int = 1,
+        rpe_feature_dim: int = 32,  # for rpe in tno
+        rpe_layers: int = 3,
+        dims: List[int] = [-2],
+        # glu config
+        mid_dim: int = 1024,
+        glu_activation: str = "silu",
+        # others
+        num_layers: int = 24,
         add_bos_token: int = False,
-        in_act="none",
-        out_act="silu",
-        causal=True,
-        glu_act="none",
-        glu_dim=2816,
-        bias=False,
-        norm_type="simplermsnorm",
-        no_scale_embedding=True,
         **kwargs,
     ):
         super().__init__(
@@ -47,15 +53,21 @@ class TnnConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.init_std = init_std
         # add
-        self.decoder_embed_dim = decoder_embed_dim
+        self.embed_dim = embed_dim
         self.expand_ratio = expand_ratio
-        self.decoder_layers = decoder_layers
-        self.add_bos_token = add_bos_token
-        self.in_act = in_act
-        self.out_act = out_act
-        self.causal = causal
-        self.glu_act = glu_act
-        self.glu_dim = glu_dim
         self.bias = bias
+
+        self.gtu_activation = gtu_activation
+        self.causal = causal
         self.norm_type = norm_type
-        self.no_scale_embedding = no_scale_embedding
+        self.use_decay = use_decay
+        self.in_dim = in_dim
+        self.rpe_feature_dim = rpe_feature_dim
+        self.rpe_layers = rpe_layers
+        self.dims = dims
+        # glu config
+        self.mid_dim = mid_dim
+        self.glu_activation = glu_activation
+        # others
+        self.num_layers = num_layers
+        self.add_bos_token = add_bos_token
