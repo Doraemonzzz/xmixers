@@ -4,18 +4,15 @@ GLU in https://arxiv.org/pdf/2002.05202.pdf
 
 import torch.nn as nn
 
-from xmixers.utils import get_activation_fn, print_params
+from xmixers.modules import BaseModule
+from xmixers.modules.activations import get_activation_fn
 
 
-class GLU(nn.Module):
+class GLU(BaseModule):
     def __init__(
         self, embed_dim: int, mid_dim: int, activation: str, bias: bool = True
     ) -> None:
         super().__init__()
-        # get local varables
-        params = locals()
-        # print params
-        print_params(**params)
 
         self.w1 = nn.Linear(embed_dim, mid_dim, bias=bias)
         self.w2 = nn.Linear(embed_dim, mid_dim, bias=bias)

@@ -1,11 +1,14 @@
+import torch
 import torch.nn.functional as F
-from torch import nn
 
-from .utils import logger
+from xmixers.utils import XMIXERS_DEBUG, logger
+
+from .base_module import BaseModule
 
 
 def get_activation_fn(activation: str) -> None:
-    logger.info(f"activation: {activation}")
+    if XMIXERS_DEBUG:
+        logger.info(f"activation: {activation}")
     if activation == "gelu":
         return F.gelu
     elif activation == "relu":
@@ -36,7 +39,7 @@ def get_activation_fn(activation: str) -> None:
         return lambda x: x
 
 
-class ActLayer(nn.Module):
+class ActLayer(BaseModule):
     def __init__(
         self,
         activation: str,

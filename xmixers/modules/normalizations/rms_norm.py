@@ -10,8 +10,10 @@ https://github.com/bzhangGo/zero/blob/master/modules/rela.py
 import torch
 import torch.nn as nn
 
+from xmixers.modules import BaseModule
 
-class SimpleRMSNorm(nn.Module):
+
+class SimpleRMSNorm(BaseModule):
     def __init__(self, d: int, eps: float = 1e-8) -> None:
         super(SimpleRMSNorm, self).__init__()
         self.eps = eps
@@ -27,7 +29,7 @@ class SimpleRMSNorm(nn.Module):
         return x_normed
 
 
-class RMSNorm(nn.Module):
+class RMSNorm(BaseModule):
     def __init__(
         self, d: int, p: float = -1.0, eps: float = 1e-8, bias: bool = False
     ) -> None:
@@ -73,7 +75,7 @@ class RMSNorm(nn.Module):
         return self.scale * x_normed
 
 
-class GatedRMSNorm(nn.Module):
+class GatedRMSNorm(BaseModule):
     def __init__(self, d: int, eps: float = 1e-8, bias: bool = False) -> None:
         super(GatedRMSNorm, self).__init__()
 

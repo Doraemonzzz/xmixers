@@ -5,10 +5,11 @@ Relative Position Encoder in https://arxiv.org/pdf/2305.04749.pdf
 import torch
 import torch.nn as nn
 
-from xmixers.utils import ActLayer, get_norm_fn, print_params
+from xmixers.modules import BaseModule, get_norm_fn
+from xmixers.modules.activations import ActLayer
 
 
-class Rpe(nn.Module):
+class Rpe(BaseModule):
     def __init__(
         self,
         in_dim: int,
@@ -22,10 +23,6 @@ class Rpe(nn.Module):
         **kwargs,
     ) -> None:
         super().__init__()
-        # get local varables
-        params = locals()
-        # print params
-        print_params(**params)
 
         self.in_dim = in_dim
         if in_dim > 1:

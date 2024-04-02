@@ -6,13 +6,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from xmixers.modules import BaseModule
 from xmixers.ops import long_conv_1d_op
-from xmixers.utils import next_power_of_2, print_module, print_params
+from xmixers.utils import next_power_of_2, print_module
 
 from .rpe import Rpe
 
 
-class Tno(nn.Module):
+class Tno(BaseModule):
     def __init__(
         self,
         in_dim: int,
@@ -29,10 +30,6 @@ class Tno(nn.Module):
         **kwargs,
     ) -> None:
         super().__init__()
-        # get local varables
-        params = locals()
-        # print params
-        print_params(**params)
 
         self.rpe = Rpe(
             in_dim=in_dim,

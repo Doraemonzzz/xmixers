@@ -5,8 +5,10 @@ ScaleNorm in https://arxiv.org/pdf/2202.10447.pdf
 import torch
 from torch import nn
 
+from xmixers.modules import BaseModule
 
-class ScaleNorm(nn.Module):
+
+class ScaleNorm(BaseModule):
     def __init__(self, d: int, eps: bool = 1e-5) -> None:
         super().__init__()
         self.d = d
