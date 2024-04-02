@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 import torch
+import torch.nn as nn
 import torch.utils.checkpoint
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
@@ -18,22 +19,6 @@ class TnnLayer(BaseModule):
     def __init__(
         self,
         config: TnnConfig,
-        # embed_dim: int,
-        # expand_ratio: int = 1,
-        # bias: bool = False,
-        # gtu_activation: str = "silu",
-        # causal: bool = True,
-        # norm_type: str = "layernorm",
-        # use_decay: bool = True,
-        # in_dim: int = 1,
-        # feature_dim: int = 32,
-        # rpe_layers: int = 3,
-        # dims: List[int] = [-2],
-        # # glu config
-        # mid_dim: int = 1024,
-        # glu_activation: str = "silu",
-        # *args,
-        # **kwargs,
     ) -> None:
         super().__init__()
 
@@ -45,8 +30,8 @@ class TnnLayer(BaseModule):
             causal=config.causal,
             norm_type=config.norm_type,
             use_decay=config.use_decay,
-            in_dim=config.in_dim,
-            feature_dim=config.feature_dim,
+            rpe_in_dim=config.rpe_in_dim,
+            rpe_feature_dim=config.rpe_feature_dim,
             rpe_layers=config.rpe_layers,
             dims=config.dims,
         )
@@ -107,10 +92,10 @@ class TnnModel(TnnPreTrainedModel):
         self.gradient_checkpointing = False
 
         self.embed_tokens = nn.Embedding(
-            config.vocab_size, config.hidden_size, self.padding_idx
+            config.vocab_size, config.embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
-            [TnnLayer(config) for layer_idx in range(config.num_hidden_layers)]
+            [TnnLayer(config) for layer_idx in range(config.num_layers)]
         )
         self.norm = get_norm_fn(config.norm_type)(config.embed_dim)
 

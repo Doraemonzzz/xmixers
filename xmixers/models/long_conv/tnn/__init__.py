@@ -5,6 +5,6 @@ from .modeling_tnn import TnnForCausalLM, TnnModel
 
 AutoConfig.register(TnnConfig.model_type, TnnConfig)
 AutoModel.register(TnnConfig, TnnModel)
-AutoModelForCausalLM.register(TnnModel, TnnForCausalLM)
+AutoModelForCausalLM.register(TnnConfig, TnnForCausalLM)
 
 __all__ = ["TnnConfig", "TnnModel", "TnnForCausalLM"]

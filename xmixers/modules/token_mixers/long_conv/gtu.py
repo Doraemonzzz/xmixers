@@ -25,8 +25,8 @@ class Gtu(BaseModule):
         causal: bool = True,
         norm_type: str = "layernorm",
         use_decay: bool = True,
-        in_dim: int = 1,
-        feature_dim: int = 32,
+        rpe_in_dim: int = 1,
+        rpe_feature_dim: int = 32,
         rpe_layers: int = 3,
         dims: List[int] = [-2],
         *args,
@@ -48,8 +48,8 @@ class Gtu(BaseModule):
             # tno
             self.tno_list.append(
                 Tno(
-                    in_dim=in_dim,
-                    feature_dim=feature_dim,
+                    in_dim=rpe_in_dim,
+                    feature_dim=rpe_feature_dim,
                     out_dim=d1,
                     activation=activation,
                     bias=bias,

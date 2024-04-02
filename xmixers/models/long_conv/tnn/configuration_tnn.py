@@ -30,7 +30,7 @@ class TnnConfig(PretrainedConfig):
         causal: bool = True,
         norm_type: str = "layernorm",
         use_decay: bool = True,
-        in_dim: int = 1,
+        rpe_in_dim: int = 1,
         rpe_feature_dim: int = 32,  # for rpe in tno
         rpe_layers: int = 3,
         dims: List[int] = [-2],
@@ -61,7 +61,7 @@ class TnnConfig(PretrainedConfig):
         self.causal = causal
         self.norm_type = norm_type
         self.use_decay = use_decay
-        self.in_dim = in_dim
+        self.rpe_in_dim = rpe_in_dim
         self.rpe_feature_dim = rpe_feature_dim
         self.rpe_layers = rpe_layers
         self.dims = dims
