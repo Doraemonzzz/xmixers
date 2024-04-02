@@ -41,7 +41,7 @@ class TnnConfig(PretrainedConfig):
         num_layers: int = 24,
         add_bos_token: int = False,
         **kwargs,
-    ):
+    ) -> None:
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
