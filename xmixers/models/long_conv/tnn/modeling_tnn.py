@@ -55,12 +55,13 @@ class TnnLayer(BaseModule):
 
     def forward(
         self,
-        x,
-        attn_mask: Optional[torch.Tensor] = None,
-        attn_padding_mask: Optional[torch.Tensor] = None,
+        x: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+        **kwargs,
     ):
         x = self.token_mixer(self.token_norm(x)) + x
         x = self.channel_mixer(self.channel_norm(x)) + x
@@ -83,10 +84,6 @@ class TnnPreTrainedModel(PreTrainedModel):
     config_class = TnnConfig
     supports_gradient_checkpointing = True
     _no_split_modules = ["TnnLayer"]
-
-    # def _set_gradient_checkpointing(self, module, value=False):
-    #     if isinstance(module, TransnormerModel):
-    #         module.gradient_checkpointing = value
 
 
 class TnnModel(TnnPreTrainedModel):
