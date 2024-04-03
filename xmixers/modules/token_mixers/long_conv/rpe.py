@@ -55,7 +55,7 @@ class Rpe(BaseModule):
         return x
 
     def forward(self, index):
-        input = self.get_feature(index)
+        input = self.get_feature(index).to(self.pos_proj.weight.dtype)
         x = self.pos_proj(input)
         for m in self.layers:
             x = m(x) + x

@@ -40,6 +40,7 @@ class TnnConfig(PretrainedConfig):
         # others
         num_layers: int = 24,
         add_bos_token: int = False,
+        max_position_embeddings: int = 2048,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -71,3 +72,4 @@ class TnnConfig(PretrainedConfig):
         # others
         self.num_layers = num_layers
         self.add_bos_token = add_bos_token
+        self.max_position_embeddings = max_position_embeddings

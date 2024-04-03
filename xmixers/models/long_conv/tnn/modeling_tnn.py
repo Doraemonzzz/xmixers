@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+import warnings
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
+from transformers.cache_utils import Cache, DynamicCache
+from transformers.modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+)
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
@@ -95,7 +101,7 @@ class TnnModel(TnnPreTrainedModel):
             config.vocab_size, config.embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
-            [TnnLayer(config) for layer_idx in range(config.num_layers)]
+            [TnnLayer(config) for _ in range(config.num_layers)]
         )
         self.norm = get_norm_fn(config.norm_type)(config.embed_dim)
 
@@ -260,6 +266,7 @@ class TnnForCausalLM(TnnPreTrainedModel):
         self.model = TnnModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
+        self.max_position_embeddings = config.max_position_embeddings
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -362,10 +369,7 @@ class TnnForCausalLM(TnnPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.fuse_cross_entropy:
-                loss_fct = FusedCrossEntropyLoss(inplace_backward=True)
-            else:
-                loss_fct = nn.CrossEntropyLoss()
+            loss_fct = nn.CrossEntropyLoss()
             # Enable model parallelism
             labels = labels.to(logits.device)
             labels = torch.cat(
