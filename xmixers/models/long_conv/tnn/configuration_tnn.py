@@ -39,7 +39,7 @@ class TnnConfig(PretrainedConfig):
         glu_activation: str = "silu",
         # others
         num_layers: int = 24,
-        add_bos_token: int = False,
+        add_bos_token: bool = False,
         max_position_embeddings: int = 2048,
         **kwargs,
     ) -> None:
