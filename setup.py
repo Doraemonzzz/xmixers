@@ -11,6 +11,7 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
+__version__ = "0.0.0"
 exec(open("xmixers/version.py").read())
 setup(
     name="xmixers",

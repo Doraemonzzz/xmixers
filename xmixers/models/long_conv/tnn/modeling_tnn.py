@@ -70,13 +70,13 @@ class TnnLayer(nn.Module):
         outputs = (x,)
 
         # add this later
-        attn_weights, present_key_value = None, None
+        # attn_weights, present_key_value = None, None
 
-        if output_attentions:
-            outputs += (attn_weights,)
+        # if output_attentions:
+        #     outputs += (attn_weights,)
 
-        if use_cache:
-            outputs += (present_key_value,)
+        # if use_cache:
+        #     outputs += (present_key_value,)
 
         return outputs
 
@@ -178,7 +178,7 @@ class TnnModel(TnnPreTrainedModel):
             use_legacy_cache = not isinstance(past_key_values, Cache)
             if use_legacy_cache:
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_key_values_length = past_key_values.get_usable_length(seq_length)
+                past_key_values_length = past_key_values.get_seq_length()
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -204,8 +204,8 @@ class TnnModel(TnnPreTrainedModel):
                 use_cache = False
 
         # layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
+        all_hidden_states = ()
+        all_self_attns = ()
         next_decoder_cache = None
 
         for layer in self.layers:

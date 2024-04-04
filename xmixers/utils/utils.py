@@ -64,11 +64,11 @@ def print_config(config) -> None:
         logger.info(f"end print config of {config['__class__']}")
 
 
-def print_module(module: nn.Module) -> None:
-    named_modules = set()
+def print_module(module: nn.Module) -> str:
+    named_modules_ = set()
     for p in module.named_modules():
-        named_modules.update([p[0]])
-    named_modules = list(named_modules)
+        named_modules_.update([p[0]])
+    named_modules = list(named_modules_)
 
     string_repr = ""
     for p in module.named_parameters():
