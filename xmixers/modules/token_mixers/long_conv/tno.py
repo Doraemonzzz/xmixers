@@ -26,6 +26,7 @@ class Tno(nn.Module):
         use_decay: bool = True,
         causal: bool = True,
         dim: int = 1,
+        lower_bound: float = 0.99,
         *args,
         **kwargs,
     ) -> None:
@@ -50,6 +51,9 @@ class Tno(nn.Module):
 
         if use_decay:
             self.gamma = nn.Parameter(torch.randn(1, out_dim) * 0.1, requires_grad=True)
+            # self.lower_bound = lower_bound
+            # gamma = 1 / (torch.arange(1, out_dim + 1))
+            # self.gamma = nn.Parameter(gamma.reshape(1, -1), requires_grad=True)
 
         self.use_decay = use_decay
         self.dim = dim
@@ -83,6 +87,10 @@ class Tno(nn.Module):
 
     def get_gamma(self, x):
         n = x.shape[self.dim]
+        # gamma = self.lower_bound + (1 - self.lower_bound) * torch.clamp(self.gamma, min=0, max=1).float()
+        # gamma_zero = torch.exp(self.zero * torch.log(self.gamma))
+        # gamma_pos = torch.exp(self.pos[:n] * torch.log(self.gamma))
+
         gamma_zero = torch.exp(self.zero * F.logsigmoid(self.gamma))
         gamma_pos = torch.exp(self.pos[:n] * F.logsigmoid(self.gamma))
 
@@ -92,12 +100,12 @@ class Tno(nn.Module):
             gamma = torch.cat(
                 [gamma_zero, gamma_pos, gamma_zero, gamma_pos.flip(0)], dim=0
             )
-
+        # print(gamma)
         return gamma
 
     def forward(self, x):
         index = self.get_w(x)
-        w = self.rpe(index)
+        w = self.rpe(index).to(torch.float32)
         if self.use_decay:
             w = self.get_gamma(x) * w
         y = self.norm(long_conv_1d_op(x, w, self.dim))

@@ -29,6 +29,7 @@ class Gtu(nn.Module):
         rpe_feature_dim: int = 32,
         rpe_layers: int = 3,
         dims: List[int] = [-2],
+        lower_bound: float = 0.99,
         *args,
         **kwargs,
     ) -> None:
@@ -64,6 +65,7 @@ class Gtu(nn.Module):
                     use_decay=use_decay,
                     causal=causal,
                     dim=dim,
+                    lower_bound=lower_bound,
                 )
             )
 

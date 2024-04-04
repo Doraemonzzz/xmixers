@@ -34,6 +34,7 @@ class TnnConfig(PretrainedConfig):
         rpe_feature_dim: int = 32,  # for rpe in tno
         rpe_layers: int = 3,
         dims: List[int] = [-2],
+        lower_bound: float = 0.99,
         # glu config
         mid_dim: int = 1024,
         glu_activation: str = "silu",
@@ -41,6 +42,7 @@ class TnnConfig(PretrainedConfig):
         num_layers: int = 24,
         add_bos_token: bool = False,
         max_position_embeddings: int = 2048,
+        initializer_range: float = 0.02,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -66,6 +68,7 @@ class TnnConfig(PretrainedConfig):
         self.rpe_feature_dim = rpe_feature_dim
         self.rpe_layers = rpe_layers
         self.dims = dims
+        self.lower_bound = lower_bound
         # glu config
         self.mid_dim = mid_dim
         self.glu_activation = glu_activation
@@ -73,3 +76,4 @@ class TnnConfig(PretrainedConfig):
         self.num_layers = num_layers
         self.add_bos_token = add_bos_token
         self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range

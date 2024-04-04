@@ -14,14 +14,14 @@ from transformers.modeling_outputs import (
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
-from xmixers.modules import GLU, BaseModule, Gtu, get_norm_fn
+from xmixers.modules import GLU, Gtu, get_norm_fn
 
 from .configuration_tnn import TnnConfig
 
 logger = logging.get_logger(__name__)
 
 
-class TnnLayer(BaseModule):
+class TnnLayer(nn.Module):
     def __init__(
         self,
         config: TnnConfig,
@@ -40,6 +40,7 @@ class TnnLayer(BaseModule):
             rpe_feature_dim=config.rpe_feature_dim,
             rpe_layers=config.rpe_layers,
             dims=config.dims,
+            lower_bound=config.lower_bound,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
@@ -84,6 +85,17 @@ class TnnPreTrainedModel(PreTrainedModel):
     config_class = TnnConfig
     supports_gradient_checkpointing = True
     _no_split_modules = ["TnnLayer"]
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class TnnModel(TnnPreTrainedModel):
