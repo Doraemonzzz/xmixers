@@ -6,14 +6,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from xmixers.modules import BaseModule, get_norm_fn
+from xmixers.modules import get_norm_fn
 from xmixers.ops import long_conv_1d_op
-from xmixers.utils import next_power_of_2, print_module
+from xmixers.utils import XMIXERS_DEBUG, next_power_of_2, print_module, print_params
 
 from .rpe import Rpe
 
 
-class Tno(BaseModule):
+class Tno(nn.Module):
     def __init__(
         self,
         in_dim: int,
@@ -31,6 +31,12 @@ class Tno(BaseModule):
     ) -> None:
         super().__init__()
 
+        if XMIXERS_DEBUG:
+            # get local varables
+            params = locals()
+            # print params
+            print_params(**params)
+
         self.rpe = Rpe(
             in_dim=in_dim,
             feature_dim=feature_dim,
@@ -40,7 +46,7 @@ class Tno(BaseModule):
             rpe_layers=rpe_layers,
             norm_type=norm_type,
         )
-        self.norm = get_norm_fn(norm_type)(feature_dim)
+        self.norm = get_norm_fn(norm_type)(out_dim)
 
         if use_decay:
             self.gamma = nn.Parameter(torch.randn(1, out_dim) * 0.1, requires_grad=True)

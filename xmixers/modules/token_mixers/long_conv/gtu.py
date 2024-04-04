@@ -9,13 +9,13 @@ from typing import List
 
 import torch.nn as nn
 
-from xmixers.modules import BaseModule
 from xmixers.modules.activations import get_activation_fn
+from xmixers.utils import XMIXERS_DEBUG, print_params
 
 from .tno import Tno
 
 
-class Gtu(BaseModule):
+class Gtu(nn.Module):
     def __init__(
         self,
         embed_dim: int,
@@ -33,6 +33,12 @@ class Gtu(BaseModule):
         **kwargs,
     ) -> None:
         super().__init__()
+
+        if XMIXERS_DEBUG:
+            # get local varables
+            params = locals()
+            # print params
+            print_params(**params)
 
         self.embed_dim = embed_dim
         self.expand_ratio = expand_ratio

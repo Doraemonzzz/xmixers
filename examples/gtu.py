@@ -25,7 +25,7 @@ print(gtu_causal)
 print(gtu_none_causal)
 
 y1 = gtu_causal(x)
-y2 = gtu_causal(x)
+y2 = gtu_none_causal(x)
 
 print(x.shape)
 print(y1.shape)

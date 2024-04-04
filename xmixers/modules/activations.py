@@ -1,9 +1,8 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
-from xmixers.utils import XMIXERS_DEBUG, logger
-
-from .base_module import BaseModule
+from xmixers.utils import XMIXERS_DEBUG, logger, print_params
 
 
 def get_activation_fn(activation: str) -> None:
@@ -39,12 +38,18 @@ def get_activation_fn(activation: str) -> None:
         return lambda x: x
 
 
-class ActLayer(BaseModule):
+class ActLayer(nn.Module):
     def __init__(
         self,
         activation: str,
     ) -> None:
         super().__init__()
+        if XMIXERS_DEBUG:
+            # get local varables
+            params = locals()
+            # print params
+            print_params(**params)
+
         self.activation = activation
         self.f = get_activation_fn(activation)
 

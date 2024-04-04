@@ -10,12 +10,18 @@ https://github.com/bzhangGo/zero/blob/master/modules/rela.py
 import torch
 import torch.nn as nn
 
-from xmixers.modules import BaseModule
+from xmixers.utils import XMIXERS_DEBUG, print_params
 
 
-class SimpleRMSNorm(BaseModule):
+class SimpleRMSNorm(nn.Module):
     def __init__(self, d: int, eps: float = 1e-8) -> None:
-        super(SimpleRMSNorm, self).__init__()
+        super().__init__()
+        if XMIXERS_DEBUG:
+            # get local varables
+            params = locals()
+            # print params
+            print_params(**params)
+
         self.eps = eps
         self.d = d
 
@@ -29,7 +35,7 @@ class SimpleRMSNorm(BaseModule):
         return x_normed
 
 
-class RMSNorm(BaseModule):
+class RMSNorm(nn.Module):
     def __init__(
         self, d: int, p: float = -1.0, eps: float = 1e-8, bias: bool = False
     ) -> None:
@@ -41,7 +47,13 @@ class RMSNorm(BaseModule):
         :param bias: whether use bias term for RMSNorm, disabled by
             default because RMSNorm doesn't enforce re-centering invariance.
         """
-        super(RMSNorm, self).__init__()
+        super().__init__()
+
+        if XMIXERS_DEBUG:
+            # get local varables
+            params = locals()
+            # print params
+            print_params(**params)
 
         self.eps = eps
         self.d = d
@@ -75,9 +87,15 @@ class RMSNorm(BaseModule):
         return self.scale * x_normed
 
 
-class GatedRMSNorm(BaseModule):
+class GatedRMSNorm(nn.Module):
     def __init__(self, d: int, eps: float = 1e-8, bias: bool = False) -> None:
-        super(GatedRMSNorm, self).__init__()
+        super().__init__()
+
+        if XMIXERS_DEBUG:
+            # get local varables
+            params = locals()
+            # print params
+            print_params(**params)
 
         self.eps = eps
         self.d = d
