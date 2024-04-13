@@ -102,6 +102,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+/xmixers_env/venv/
+
 
 # Spyder project settings
 .spyderproject
