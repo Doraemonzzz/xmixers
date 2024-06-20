@@ -51,11 +51,11 @@ class TnnConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             **kwargs,
         )
-        # hf origin
+        ##### hf origin
         self.vocab_size = vocab_size
         self.use_cache = use_cache
         self.init_std = init_std
-        # add
+        ##### add
         self.embed_dim = embed_dim
         self.expand_ratio = expand_ratio
         self.bias = bias

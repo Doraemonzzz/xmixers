@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from transformers.cache_utils import Cache
 
 from xmixers.utils import XMIXERS_DEBUG, print_params
 
@@ -19,7 +20,7 @@ class Attention(nn.Module):
         use_lrpe: bool = True,
         layer_idx: int = 0,
         lrpe_type: int = 1,
-        base: int = 0,
+        base: int = 10000,
         **kwargs,
     ):
         super().__init__()
@@ -54,7 +55,6 @@ class Attention(nn.Module):
         self,
         x,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
-        output_attentions: bool = False,
         past_key_values: Optional[Cache] = None,
         **kwargs,
     ):
