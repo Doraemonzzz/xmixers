@@ -1,8 +1,12 @@
+from typing import Optional
+
 import torch
 import torch.nn as nn
 from transformers.cache_utils import Cache
 
 from xmixers.utils import XMIXERS_DEBUG, print_params
+
+from ...pes import Lrpe
 
 try:
     from flash_attn import flash_attn_func
@@ -32,14 +36,16 @@ class Attention(nn.Module):
 
         self.layer_idx = layer_idx
         self.kv_heads = kv_heads
-        self.head_dim = hidden_dim // num_heads
-        if self.kv_heads == -1:
-            self.qkv_proj = nn.Linear(embed_dim, 3 * hidden_dim, bias=bias)
-        else:
-            d = self.kv_heads * self.head_dim
-            self.qkv_proj = nn.Linear(embed_dim, hidden_dim + 2 * d, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, hidden_dim, bias=bias)
         self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        if self.kv_heads == -1:
+            kv_dim = embed_dim
+        else:
+            kv_dim = self.kv_heads * self.head_dim
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.use_lrpe = use_lrpe
 

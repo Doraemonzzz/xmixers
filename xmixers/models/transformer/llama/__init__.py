@@ -1,10 +1,10 @@
 from transformers import AutoConfig, AutoModel, AutoModelForCausalLM
 
-from .configuration_llama import LlamaConfig
+from .configuration_llama import LLaMAConfig
 from .modeling_llama import LlamaForCausalLM, LlamaModel
 
-AutoConfig.register(LlamaConfig.model_type, LlamaConfig)
-AutoModel.register(LlamaConfig, LlamaModel)
-AutoModelForCausalLM.register(LlamaConfig, LlamaForCausalLM)
+AutoConfig.register(LLaMAConfig.model_type, LLaMAConfig)
+AutoModel.register(LLaMAConfig, LlamaModel)
+AutoModelForCausalLM.register(LLaMAConfig, LlamaForCausalLM)
 
-__all__ = ["LlamaConfig", "LlamaModel", "LlamaForCausalLM"]
+__all__ = ["LLaMAConfig", "LlamaModel", "LlamaForCausalLM"]

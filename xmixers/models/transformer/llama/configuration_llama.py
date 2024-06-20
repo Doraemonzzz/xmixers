@@ -7,8 +7,8 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-class LlamaConfig(PretrainedConfig):
-    model_type = "llama"
+class LLaMAConfig(PretrainedConfig):
+    model_type = "llama_"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

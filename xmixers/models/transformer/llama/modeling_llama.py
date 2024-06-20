@@ -17,16 +17,16 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import GLU
+from xmixers.modules import GLU, Attention, get_norm_fn
 
-from .configuration_llama import LlamaConfig
+from .configuration_llama import LLaMAConfig
 
 
 class LlamaLayer(nn.Module):
-    def __init__(self, config: LlamaConfig, layer_idx=0):
+    def __init__(self, config: LLaMAConfig, layer_idx=0):
         super().__init__()
 
-        self.token_mixer = Gtu(
+        self.token_mixer = Attention(
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,
             kv_heads=config.kv_heads,
@@ -70,7 +70,7 @@ class LlamaLayer(nn.Module):
 
 
 class LlamaPreTrainedModel(PreTrainedModel):
-    config_class = LlamaConfig
+    config_class = LLaMAConfig
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaLayer"]
 
@@ -91,7 +91,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
 
 
 class LlamaModel(LlamaPreTrainedModel):
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: LLaMAConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
@@ -100,7 +100,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         # params
         self.embed_tokens = nn.Embedding(
-            config.vocab_size, config.dembed_dim, self.padding_idx
+            config.vocab_size, config.embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
             [LlamaLayer(config, layer_idx) for layer_idx in range(config.num_layers)]

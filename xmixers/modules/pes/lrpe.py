@@ -26,7 +26,7 @@ class Lrpe(nn.Module):
             # print params
             print_params(**params)
 
-        d = num_heads * embed_dim
+        d = num_heads * head_dim
         self.lrpe_type = lrpe_type
         self.index = torch.empty(0)
         if self.lrpe_type == 1:
