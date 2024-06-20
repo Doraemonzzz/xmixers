@@ -124,6 +124,8 @@ class LlamaModel(LlamaPreTrainedModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
@@ -229,9 +231,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.model = LlamaModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
-        self.lm_head = nn.Linear(
-            config.decoder_embed_dim, config.vocab_size, bias=False
-        )
+        self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -2,6 +2,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+from einops import rearrange
 from transformers.cache_utils import Cache
 
 from xmixers.utils import XMIXERS_DEBUG, print_params
@@ -65,10 +66,11 @@ class Attention(nn.Module):
         **kwargs,
     ):
         # x: b n d
-        x.shape[-2]
 
         # linear map
-        q, k, v = self.qkv_proj(x).chunk(3, dim=-1)
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
 
         q, k, v = map(
             lambda x: rearrange(x, "... n (h d) -> ... h n d", h=self.num_heads),
