@@ -73,7 +73,7 @@ class Attention(nn.Module):
         v = self.v_proj(x)
 
         q, k, v = map(
-            lambda x: rearrange(x, "... n (h d) -> ... h n d", h=self.num_heads),
+            lambda x: rearrange(x, "... n (h d) -> ... h n d", d=self.head_dim),
             [q, k, v],
         )
 
