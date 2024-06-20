@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-TORCH_VERSION = torch.__version__
+from xmixers.utils import XMIXERS_DEBUG, print_params
 
 try:
     from flash_attn import flash_attn_func
@@ -21,6 +21,12 @@ class Attention(nn.Module):
         **kwargs,
     ):
         super().__init__()
+        if XMIXERS_DEBUG:
+            # get local varables
+            params = locals()
+            # print params
+            print_params(**params)
+
         self.layer_idx = layer_idx
         self.kv_heads = kv_heads
         self.head_dim = hidden_dim // num_heads
