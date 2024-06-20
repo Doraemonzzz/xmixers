@@ -15,9 +15,11 @@ class Attention(nn.Module):
         embed_dim: int,
         num_heads: int,
         kv_heads: int = -1,
-        use_lrpe: bool = True,
         bias: bool = False,
+        use_lrpe: bool = True,
         layer_idx: int = 0,
+        lrpe_type: int = 1,
+        base: int = 0,
         **kwargs,
     ):
         super().__init__()
@@ -42,8 +44,10 @@ class Attention(nn.Module):
 
         if self.use_lrpe:
             self.lrpe = Lrpe(
+                head_dim=self.head_dim,
                 num_heads=self.num_heads,
-                embed_dim=self.head_dim,
+                lrpe_type=lrpe_type,
+                base=base,
             )
 
     def forward(
