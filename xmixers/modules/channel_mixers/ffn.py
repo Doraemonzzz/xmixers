@@ -10,7 +10,7 @@ from xmixers.utils import XMIXERS_DEBUG, print_params
 
 class FFN(nn.Module):
     def __init__(
-        self, embed_dim: int, mid_dim: int, activation: str, bias: bool = True
+        self, embed_dim: int, mid_dim: int, activation: str, bias: bool = False
     ) -> None:
         super().__init__()
 
