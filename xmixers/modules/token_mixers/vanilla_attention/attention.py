@@ -58,6 +58,14 @@ class Attention(nn.Module):
                 base=base,
             )
 
+    def init_weights(self):
+        self.q_proj.reset_parameters()
+        self.k_proj.reset_parameters()
+        self.v_proj.reset_parameters()
+        self.out_proj.reset_parameters()
+        if self.use_lrpe:
+            self.lrpe.init_weights()
+
     def forward(
         self,
         x,

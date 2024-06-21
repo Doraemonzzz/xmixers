@@ -16,6 +16,8 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 
 # ToDo
 
+- [ ] Add special init.
+
 ## Model
 - [x] LLaMA.
 

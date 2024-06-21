@@ -25,6 +25,11 @@ class GLU(nn.Module):
         self.w3 = nn.Linear(mid_dim, embed_dim, bias=bias)
         self.act = get_activation_fn(activation)
 
+    def init_weights(self):
+        self.w1.reset_parameters()
+        self.w2.reset_parameters()
+        self.w3.reset_parameters()
+
     def forward(self, x):
         output = self.w3(self.act(self.w1(x)) * self.w2(x))
 

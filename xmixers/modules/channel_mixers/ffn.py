@@ -24,6 +24,10 @@ class FFN(nn.Module):
         self.w2 = nn.Linear(mid_dim, embed_dim, bias=bias)
         self.act = get_activation_fn(activation)
 
+    def init_weights(self):
+        self.w1.reset_parameters()
+        self.w2.reset_parameters()
+
     def forward(self, x):
         output = self.w2(self.act(self.w1(x)))
 

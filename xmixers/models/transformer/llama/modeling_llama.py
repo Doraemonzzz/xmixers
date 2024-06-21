@@ -68,6 +68,12 @@ class LlamaLayer(nn.Module):
 
         return outputs
 
+    def init_weights(self):
+        self.token_mixer.init_weights()
+        self.token_norm.reset_parameters()
+        self.channel_mixer.init_weights()
+        self.channel_norm.reset_parameters()
+
 
 class LlamaPreTrainedModel(PreTrainedModel):
     config_class = LLaMAConfig
@@ -75,7 +81,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LlamaLayer"]
 
     def _init_weights(self, module):
-        std = self.config.init_std
         if isinstance(module, nn.Embedding):
             embedding_dim = module.weight.shape[-1]
             std = embedding_dim**-0.5
@@ -105,9 +110,15 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
-
         # Initialize weights and apply final processing
         self.post_init()
+
+    def init_weights(self):
+        std = self.config.embed_dim**-0.5
+        self.embed_tokens.weight.data.normal_(mean=0.0, std=std)
+        for layer in self.layers:
+            layer.init_weights()
+        self.final_norm.reset_parameters()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -233,6 +244,30 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def init_weights(self):
+        """
+        [Note: On ``init_weights`` vs. ``reset_parameters``]
+        Modules may define ``reset_parameters`` to initialize parameter values.
+        ``reset_parameters`` is meant to only initialize directly owned
+        parameters/buffers, not those of their child modules, and it can be
+        used to give the initial values for these tensors.
+        Separately, users may want custom initialization for their modules,
+        different from that in ``reset_parameters``. For this, we define
+        ``init_weights``. We only call it in the constructor of this
+        ``Model`` root module to avoid reinitializing tensors.
+        """
+        self.model.init_weights()
+
+        final_out_std = self.config.embed_dim**-0.5
+        cutoff_factor = 3
+        nn.init.trunc_normal_(
+            self.lm_head.weight,
+            mean=0.0,
+            std=final_out_std,
+            a=-cutoff_factor * final_out_std,
+            b=cutoff_factor * final_out_std,
+        )
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
