@@ -91,8 +91,6 @@ class Attention(nn.Module):
         if past_key_values is not None:
             k, v = past_key_values.update(k, v, self.layer_idx)
 
-        q, k, v = map(lambda x: rearrange(x, "... h n d -> ... n h d"), [q, k, v])
-
         if attention_mask is None:
             output = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         else:
