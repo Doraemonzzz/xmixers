@@ -1,7 +1,7 @@
 from transformers import AutoConfig, AutoModel, AutoModelForCausalLM
 
 from .configuration_llama import LLaMAConfig
-from .modeling_llama import LlamaForCausalLM, LlamaModel
+from .modeling_llama import LlamaForCausalLM, LlamaLayer, LlamaModel
 
 AutoConfig.register(LLaMAConfig.model_type, LLaMAConfig)
 AutoModel.register(LLaMAConfig, LlamaModel)
