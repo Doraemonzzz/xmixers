@@ -2,6 +2,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
 
@@ -58,14 +59,6 @@ class Attention(nn.Module):
                 base=base,
             )
 
-    def init_weights(self):
-        self.q_proj.reset_parameters()
-        self.k_proj.reset_parameters()
-        self.v_proj.reset_parameters()
-        self.out_proj.reset_parameters()
-        if self.use_lrpe:
-            self.lrpe.init_weights()
-
     def forward(
         self,
         x,
@@ -101,7 +94,7 @@ class Attention(nn.Module):
         q, k, v = map(lambda x: rearrange(x, "... h n d -> ... n h d"), [q, k, v])
 
         if attention_mask is None:
-            output = flash_attn_func(q, k, v, causal=True)
+            output = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         else:
             assert False, "flash_attn_varlen_qkvpacked_func current not support"
 

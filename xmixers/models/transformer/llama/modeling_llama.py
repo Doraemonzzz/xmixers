@@ -1,5 +1,5 @@
 # coding=utf-8
-""" PyTorch Llama model."""
+""" PyTorch LLaMA model."""
 from typing import Optional, Tuple, Union
 
 import torch
@@ -22,7 +22,7 @@ from xmixers.modules import GLU, Attention, get_norm_fn
 from .configuration_llama import LLaMAConfig
 
 
-class LlamaLayer(nn.Module):
+class LLaMALayer(nn.Module):
     def __init__(self, config: LLaMAConfig, layer_idx=0):
         super().__init__()
 
@@ -68,32 +68,36 @@ class LlamaLayer(nn.Module):
 
         return outputs
 
-    def init_weights(self):
-        self.token_mixer.init_weights()
-        self.token_norm.reset_parameters()
-        self.channel_mixer.init_weights()
-        self.channel_norm.reset_parameters()
 
-
-class LlamaPreTrainedModel(PreTrainedModel):
+class LLaMAPreTrainedModel(PreTrainedModel):
     config_class = LLaMAConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaLayer"]
+    _no_split_modules = ["LLaMALayer"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
             embedding_dim = module.weight.shape[-1]
             std = embedding_dim**-0.5
+            print("aaa", std)
+            std = 0.02
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.Linear):
+            embedding_dim = module.weight.shape[-1]
+            std = embedding_dim**-0.5
+            print("bbb", std)
+            std = 0.02
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LlamaModel):
+        if isinstance(module, LLaMAModel):
             module.gradient_checkpointing = value
 
 
-class LlamaModel(LlamaPreTrainedModel):
+class LLaMAModel(LLaMAPreTrainedModel):
     def __init__(self, config: LLaMAConfig):
         super().__init__(config)
         # hf origin
@@ -106,19 +110,19 @@ class LlamaModel(LlamaPreTrainedModel):
             config.vocab_size, config.embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
-            [LlamaLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
+            [LLaMALayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
 
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
         # Initialize weights and apply final processing
         self.post_init()
 
-    def init_weights(self):
-        std = self.config.embed_dim**-0.5
-        self.embed_tokens.weight.data.normal_(mean=0.0, std=std)
-        for layer in self.layers:
-            layer.init_weights()
-        self.final_norm.reset_parameters()
+    # def init_weights(self):
+    #     std = self.config.embed_dim**-0.5
+    #     self.embed_tokens.weight.data.normal_(mean=0.0, std=std)
+    #     for layer in self.layers:
+    #         layer.init_weights()
+    #     self.final_norm.reset_parameters()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -165,13 +169,6 @@ class LlamaModel(LlamaPreTrainedModel):
             use_legacy_cache = not isinstance(past_key_values, Cache)
             if use_legacy_cache:
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-
-        seq_length_with_past = seq_length
-        past_key_values_length = 0
-
-        if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[-2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -234,10 +231,10 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
 
-class LlamaForCausalLM(LlamaPreTrainedModel):
+class LLaMAForCausalLM(LLaMAPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.model = LlamaModel(config)
+        self.model = LLaMAModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
@@ -245,29 +242,29 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def init_weights(self):
-        """
-        [Note: On ``init_weights`` vs. ``reset_parameters``]
-        Modules may define ``reset_parameters`` to initialize parameter values.
-        ``reset_parameters`` is meant to only initialize directly owned
-        parameters/buffers, not those of their child modules, and it can be
-        used to give the initial values for these tensors.
-        Separately, users may want custom initialization for their modules,
-        different from that in ``reset_parameters``. For this, we define
-        ``init_weights``. We only call it in the constructor of this
-        ``Model`` root module to avoid reinitializing tensors.
-        """
-        self.model.init_weights()
+    # def init_weights(self):
+    #     """
+    #     [Note: On ``init_weights`` vs. ``reset_parameters``]
+    #     Modules may define ``reset_parameters`` to initialize parameter values.
+    #     ``reset_parameters`` is meant to only initialize directly owned
+    #     parameters/buffers, not those of their child modules, and it can be
+    #     used to give the initial values for these tensors.
+    #     Separately, users may want custom initialization for their modules,
+    #     different from that in ``reset_parameters``. For this, we define
+    #     ``init_weights``. We only call it in the constructor of this
+    #     ``Model`` root module to avoid reinitializing tensors.
+    #     """
+    #     self.model.init_weights()
 
-        final_out_std = self.config.embed_dim**-0.5
-        cutoff_factor = 3
-        nn.init.trunc_normal_(
-            self.lm_head.weight,
-            mean=0.0,
-            std=final_out_std,
-            a=-cutoff_factor * final_out_std,
-            b=cutoff_factor * final_out_std,
-        )
+    #     final_out_std = self.config.embed_dim**-0.5
+    #     cutoff_factor = 3
+    #     nn.init.trunc_normal_(
+    #         self.lm_head.weight,
+    #         mean=0.0,
+    #         std=final_out_std,
+    #         a=-cutoff_factor * final_out_std,
+    #         b=cutoff_factor * final_out_std,
+    #     )
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -311,9 +308,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LlamaForCausalLM
+        >>> from transformers import AutoTokenizer, LLaMAForCausalLM
 
-        >>> model = LlamaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = LLaMAForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"

@@ -1,1 +1,1 @@
-from .llama import LLaMAConfig, LlamaForCausalLM, LlamaLayer, LlamaModel
+from .llama import LLaMAConfig, LLaMAForCausalLM, LLaMALayer, LLaMAModel

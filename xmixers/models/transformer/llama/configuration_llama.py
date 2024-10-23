@@ -19,6 +19,7 @@ class LLaMAConfig(PretrainedConfig):
         vocab_size=64000,
         use_cache=True,
         init_std=0.02,
+        tie_word_embeddings=False,
         ##### model config
         # attention config
         embed_dim=1024,
@@ -40,6 +41,7 @@ class LLaMAConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
         ##### hf origin
