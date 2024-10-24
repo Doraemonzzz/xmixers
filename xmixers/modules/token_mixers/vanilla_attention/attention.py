@@ -67,7 +67,6 @@ class Attention(nn.Module):
         **kwargs,
     ):
         # x: b n d
-
         # linear map
         q = self.q_proj(x)
         k = self.k_proj(x)
@@ -92,12 +91,14 @@ class Attention(nn.Module):
             k, v = past_key_values.update(k, v, self.layer_idx)
 
         if attention_mask is None:
-            output = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+            output = F.scaled_dot_product_attention(
+                q, k, v, is_causal=True if self.training else False
+            )
         else:
             assert False, "flash_attn_varlen_qkvpacked_func current not support"
 
         # reshape
-        output = rearrange(output, "... n h d -> ... n (h d)")
+        output = rearrange(output, "... h n d -> ... n (h d)")
         # outproj
         output = self.out_proj(output)
 

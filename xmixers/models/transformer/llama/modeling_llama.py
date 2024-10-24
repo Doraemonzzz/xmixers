@@ -55,11 +55,13 @@ class LLaMALayer(nn.Module):
         past_key_values: Optional[Cache] = None,
     ):
         # token mixer
+        residual = x
         x, past_key_values = self.token_mixer(
             x=self.token_norm(x),
             attention_mask=attention_mask,
             past_key_values=past_key_values,
         )
+        x = x + residual
 
         # channel mixer
         x = self.channel_mixer(self.channel_norm(x)) + x
