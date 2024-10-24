@@ -29,3 +29,11 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 
 ## Token Mixers
 - [x] Gtu.
+
+# Note
+```
+[Feature Add]
+[Bug Fix]
+[Benchmark Add]
+[Document Add]
+```

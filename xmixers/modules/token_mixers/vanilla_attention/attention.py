@@ -91,9 +91,9 @@ class Attention(nn.Module):
             k, v = past_key_values.update(k, v, self.layer_idx)
 
         if attention_mask is None:
-            output = F.scaled_dot_product_attention(
-                q, k, v, is_causal=True if self.training else False
-            )
+            # use causal when training or evaluation(not for generation)
+            is_causal = True if self.training or q.shape[-2] == k.shape[-2] else False
+            output = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
         else:
             assert False, "flash_attn_varlen_qkvpacked_func current not support"
 
