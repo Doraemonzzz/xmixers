@@ -1,5 +1,5 @@
 # coding=utf-8
-""" PyTorch LLaMA model."""
+""" PyTorch GPT model."""
 from typing import Optional, Tuple, Union
 
 import torch
@@ -17,13 +17,13 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import GLU, Attention, get_norm_fn
+from xmixers.modules import FFN, Attention, SinCosPe, get_norm_fn
 
-from .configuration_llama import LLaMAConfig
+from .configuration_gpt import GPTConfig
 
 
-class LLaMALayer(nn.Module):
-    def __init__(self, config: LLaMAConfig, layer_idx=0):
+class GPTLayer(nn.Module):
+    def __init__(self, config: GPTConfig, layer_idx=0):
         super().__init__()
 
         self.token_mixer = Attention(
@@ -31,18 +31,17 @@ class LLaMALayer(nn.Module):
             num_heads=config.num_heads,
             kv_heads=config.kv_heads,
             bias=config.bias,
-            use_lrpe=config.use_lrpe,
+            use_lrpe=False,
             layer_idx=layer_idx,
-            lrpe_type=config.lrpe_type,
             base=config.base,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
 
-        self.channel_mixer = GLU(
+        self.channel_mixer = FFN(
             embed_dim=config.embed_dim,
             mid_dim=config.mid_dim,
-            activation=config.glu_activation,
+            activation=config.ffn_activation,
             bias=config.bias,
         )
 
@@ -71,38 +70,30 @@ class LLaMALayer(nn.Module):
         return outputs
 
 
-class LLaMAPreTrainedModel(PreTrainedModel):
-    config_class = LLaMAConfig
+class GPTPreTrainedModel(PreTrainedModel):
+    config_class = GPTConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LLaMALayer"]
+    _no_split_modules = ["GPTLayer"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            embedding_dim = module.weight.shape[-1]
-            std = embedding_dim**-0.5
-            print(print(module))
-            print("bbb", std)
-            std = 0.02
+            std = self.config.init_std
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            embedding_dim = module.weight.shape[-1]
-            std = embedding_dim**-0.5
-            print(module)
-            print("aaa", std)
-            std = 0.02
+            std = self.config.init_std
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LLaMAModel):
+        if isinstance(module, GPTModel):
             module.gradient_checkpointing = value
 
 
-class LLaMAModel(LLaMAPreTrainedModel):
-    def __init__(self, config: LLaMAConfig):
+class GPTModel(GPTPreTrainedModel):
+    def __init__(self, config: GPTConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
@@ -113,20 +104,15 @@ class LLaMAModel(LLaMAPreTrainedModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
+        self.ape = SinCosPe(config.embed_dim, config.base)
         self.layers = nn.ModuleList(
-            [LLaMALayer(config, layer_idx) for layer_idx in range(config.num_layers)]
+            [GPTLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
 
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+
         # Initialize weights and apply final processing
         self.post_init()
-
-    # def init_weights(self):
-    #     std = self.config.embed_dim**-0.5
-    #     self.embed_tokens.weight.data.normal_(mean=0.0, std=std)
-    #     for layer in self.layers:
-    #         layer.init_weights()
-    #     self.final_norm.reset_parameters()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -178,6 +164,7 @@ class LLaMAModel(LLaMAPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         hidden_states = inputs_embeds
+        hidden_states = self.ape(hidden_states)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -235,40 +222,16 @@ class LLaMAModel(LLaMAPreTrainedModel):
         )
 
 
-class LLaMAForCausalLM(LLaMAPreTrainedModel):
+class GPTForCausalLM(GPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.model = LLaMAModel(config)
+        self.model = GPTModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # def init_weights(self):
-    #     """
-    #     [Note: On ``init_weights`` vs. ``reset_parameters``]
-    #     Modules may define ``reset_parameters`` to initialize parameter values.
-    #     ``reset_parameters`` is meant to only initialize directly owned
-    #     parameters/buffers, not those of their child modules, and it can be
-    #     used to give the initial values for these tensors.
-    #     Separately, users may want custom initialization for their modules,
-    #     different from that in ``reset_parameters``. For this, we define
-    #     ``init_weights``. We only call it in the constructor of this
-    #     ``Model`` root module to avoid reinitializing tensors.
-    #     """
-    #     self.model.init_weights()
-
-    #     final_out_std = self.config.embed_dim**-0.5
-    #     cutoff_factor = 3
-    #     nn.init.trunc_normal_(
-    #         self.lm_head.weight,
-    #         mean=0.0,
-    #         std=final_out_std,
-    #         a=-cutoff_factor * final_out_std,
-    #         b=cutoff_factor * final_out_std,
-    #     )
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -312,9 +275,9 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LLaMAForCausalLM
+        >>> from transformers import AutoTokenizer, GPTForCausalLM
 
-        >>> model = LLaMAForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = GPTForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"

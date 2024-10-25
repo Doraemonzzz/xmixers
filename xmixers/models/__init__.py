@@ -1,2 +1,11 @@
 from .long_conv import *
-from .transformer import LLaMAConfig, LLaMAForCausalLM, LLaMALayer, LLaMAModel
+from .transformer import (
+    GPTConfig,
+    GPTForCausalLM,
+    GPTLayer,
+    GPTModel,
+    LLaMAConfig,
+    LLaMAForCausalLM,
+    LLaMALayer,
+    LLaMAModel,
+)
