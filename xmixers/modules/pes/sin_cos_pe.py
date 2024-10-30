@@ -56,11 +56,11 @@ class SinCosPe(nn.Module):
         self.pe = pe
 
     def forward(self, x, shape=None, offset=0):
-        if self.pe.shape[0] == 0 or self.pe.shape[0] < x.shape[1]:
-            self.get_pe(x, shape)
+        if self.pe.shape[0] == 0 or self.pe.shape[0] < (offset + x.shape[-2]):
+            assert len(x.shape) == 3, "only support 1d case"
+            self.get_pe(x, [offset + x.shape[-2]])
         start = offset
         end = offset + x.shape[1]
-
         x = (
             x
             + self.pe[

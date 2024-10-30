@@ -8,7 +8,7 @@ logger = logging.get_logger(__name__)
 
 
 class GPTConfig(PretrainedConfig):
-    model_type = "llama_"
+    model_type = "gpt"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

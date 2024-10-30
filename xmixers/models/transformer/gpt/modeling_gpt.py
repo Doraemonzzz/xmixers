@@ -164,7 +164,11 @@ class GPTModel(GPTPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         hidden_states = inputs_embeds
-        hidden_states = self.ape(hidden_states)
+        # get offset
+        offset = 0
+        if past_key_values is not None:
+            offset = past_key_values.get_seq_length(0)
+        hidden_states = self.ape(hidden_states, offset=offset)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -350,14 +354,18 @@ class GPTForCausalLM(GPTPreTrainedModel):
         inputs_embeds=None,
         **kwargs,
     ):
-        if past_key_values:
+        # only last token for `inputs_ids` if the `past_key_values` is passed along.
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
-
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
+            # recompiles graphs as the stride of the inputs is a guard.
+            # Ref: https://github.com/huggingface/transformers/pull/29114
+            # TODO: use `next_tokens` directly instead.
+            model_inputs = {"input_ids": input_ids.contiguous()}
 
         model_inputs.update(
             {
