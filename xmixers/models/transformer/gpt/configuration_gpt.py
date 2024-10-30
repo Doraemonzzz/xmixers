@@ -27,6 +27,7 @@ class GPTConfig(PretrainedConfig):
         kv_heads=-1,
         bias=False,
         base=10000,
+        ape_type="sincos",
         # ffn config
         mid_dim=1024,
         ffn_activation="silu",
@@ -42,6 +43,7 @@ class GPTConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        assert ape_type in ["sincos", "learnable"]
         ##### hf origin
         self.vocab_size = vocab_size
         self.use_cache = use_cache
@@ -53,6 +55,7 @@ class GPTConfig(PretrainedConfig):
         self.kv_heads = kv_heads
         self.bias = bias
         self.base = base
+        self.ape_type = ape_type
         # ffn config
         self.mid_dim = mid_dim
         self.ffn_activation = ffn_activation

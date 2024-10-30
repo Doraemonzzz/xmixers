@@ -17,7 +17,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import FFN, Attention, SinCosPe, get_norm_fn
+from xmixers.modules import FFN, Attention, LearnablePe, SinCosPe, get_norm_fn
 
 from .configuration_gpt import GPTConfig
 
@@ -104,7 +104,11 @@ class GPTModel(GPTPreTrainedModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
-        self.ape = SinCosPe(config.embed_dim, config.base)
+        if config.ape_type == "sincos":
+            self.ape = SinCosPe(config.embed_dim, config.base)
+        else:
+            self.ape = LearnablePe(config.embed_dim, config.max_position_embeddings)
+
         self.layers = nn.ModuleList(
             [GPTLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )

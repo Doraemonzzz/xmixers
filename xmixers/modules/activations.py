@@ -34,7 +34,7 @@ def get_activation_fn(activation: str) -> Callable[[torch.Tensor], torch.Tensor]
             return 2 + F.elu(x)
 
         return f
-    elif activation == "silu":
+    elif activation in ["swish", "silu"]:
         return F.silu
     else:
         return lambda x: x
