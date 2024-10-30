@@ -18,6 +18,8 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 
 - GPT
   - Doreamonzzz/xmixers_gpt_120m_50b
+- LLaMA
+  - Doreamonzzz/xmixers_llama_120m_50b
 -
 
 # ToDo
