@@ -78,7 +78,8 @@ class Lrpe(nn.Module):
 
     def forward(self, x, offset=0):
         n, d = x.shape[-2], x.shape[-1]
-        if self.index.shape[0] == 0 or self.index.shape[1] < n:
+
+        if self.index.shape[0] == 0 or self.index.shape[1] < (offset + n):
             self.index = (
                 torch.arange(n, dtype=torch.int64)
                 .reshape(1, -1, 1)

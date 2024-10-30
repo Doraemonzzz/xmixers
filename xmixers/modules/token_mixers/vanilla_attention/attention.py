@@ -82,13 +82,14 @@ class Attention(nn.Module):
         if past_key_values is not None:
             q_offset = past_key_values.get_seq_length(self.layer_idx)
 
-        if self.use_lrpe:
-            q = self.lrpe(q, offset=q_offset)
-            k = self.lrpe(k)
-
         # cache update
         if past_key_values is not None:
             k, v = past_key_values.update(k, v, self.layer_idx)
+
+        if self.use_lrpe:
+            q = self.lrpe(q, offset=q_offset)
+            k = self.lrpe(k)
+        print("bbb", q.shape, k.shape)
 
         if (
             attention_mask is None or attention_mask.all()

@@ -113,13 +113,6 @@ class LLaMAModel(LLaMAPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # def init_weights(self):
-    #     std = self.config.embed_dim**-0.5
-    #     self.embed_tokens.weight.data.normal_(mean=0.0, std=std)
-    #     for layer in self.layers:
-    #         layer.init_weights()
-    #     self.final_norm.reset_parameters()
-
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -238,30 +231,6 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # def init_weights(self):
-    #     """
-    #     [Note: On ``init_weights`` vs. ``reset_parameters``]
-    #     Modules may define ``reset_parameters`` to initialize parameter values.
-    #     ``reset_parameters`` is meant to only initialize directly owned
-    #     parameters/buffers, not those of their child modules, and it can be
-    #     used to give the initial values for these tensors.
-    #     Separately, users may want custom initialization for their modules,
-    #     different from that in ``reset_parameters``. For this, we define
-    #     ``init_weights``. We only call it in the constructor of this
-    #     ``Model`` root module to avoid reinitializing tensors.
-    #     """
-    #     self.model.init_weights()
-
-    #     final_out_std = self.config.embed_dim**-0.5
-    #     cutoff_factor = 3
-    #     nn.init.trunc_normal_(
-    #         self.lm_head.weight,
-    #         mean=0.0,
-    #         std=final_out_std,
-    #         a=-cutoff_factor * final_out_std,
-    #         b=cutoff_factor * final_out_std,
-    #     )
-
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
@@ -379,14 +348,18 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         inputs_embeds=None,
         **kwargs,
     ):
-        if past_key_values:
+        # only last token for `inputs_ids` if the `past_key_values` is passed along.
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
-
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
+            # recompiles graphs as the stride of the inputs is a guard.
+            # Ref: https://github.com/huggingface/transformers/pull/29114
+            # TODO: use `next_tokens` directly instead.
+            model_inputs = {"input_ids": input_ids.contiguous()}
 
         model_inputs.update(
             {
