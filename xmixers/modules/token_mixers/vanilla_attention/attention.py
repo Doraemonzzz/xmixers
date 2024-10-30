@@ -89,7 +89,6 @@ class Attention(nn.Module):
         if self.use_lrpe:
             q = self.lrpe(q, offset=q_offset)
             k = self.lrpe(k)
-        print("bbb", q.shape, k.shape)
 
         if (
             attention_mask is None or attention_mask.all()
