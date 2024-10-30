@@ -14,12 +14,19 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
     - Long Convolution
 - Channel Mixers
 
+# Pretrained weights
+
+- GPT
+  - Doreamonzzz/xmixers_gpt_120m_50b
+-
+
 # ToDo
 
 - [ ] Add special init.
 
 ## Model
 - [x] LLaMA.
+- [x] GPT.
 
 ## Basic
 - [ ] Add data type for class and function.
@@ -36,4 +43,5 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 [Bug Fix]
 [Benchmark Add]
 [Document Add]
+[README Add]
 ```
