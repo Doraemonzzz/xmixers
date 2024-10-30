@@ -17,7 +17,7 @@ class Lrpe(nn.Module):
         base: int = 10000,
     ):
         """
-        lrpe_type: 1 for standard rope, 2 for mix rope (rope half hea dim), 3 for complex version(cosformer style)
+        lrpe_type: 1 for standard rope, 2 for mix rope (rope half head dim), 3 for complex version(cosformer style)
         """
         super().__init__()
         if XMIXERS_DEBUG:
@@ -112,7 +112,8 @@ class Lrpe(nn.Module):
         elif self.lrpe_type == 3:
             index = self.index[:, :n] + offset
             theta = self.theta.float() * index
-            x.dtype
-            x_out = torch.concat([x * torch.cos(theta), x * torch.sin(theta)], dim=-1)
+            x_out = torch.concat(
+                [x * torch.cos(theta), x * torch.sin(theta)], dim=-1
+            ).to(x.dtype)
 
         return x_out
