@@ -1,5 +1,5 @@
 # coding=utf-8
-""" PyTorch GPT model."""
+""" PyTorch LinearTransformer model."""
 import math
 from typing import Optional, Tuple, Union
 
@@ -18,31 +18,36 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import FFN, Attention, LearnablePe, SinCosPe, get_norm_fn
+from xmixers.modules import GLU, LearnablePe, LinearAttention, SinCosPe, get_norm_fn
 
-from .configuration_gpt import GPTConfig
+from .configuration_linear_transformer import LinearTransformerConfig
 
 
-class GPTLayer(nn.Module):
-    def __init__(self, config: GPTConfig, layer_idx=0):
+class LinearTransformerLayer(nn.Module):
+    def __init__(self, config: LinearTransformerConfig, layer_idx=0):
         super().__init__()
 
-        self.token_mixer = Attention(
+        self.token_mixer = LinearAttention(
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,
             kv_heads=config.kv_heads,
             bias=config.bias,
-            use_lrpe=False,
+            use_lrpe=config.use_lrpe,
             layer_idx=layer_idx,
+            lrpe_type=config.lrpe_type,
             base=config.base,
+            use_output_gate=config.use_output_gate,
+            norm_type=config.norm_type,
+            linear_activation=config.linear_activation,
+            causal=config.causal,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
 
-        self.channel_mixer = FFN(
+        self.channel_mixer = GLU(
             embed_dim=config.embed_dim,
             mid_dim=config.mid_dim,
-            activation=config.ffn_activation,
+            activation=config.glu_activation,
             bias=config.bias,
         )
 
@@ -71,10 +76,10 @@ class GPTLayer(nn.Module):
         return outputs
 
 
-class GPTPreTrainedModel(PreTrainedModel):
-    config_class = GPTConfig
+class LinearTransformerPreTrainedModel(PreTrainedModel):
+    config_class = LinearTransformerConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GPTLayer"]
+    _no_split_modules = ["LinearTransformerLayer"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -87,9 +92,6 @@ class GPTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, LearnablePe):
-            std = self.config.init_std
-            module.weight.data.normal_(mean=0.0, std=std)
 
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
@@ -98,7 +100,7 @@ class GPTPreTrainedModel(PreTrainedModel):
         #
         # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
         for name, p in module.named_parameters():
-            if name in ["out_proj.weight", "w2.weight"]:
+            if name in ["out_proj.weight", "w3.weight"]:
                 std = self.config.init_std
                 num_residuals_per_layer = 2
                 # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
@@ -110,12 +112,12 @@ class GPTPreTrainedModel(PreTrainedModel):
                     p /= math.sqrt(num_residuals_per_layer * self.config.num_layers)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GPTModel):
+        if isinstance(module, LinearTransformerModel):
             module.gradient_checkpointing = value
 
 
-class GPTModel(GPTPreTrainedModel):
-    def __init__(self, config: GPTConfig):
+class LinearTransformerModel(LinearTransformerPreTrainedModel):
+    def __init__(self, config: LinearTransformerConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
@@ -126,17 +128,21 @@ class GPTModel(GPTPreTrainedModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
-        if config.ape_type == "sincos":
-            self.ape = SinCosPe(config.embed_dim, config.base)
-        else:
-            self.ape = LearnablePe(config.embed_dim, config.max_position_embeddings)
+        self.use_ape = config.use_ape
+        if self.use_ape:
+            if config.ape_type == "sincos":
+                self.ape = SinCosPe(config.embed_dim, config.base)
+            else:
+                self.ape = LearnablePe(config.embed_dim, config.max_position_embeddings)
 
         self.layers = nn.ModuleList(
-            [GPTLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
+            [
+                LinearTransformerLayer(config, layer_idx)
+                for layer_idx in range(config.num_layers)
+            ]
         )
 
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -190,11 +196,12 @@ class GPTModel(GPTPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         hidden_states = inputs_embeds
-        # get offset
-        offset = 0
-        if past_key_values is not None:
-            offset = past_key_values.get_seq_length(0)
-        hidden_states = self.ape(hidden_states, offset=offset)
+        if self.use_ape:
+            # get offset
+            offset = 0
+            if past_key_values is not None:
+                offset = past_key_values.get_seq_length(0)
+            hidden_states = self.ape(hidden_states, offset=offset)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -230,7 +237,7 @@ class GPTModel(GPTPreTrainedModel):
 
             if use_cache:
                 next_decoder_cache = layer_outputs[-1]
-        # assert False
+
         hidden_states = self.final_norm(hidden_states)
 
         # add hidden states from the last decoder layer
@@ -252,10 +259,10 @@ class GPTModel(GPTPreTrainedModel):
         )
 
 
-class GPTForCausalLM(GPTPreTrainedModel):
+class LinearTransformerForCausalLM(LinearTransformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.model = GPTModel(config)
+        self.model = LinearTransformerModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
@@ -305,9 +312,9 @@ class GPTForCausalLM(GPTPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, GPTForCausalLM
+        >>> from transformers import AutoTokenizer, LinearTransformerForCausalLM
 
-        >>> model = GPTForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = LinearTransformerForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"

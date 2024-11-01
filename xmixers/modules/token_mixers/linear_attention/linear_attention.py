@@ -7,6 +7,7 @@ from einops import rearrange
 from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
+from xmixers.modules.normalizations import get_norm_fn
 from xmixers.utils import XMIXERS_DEBUG, print_params
 
 from ...pes import Lrpe
@@ -48,8 +49,8 @@ class LinearAttention(nn.Module):
         self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.norm = get_norm_fn(config.norm_type)(config.embed_dim)
-        self.act = get_activation_fn(activation)
+        self.norm = get_norm_fn(norm_type)(embed_dim)
+        self.act = get_activation_fn(linear_activation)
         self.causal = causal
 
         self.use_lrpe = use_lrpe
@@ -65,7 +66,7 @@ class LinearAttention(nn.Module):
         if self.use_output_gate:
             self.out_gate = nn.Sequential(
                 nn.Linear(embed_dim, self.head_dim, bias=bias),
-                nn.Linear(self.head_dim, self.embed_dim, bias=bias),
+                nn.Linear(self.head_dim, embed_dim, bias=bias),
             )
 
         self.causal_mask = None
@@ -77,6 +78,7 @@ class LinearAttention(nn.Module):
         past_key_values: Optional[Cache] = None,
         **kwargs,
     ):
+        b, n, d = x.shape
         # x: b n d
         # linear map
         q = self.q_proj(x)
@@ -110,7 +112,7 @@ class LinearAttention(nn.Module):
                 self.causal_mask = (torch.tril(torch.ones(n, n))).to(q)
 
             energy = torch.einsum("... n d, ... m d -> ... n m", q, k)
-            energy = energy * causal_mask
+            energy = energy * self.causal_mask
             output = torch.einsum("... n m, ... m d -> ... n d", energy, v)
         else:
             kv = torch.einsum("... h n d, ... h n e -> ... h d e", k, v)
