@@ -27,6 +27,7 @@ class Attention(nn.Module):
         layer_idx: int = 0,
         lrpe_type: int = 1,
         base: int = 10000,
+        max_position_embeddings: int = 1024,
         **kwargs,
     ):
         super().__init__()
@@ -56,6 +57,7 @@ class Attention(nn.Module):
                 num_heads=self.num_heads,
                 lrpe_type=lrpe_type,
                 base=base,
+                max_position_embeddings=max_position_embeddings,
             )
 
     def forward(

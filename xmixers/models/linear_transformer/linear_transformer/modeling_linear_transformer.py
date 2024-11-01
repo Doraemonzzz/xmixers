@@ -40,6 +40,7 @@ class LinearTransformerLayer(nn.Module):
             norm_type=config.norm_type,
             linear_activation=config.linear_activation,
             causal=config.causal,
+            max_position_embeddings=config.max_position_embeddings,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)

@@ -28,6 +28,7 @@ class LinearAttention(nn.Module):
         norm_type: str = "layernorm",
         linear_activation: str = "silu",
         causal: bool = True,
+        max_position_embeddings: int = 1024,
         **kwargs,
     ):
         super().__init__()
@@ -60,6 +61,7 @@ class LinearAttention(nn.Module):
                 num_heads=self.num_heads,
                 lrpe_type=lrpe_type,
                 base=base,
+                max_position_embeddings=max_position_embeddings,
             )
 
         self.use_output_gate = use_output_gate

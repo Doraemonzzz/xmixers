@@ -2,6 +2,7 @@
 Lrpe in https://openreview.net/forum?id=xoLyps2qWc
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -15,6 +16,7 @@ class Lrpe(nn.Module):
         num_heads: int = 8,
         lrpe_type: int = 1,
         base: int = 10000,
+        max_position_embeddings: int = 1024,
     ):
         """
         lrpe_type: 1 for standard rope, 2 for mix rope (rope half head dim), 3 for complex version(cosformer style)
@@ -49,8 +51,16 @@ class Lrpe(nn.Module):
         elif lrpe_type == 3:
             logging_info("complex transform")
             theta = base ** (
-                -2 / d * torch.arange(d // 2, dtype=torch.int64)
+                -2 / d * torch.arange(d, dtype=torch.int64)
             ).float().reshape(num_heads, 1, -1)
+            self.theta = nn.Parameter(theta)
+        elif lrpe_type == 4:
+            logging_info("cosformer transform")
+            theta = (
+                torch.tensor(np.pi / 2 / max_position_embeddings)
+                .float()
+                .reshape(1, 1, -1)
+            )
             self.theta = nn.Parameter(theta)
         else:
             raise ValueError(f"lrpe_type: {lrpe_type} has not been support!")
@@ -108,8 +118,7 @@ class Lrpe(nn.Module):
             x_half = torch.stack([-x[..., 1::2], x[..., ::2]], dim=-1).reshape_as(x)
             x_transform = x * torch.cos(theta) + x_half * torch.sin(theta)
             x_out = torch.cat([x_transform, x1], dim=-1).to(x.dtype)
-
-        elif self.lrpe_type == 3:
+        elif self.lrpe_type in [3, 4]:
             index = self.index[:, :n] + offset
             theta = self.theta.float() * index
             x_out = torch.concat(
