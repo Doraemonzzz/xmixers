@@ -29,6 +29,7 @@ class LinearAttention(nn.Module):
         linear_activation: str = "silu",
         causal: bool = True,
         max_position_embeddings: int = 1024,
+        use_dense_memory: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -71,6 +72,14 @@ class LinearAttention(nn.Module):
                 nn.Linear(self.head_dim, embed_dim, bias=bias),
             )
 
+        self.use_dense_memory = use_dense_memory
+        if self.use_dense_memory:
+            self.alpha_proj = nn.Linear(embed_dim, 1, bias=bias)
+            self.beta_proj = nn.Sequential(
+                nn.Linear(embed_dim, self.head_dim, bias=bias),
+                nn.Linear(self.head_dim, embed_dim, bias=bias),
+            )
+
         self.causal_mask = None
         self.max_position_embeddings = max_position_embeddings
 
@@ -90,6 +99,13 @@ class LinearAttention(nn.Module):
         # act
         q = self.act(q)
         k = self.act(k)
+
+        if self.use_dense_memory:
+            alpha = F.sigmoid(self.alpha_proj(x))
+            beta = F.normalize(self.beta_proj(x), p=2, dim=-1)
+            # q * (I - alpha * beta * beta ^ T)
+            q_beta = (q * beta).sum(dim=-1, keepdim=True)
+            q = q - alpha * q_beta * beta
 
         q, k, v = map(
             lambda x: rearrange(x, "... n (h d) -> ... h n d", d=self.head_dim),

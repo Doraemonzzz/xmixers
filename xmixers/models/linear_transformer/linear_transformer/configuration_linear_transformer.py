@@ -39,6 +39,7 @@ class LinearTransformerConfig(PretrainedConfig):
         linear_activation="silu",
         causal=True,
         use_ape=False,
+        use_dense_memory=False,
         **kwargs,
     ):
         super().__init__(
@@ -71,3 +72,4 @@ class LinearTransformerConfig(PretrainedConfig):
         self.num_layers = num_layers
         self.norm_type = norm_type
         self.use_ape = use_ape
+        self.use_dense_memory = use_dense_memory

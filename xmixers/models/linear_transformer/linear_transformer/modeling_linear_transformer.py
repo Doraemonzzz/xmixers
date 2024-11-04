@@ -41,6 +41,7 @@ class LinearTransformerLayer(nn.Module):
             linear_activation=config.linear_activation,
             causal=config.causal,
             max_position_embeddings=config.max_position_embeddings,
+            use_dense_memory=config.use_dense_memory,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
