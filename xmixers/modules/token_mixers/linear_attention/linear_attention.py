@@ -72,6 +72,7 @@ class LinearAttention(nn.Module):
             )
 
         self.causal_mask = None
+        self.max_position_embeddings = max_position_embeddings
 
     def forward(
         self,
@@ -80,7 +81,6 @@ class LinearAttention(nn.Module):
         past_key_values: Optional[Cache] = None,
         **kwargs,
     ):
-        b, n, d = x.shape
         # x: b n d
         # linear map
         q = self.q_proj(x)
@@ -111,10 +111,20 @@ class LinearAttention(nn.Module):
 
         if self.causal:
             if self.causal_mask is None:
-                self.causal_mask = (torch.tril(torch.ones(n, n))).to(q)
-
+                self.causal_mask = (
+                    torch.tril(
+                        torch.ones(
+                            self.max_position_embeddings, self.max_position_embeddings
+                        )
+                    )
+                ).to(q)
             energy = torch.einsum("... n d, ... m d -> ... n m", q, k)
-            energy = energy * self.causal_mask
+            # use causal when training or evaluation(not for generation) or prefill
+            is_causal = True if self.training or (q.shape[-2] == k.shape[-2]) else False
+            if is_causal:
+                n = k.shape[-2]
+                causal_mask = self.causal_mask[:n, :n]
+                energy = energy * causal_mask
             output = torch.einsum("... n m, ... m d -> ... n d", energy, v)
         else:
             kv = torch.einsum("... h n d, ... h n e -> ... h d e", k, v)
