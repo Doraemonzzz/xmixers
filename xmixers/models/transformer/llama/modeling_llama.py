@@ -78,13 +78,12 @@ class LLaMAPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LLaMALayer"]
 
     def _init_weights(self, module):
+        std = self.config.init_std
         if isinstance(module, nn.Linear):
-            std = self.config.init_std
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            std = self.config.init_std
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
@@ -97,7 +96,6 @@ class LLaMAPreTrainedModel(PreTrainedModel):
         # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
         for name, p in module.named_parameters():
             if name in ["out_proj.weight", "w3.weight"]:
-                std = self.config.init_std
                 num_residuals_per_layer = 2
                 # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
