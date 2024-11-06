@@ -110,6 +110,7 @@ class Lrpe(nn.Module):
             x_ = torch.view_as_complex(x.float().reshape(*x.shape[:-1], -1, 2))
             x_out = torch.view_as_real(x_ * theta_).flatten(3).type_as(x)
         elif self.lrpe_type == 2:
+            index = self.index[:, :n] + offset
             # only support even number
             e = d // 2 + d % 2
             # last e features
