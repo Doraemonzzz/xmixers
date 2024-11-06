@@ -37,7 +37,6 @@ class Lrpe(nn.Module):
         d = self.num_heads * self.head_dim
         if self.lrpe_type == 1:
             logging_info("standard rope")
-
             theta = base ** (
                 -2 / d * torch.arange(d // 2, dtype=torch.int64)
             ).float().reshape(num_heads, 1, -1)
@@ -62,6 +61,13 @@ class Lrpe(nn.Module):
                 .reshape(1, 1, -1)
             )
             self.theta = nn.Parameter(theta)
+        elif lrpe_type == 5:
+            logging_info("share rope")
+            d = head_dim
+            theta = base ** (
+                -2 / d * torch.arange(d // 2, dtype=torch.int64)
+            ).float().reshape(1, 1, -1)
+            self.register_buffer("theta", theta, persistent=False)
         else:
             raise ValueError(f"lrpe_type: {lrpe_type} has not been support!")
 
@@ -96,7 +102,7 @@ class Lrpe(nn.Module):
                 .to(self.theta.device)
             )
 
-        if self.lrpe_type == 1:
+        if self.lrpe_type in [1, 5]:
             theta = (self.index[:, :n] + offset) * self.theta
             theta_ = torch.polar(
                 torch.ones_like(theta).to(torch.float32), theta.to(torch.float32)
