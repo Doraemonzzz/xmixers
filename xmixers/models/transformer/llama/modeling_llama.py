@@ -36,6 +36,7 @@ class LLaMALayer(nn.Module):
             layer_idx=layer_idx,
             lrpe_type=config.lrpe_type,
             base=config.base,
+            init_type=config.init_type,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)

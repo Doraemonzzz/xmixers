@@ -28,6 +28,7 @@ class Attention(nn.Module):
         lrpe_type: int = 1,
         base: int = 10000,
         max_position_embeddings: int = 1024,
+        init_type: int = 0,
         **kwargs,
     ):
         super().__init__()
@@ -59,6 +60,27 @@ class Attention(nn.Module):
                 base=base,
                 max_position_embeddings=max_position_embeddings,
             )
+
+        self.init_type = init_type
+        self.apply(self._initialize_weights)
+
+    def _initialize_weights(self, module):
+        if getattr(module, "_is_hf_initialized", False):
+            return
+
+        if self.init_type == 0:
+            pass
+        elif self.init_type == 1:  # fla init
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight, gain=2**-2.5)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        elif self.init_type == 2:  # fairseq init
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight, gain=2**-0.5)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        module._is_hf_initialized = True
 
     def forward(
         self,

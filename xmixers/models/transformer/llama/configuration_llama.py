@@ -35,6 +35,7 @@ class LLaMAConfig(PretrainedConfig):
         # others
         num_layers=24,
         norm_type="layernorm",
+        init_type=0,
         **kwargs,
     ):
         super().__init__(
@@ -63,3 +64,4 @@ class LLaMAConfig(PretrainedConfig):
         # others
         self.num_layers = num_layers
         self.norm_type = norm_type
+        self.init_type = init_type
