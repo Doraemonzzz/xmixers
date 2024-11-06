@@ -86,8 +86,8 @@ class GPTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, LearnablePe):
-            module.weight.data.normal_(mean=0.0, std=std)
+        # elif isinstance(module, LearnablePe):
+        #     module.weight.data.normal_(mean=0.0, std=std)
 
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
