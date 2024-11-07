@@ -36,7 +36,7 @@ class LLaMALayer(nn.Module):
             layer_idx=layer_idx,
             lrpe_type=config.lrpe_type,
             base=config.base,
-            init_type=config.init_type,
+            token_mixer_init_type=config.token_mixer_init_type,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
@@ -80,14 +80,31 @@ class LLaMAPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        if self.config.init_type == 0:
+            if isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+                if module.padding_idx is not None:
+                    nn.init.zeros_(module.weight[module.padding_idx])
+        elif (
+            self.config.init_type == 1
+        ):  # credit to https://arxiv.org/pdf/2409.02060#page=14.84
+            trunc_std = 3 * std
+            if isinstance(module, nn.Linear):
+                nn.init.trunc_normal_(
+                    module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
+                )
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.trunc_normal_(
+                    module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
+                )
+                if module.padding_idx is not None:
+                    nn.init.zeros_(module.weight[module.padding_idx])
 
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale

@@ -34,6 +34,8 @@ class GPTConfig(PretrainedConfig):
         # others
         num_layers=24,
         norm_type="layernorm",
+        token_mixer_init_type=0,
+        init_type=0,
         **kwargs,
     ):
         super().__init__(
@@ -62,3 +64,5 @@ class GPTConfig(PretrainedConfig):
         # others
         self.num_layers = num_layers
         self.norm_type = norm_type
+        self.token_mixer_init_type = token_mixer_init_type
+        self.init_type = init_type
