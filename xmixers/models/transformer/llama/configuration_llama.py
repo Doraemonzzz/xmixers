@@ -37,6 +37,7 @@ class LLaMAConfig(PretrainedConfig):
         norm_type="layernorm",
         token_mixer_init_type=0,
         init_type=0,
+        use_postnorm=False,
         **kwargs,
     ):
         super().__init__(
@@ -67,3 +68,4 @@ class LLaMAConfig(PretrainedConfig):
         self.norm_type = norm_type
         self.token_mixer_init_type = token_mixer_init_type
         self.init_type = init_type
+        self.use_postnorm = use_postnorm

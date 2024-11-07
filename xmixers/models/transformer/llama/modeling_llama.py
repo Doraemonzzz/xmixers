@@ -49,6 +49,53 @@ class LLaMALayer(nn.Module):
         )
 
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+        self.use_postnorm = config.use_postnorm
+        if self.use_postnorm:
+            self.forward = self.forward_postnorm
+
+    def forward(
+        self,
+        x,
+        attention_mask: Optional[torch.Tensor] = None,  # (b, m)
+        past_key_values: Optional[Cache] = None,
+    ):
+        # token mixer
+        residual = x
+        x, past_key_values = self.token_mixer(
+            x=self.token_norm(x),
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+        )
+        x = x + residual
+
+        # channel mixer
+        x = self.channel_mixer(self.channel_norm(x)) + x
+
+        outputs = (x, past_key_values)
+
+        return outputs
+
+    def forward_postnorm(
+        self,
+        x,
+        attention_mask: Optional[torch.Tensor] = None,  # (b, m)
+        past_key_values: Optional[Cache] = None,
+    ):
+        # token mixer
+        residual = x
+        x, past_key_values = self.token_mixer(
+            x=x,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+        )
+        x = self.token_norm(x + residual)
+
+        # channel mixer
+        x = self.channel_norm(self.channel_mixer(x) + x)
+
+        outputs = (x, past_key_values)
+
+        return outputs
 
     def forward(
         self,
