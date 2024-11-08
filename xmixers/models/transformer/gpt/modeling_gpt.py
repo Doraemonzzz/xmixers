@@ -18,7 +18,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import FFN, Attention, LearnablePe, SinCosPe, get_norm_fn
+from xmixers.modules import FFN, Attention, LearnablePe, MlpPe, SinCosPe, get_norm_fn
 
 from .configuration_gpt import GPTConfig
 
@@ -158,8 +158,10 @@ class GPTModel(GPTPreTrainedModel):
         )
         if config.ape_type == "sincos":
             self.ape = SinCosPe(config.embed_dim, config.base)
-        else:
+        elif config.ape_type == "learnable":
             self.ape = LearnablePe(config.embed_dim, config.max_position_embeddings)
+        else:
+            self.ape = MlpPe(config.embed_dim, config.base, config.bias)
 
         self.layers = nn.ModuleList(
             [GPTLayer(config, layer_idx) for layer_idx in range(config.num_layers)]

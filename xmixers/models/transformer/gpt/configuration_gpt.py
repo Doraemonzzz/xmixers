@@ -45,7 +45,7 @@ class GPTConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        assert ape_type in ["sincos", "learnable"]
+        assert ape_type in ["sincos", "learnable", "mlp"]
         ##### hf origin
         self.vocab_size = vocab_size
         self.use_cache = use_cache
