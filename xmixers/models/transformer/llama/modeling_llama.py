@@ -126,8 +126,8 @@ class LLaMAPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LLaMALayer"]
 
     def _init_weights(self, module):
-        std = self.config.init_std
         if self.config.init_type == 0:
+            std = self.config.init_std
             if isinstance(module, nn.Linear):
                 nn.init.normal_(module.weight, mean=0.0, std=std)
                 if module.bias is not None:
@@ -139,6 +139,7 @@ class LLaMAPreTrainedModel(PreTrainedModel):
         elif (
             self.config.init_type == 1
         ):  # credit to https://arxiv.org/pdf/2409.02060#page=14.84
+            std = self.config.init_std
             trunc_std = 3 * std
             if isinstance(module, nn.Linear):
                 nn.init.trunc_normal_(
@@ -150,6 +151,16 @@ class LLaMAPreTrainedModel(PreTrainedModel):
                 nn.init.trunc_normal_(
                     module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
                 )
+                if module.padding_idx is not None:
+                    nn.init.zeros_(module.weight[module.padding_idx])
+        elif self.config.init_type == 2:  # credit to https://arxiv.org/pdf/1910.05895
+            std = (2 / 5 / self.config.embed_dim) ** 0.5
+            if isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
                 if module.padding_idx is not None:
                     nn.init.zeros_(module.weight[module.padding_idx])
 

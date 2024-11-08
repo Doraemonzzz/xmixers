@@ -78,8 +78,8 @@ class GPTPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPTLayer"]
 
     def _init_weights(self, module):
-        std = self.config.init_std
         if self.config.init_type == 0:
+            std = self.config.init_std
             if isinstance(module, nn.Linear):
                 nn.init.normal_(module.weight, mean=0.0, std=std)
                 if module.bias is not None:
@@ -93,6 +93,7 @@ class GPTPreTrainedModel(PreTrainedModel):
         elif (
             self.config.init_type == 1
         ):  # credit to https://arxiv.org/pdf/2409.02060#page=14.84
+            std = self.config.init_std
             trunc_std = 3 * std
             if isinstance(module, nn.Linear):
                 nn.init.trunc_normal_(
@@ -110,17 +111,18 @@ class GPTPreTrainedModel(PreTrainedModel):
                 nn.init.trunc_normal_(
                     module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
                 )
-
-        # if isinstance(module, nn.Linear):
-        #     module.weight.data.normal_(mean=0.0, std=std)
-        #     if module.bias is not None:
-        #         module.bias.data.zero_()
-        # elif isinstance(module, nn.Embedding):
-        #     module.weight.data.normal_(mean=0.0, std=std)
-        #     if module.padding_idx is not None:
-        #         module.weight.data[module.padding_idx].zero_()
-        # elif isinstance(module, LearnablePe):
-        #     module.weight.data.normal_(mean=0.0, std=std)
+        elif self.config.init_type == 2:  # credit to https://arxiv.org/pdf/1910.05895
+            std = (2 / 5 / self.config.embed_dim) ** 0.5
+            if isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+                if module.padding_idx is not None:
+                    nn.init.zeros_(module.weight[module.padding_idx])
+            elif isinstance(module, LearnablePe):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
 
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
