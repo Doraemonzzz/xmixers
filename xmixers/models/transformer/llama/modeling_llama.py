@@ -184,6 +184,7 @@ class LLaMAModel(LLaMAPreTrainedModel):
         self.gradient_checkpointing = False
 
         # params
+        self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
@@ -244,7 +245,7 @@ class LLaMAModel(LLaMAPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        hidden_states = inputs_embeds
+        hidden_states = self.embed_scale * inputs_embeds
 
         if self.gradient_checkpointing and self.training:
             if use_cache:

@@ -153,6 +153,7 @@ class GPTModel(GPTPreTrainedModel):
         self.gradient_checkpointing = False
 
         # params
+        self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
@@ -226,7 +227,8 @@ class GPTModel(GPTPreTrainedModel):
         offset = 0
         if past_key_values is not None:
             offset = past_key_values.get_seq_length(0)
-        hidden_states = self.ape(hidden_states, offset=offset)
+
+        hidden_states = self.embed_scale * self.ape(hidden_states, offset=offset)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:

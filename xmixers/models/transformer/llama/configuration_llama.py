@@ -38,6 +38,7 @@ class LLaMAConfig(PretrainedConfig):
         token_mixer_init_type=0,
         init_type=0,
         use_postnorm=False,
+        use_embed_scale=False,
         **kwargs,
     ):
         super().__init__(
@@ -69,3 +70,4 @@ class LLaMAConfig(PretrainedConfig):
         self.token_mixer_init_type = token_mixer_init_type
         self.init_type = init_type
         self.use_postnorm = use_postnorm
+        self.use_embed_scale = use_embed_scale

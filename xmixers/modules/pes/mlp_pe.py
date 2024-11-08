@@ -59,11 +59,6 @@ class MlpPe(nn.Module):
             self.get_pe(x, [offset + x.shape[-2]])
         start = offset
         end = offset + x.shape[1]
-        print(
-            self.pe[
-                start:end,
-            ].shape
-        )
         pe = self.linear(
             self.pe[
                 start:end,
