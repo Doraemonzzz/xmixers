@@ -40,6 +40,8 @@ class LinearTransformerConfig(PretrainedConfig):
         causal=True,
         use_ape=False,
         use_dense_memory=False,
+        token_mixer_init_type=0,
+        init_type=0,
         **kwargs,
     ):
         super().__init__(
@@ -73,3 +75,5 @@ class LinearTransformerConfig(PretrainedConfig):
         self.norm_type = norm_type
         self.use_ape = use_ape
         self.use_dense_memory = use_dense_memory
+        self.token_mixer_init_type = token_mixer_init_type
+        self.init_type = init_type

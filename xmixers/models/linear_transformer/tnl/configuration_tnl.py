@@ -47,6 +47,8 @@ class TnlConfig(PretrainedConfig):
         n_min=2,
         n_max=256,
         use_embed_scale=False,
+        token_mixer_init_type=0,
+        init_type=0,
         **kwargs,
     ):
         super().__init__(
@@ -86,3 +88,5 @@ class TnlConfig(PretrainedConfig):
         self.n_min = n_min
         self.n_max = n_max
         self.use_embed_scale = use_embed_scale
+        self.token_mixer_init_type = token_mixer_init_type
+        self.init_type = init_type

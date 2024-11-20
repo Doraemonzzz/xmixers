@@ -28,8 +28,9 @@ class LinearAttention(nn.Module):
         norm_type: str = "layernorm",
         linear_activation: str = "silu",
         causal: bool = True,
-        max_position_embeddings: int = 1024,
         use_dense_memory: bool = False,
+        max_position_embeddings: int = 1024,
+        token_mixer_init_type: int = 0,
         **kwargs,
     ):
         super().__init__()
@@ -82,6 +83,26 @@ class LinearAttention(nn.Module):
 
         self.causal_mask = None
         self.max_position_embeddings = max_position_embeddings
+        self.token_mixer_init_type = token_mixer_init_type
+        self.apply(self._initialize_weights)
+
+    def _initialize_weights(self, module):
+        if getattr(module, "_is_hf_initialized", False):
+            return
+
+        if self.token_mixer_init_type == 0:
+            pass
+        elif self.token_mixer_init_type == 1:  # fla init
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight, gain=2**-2.5)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        elif self.token_mixer_init_type == 2:  # fairseq init
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight, gain=2**-0.5)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        module._is_hf_initialized = True
 
     def forward(
         self,
@@ -148,8 +169,6 @@ class LinearAttention(nn.Module):
 
         # reshape
         output = rearrange(output, "... h n d -> ... n (h d)")
-        # outproj
-        output = self.out_proj(output)
 
         if self.use_output_gate:
             output_gate = F.sigmoid(self.out_gate(x))
@@ -157,5 +176,8 @@ class LinearAttention(nn.Module):
 
         # use post norm here for better parallel when using tp
         output = self.norm(output)
+
+        # outproj
+        output = self.out_proj(output)
 
         return output, past_key_values
