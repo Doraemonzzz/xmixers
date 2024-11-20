@@ -13,7 +13,7 @@ import torch.nn as nn
 from xmixers.utils import XMIXERS_DEBUG, print_params
 
 
-class SimpleRMSNorm(nn.Module):
+class SRMSNorm(nn.Module):
     def __init__(self, d: int, eps: float = 1e-8) -> None:
         super().__init__()
         if XMIXERS_DEBUG:

@@ -7,5 +7,8 @@ from .models import (
     LLaMAForCausalLM,
     LLaMALayer,
     LLaMAModel,
+    TnlConfig,
+    TnlForCausalLM,
+    TnlModel,
 )
 from .ops import *

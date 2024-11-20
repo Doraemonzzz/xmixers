@@ -85,7 +85,7 @@ class Hgru3(nn.Module):
     def forward(
         self,
         x,
-        log_lower_bound=0,
+        log_lower_bound: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         **kwargs,

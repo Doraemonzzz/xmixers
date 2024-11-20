@@ -8,8 +8,8 @@ def get_norm_fn(norm_type: str) -> nn.Module:
         return RMSNorm
     elif norm_type == "gatedrmsnorm":
         return GatedRMSNorm
-    elif norm_type == "simplermsnorm":
-        return SimpleRMSNorm
+    elif norm_type == "srmsnorm":
+        return SRMSNorm
     elif norm_type == "scalenorm":
         return ScaleNorm
     else:
