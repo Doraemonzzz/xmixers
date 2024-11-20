@@ -1,6 +1,4 @@
-"""
-FFN in https://arxiv.org/pdf/2002.05202.pdf
-"""
+# FFN: https://arxiv.org/pdf/2002.05202.pdf
 
 import torch.nn as nn
 

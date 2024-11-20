@@ -91,3 +91,10 @@ def print_module(module: nn.Module) -> str:
 
 def next_power_of_2(n: int) -> int:
     return 2 ** (math.ceil(math.log(n, 2)))
+
+
+def endswith(name, keyword_list):
+    for keyword in keyword_list:
+        if name.endswith(keyword):
+            return True
+    return False

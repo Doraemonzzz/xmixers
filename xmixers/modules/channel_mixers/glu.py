@@ -1,6 +1,4 @@
-"""
-GLU in https://arxiv.org/pdf/2002.05202.pdf
-"""
+# GLU: https://arxiv.org/pdf/2002.05202.pdf
 
 import torch.nn as nn
 

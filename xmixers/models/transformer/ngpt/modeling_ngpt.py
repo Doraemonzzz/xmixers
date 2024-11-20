@@ -1,6 +1,6 @@
 # coding=utf-8
-# Tnl: https://arxiv.org/pdf/2405.17381
-""" PyTorch Tnl model."""
+# nGLU: https://arxiv.org/pdf/2410.01131
+""" PyTorch nGPT model."""
 import math
 from typing import Optional, Tuple, Union
 
@@ -19,78 +19,112 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import GLU, TnlAttention, get_log_slopes_general, get_norm_fn
+from xmixers.modules import LearnablePe, nAttention, nGLU
+from xmixers.utils import endswith, print_module
 
-from .configuration_tnl import TnlConfig
+from .configuration_ngpt import nGPTConfig
 
 
-class TnlLayer(nn.Module):
-    def __init__(self, config: TnlConfig, layer_idx=0):
+class nGPTLayer(nn.Module):
+    def __init__(self, config: nGPTConfig, layer_idx=0):
         super().__init__()
 
-        self.token_mixer = TnlAttention(
+        self.token_mixer = nAttention(
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,
             kv_heads=config.kv_heads,
             bias=config.bias,
-            use_lrpe=config.use_lrpe_list[layer_idx]
-            if len(config.use_lrpe_list) > layer_idx
-            else config.use_lrpe_list[0],
+            use_lrpe=config.use_lrpe,
             layer_idx=layer_idx,
-            lrpe_type=config.lrpe_type,
             base=config.base,
-            gate_dim=config.gate_dim,
-            use_output_gate=config.use_output_gate,
-            norm_type=config.norm_type,
-            q_activation=config.q_activation,
-            k_activation=config.k_activation,
-            v_activation=config.v_activation,
-            causal=config.causal,
-            norm_pos=config.norm_pos,
-            max_position_embeddings=config.max_position_embeddings,
             token_mixer_init_type=config.token_mixer_init_type,
         )
+        base_scale = 1.0 / (config.embed_dim**0.5)
+        self.token_alpha_init_value = 0.05
+        self.token_alpha_init_scaling = base_scale
+        self.token_alpha = torch.nn.Parameter(
+            self.token_alpha_init_scaling
+            * torch.ones(config.embed_dim, dtype=torch.float32)
+        )
 
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
-
-        self.channel_mixer = GLU(
+        self.channel_mixer = nGLU(
             embed_dim=config.embed_dim,
             mid_dim=config.mid_dim,
             activation=config.glu_activation,
             bias=config.bias,
         )
+        self.channel_alpha_init_value = 0.05
+        self.channel_alpha_init_scaling = base_scale
+        self.channel_alpha = torch.nn.Parameter(
+            self.channel_alpha_init_scaling
+            * torch.ones(config.embed_dim, dtype=torch.float32)
+        )
 
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+    def extra_repr(self):
+        return print_module(self)
+
+    def justnorm(self, x):
+        res = x / x.norm(p=2, dim=-1, keepdim=True)
+        return res
 
     def forward(
         self,
         x,
-        log_slope: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
     ):
         # token mixer
         residual = x
         x, past_key_values = self.token_mixer(
-            x=self.token_norm(x),
-            log_slope=log_slope,
+            x=x,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
         )
-        x = x + residual
+        # residual
+        lr = self.token_alpha * (
+            self.token_alpha_init_value / self.token_alpha_init_scaling
+        )
+        lr = torch.abs(lr)
+
+        A_norm = self.justnorm(residual)  # normally, normalization is not needed
+        B_norm = self.justnorm(x)
+
+        x = A_norm + lr * (B_norm - A_norm)
+        x = self.justnorm(x)
 
         # channel mixer
-        x = self.channel_mixer(self.channel_norm(x)) + x
+        residual = x
+        x = self.channel_mixer(x)
+        # residual
+        lr = self.channel_alpha * (
+            self.channel_alpha_init_value / self.channel_alpha_init_scaling
+        )
+        lr = torch.abs(lr)
+
+        A_norm = self.justnorm(residual)  # normally, normalization is not needed
+        B_norm = self.justnorm(x)
+
+        x = A_norm + lr * (B_norm - A_norm)
+        x = self.justnorm(x)
 
         outputs = (x, past_key_values)
 
         return outputs
 
 
-class TnlPreTrainedModel(PreTrainedModel):
-    config_class = TnlConfig
+class nGPTPreTrainedModel(PreTrainedModel):
+    config_class = nGPTConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["TnlLayer"]
+    _no_split_modules = ["nGPTLayer"]
+
+    def extra_repr(self):
+        return print_module(self)
+
+    def justnorm(self, x, idim=-1):
+        dtype = x.dtype
+        x = x.float()
+        res = (x / x.norm(p=2, dim=idim, keepdim=True)).to(dtype=dtype)
+        return res
 
     def _init_weights(self, module):
         if self.config.init_type == 0:
@@ -103,6 +137,8 @@ class TnlPreTrainedModel(PreTrainedModel):
                 nn.init.normal_(module.weight, mean=0.0, std=std)
                 if module.padding_idx is not None:
                     nn.init.zeros_(module.weight[module.padding_idx])
+            elif isinstance(module, LearnablePe):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
         elif (
             self.config.init_type == 1
         ):  # credit to https://arxiv.org/pdf/2409.02060#page=14.84
@@ -120,6 +156,10 @@ class TnlPreTrainedModel(PreTrainedModel):
                 )
                 if module.padding_idx is not None:
                     nn.init.zeros_(module.weight[module.padding_idx])
+            elif isinstance(module, LearnablePe):
+                nn.init.trunc_normal_(
+                    module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
+                )
         elif self.config.init_type == 2:  # credit to https://arxiv.org/pdf/1910.05895
             std = (2 / 5 / self.config.embed_dim) ** 0.5
             if isinstance(module, nn.Linear):
@@ -130,15 +170,18 @@ class TnlPreTrainedModel(PreTrainedModel):
                 nn.init.normal_(module.weight, mean=0.0, std=std)
                 if module.padding_idx is not None:
                     nn.init.zeros_(module.weight[module.padding_idx])
+            elif isinstance(module, LearnablePe):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
 
-        # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
+        # Reinitialize selected weights subject to the OpenAI nGPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
         #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-        #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
+        #   >   -- nGPT-2 :: https://openai.com/blog/better-language-models/
         #
-        # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
+        # Reference: https://github.com/karpathy/nanonGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
         for name, p in module.named_parameters():
-            if name in ["out_proj.weight", "w3.weight"]:
+            # if name.endswith("out_proj.weight") or name.endswith("w2.weight"):
+            if endswith(name, ["out_proj.weight", "w2.weight"]):
                 num_residuals_per_layer = 2
                 # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
@@ -148,13 +191,22 @@ class TnlPreTrainedModel(PreTrainedModel):
                 with torch.no_grad():
                     p /= math.sqrt(num_residuals_per_layer * self.config.num_layers)
 
+        # nGPT post init
+        for name, p in module.named_parameters():
+            if not name.endswith("weight"):
+                continue
+            if endswith(name, ["out_proj.weight", "w3.weight"]):
+                p = self.justnorm(p, idim=0)
+            else:
+                p = self.justnorm(p, idim=1)
+
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, TnlModel):
+        if isinstance(module, nGPTModel):
             module.gradient_checkpointing = value
 
 
-class TnlModel(TnlPreTrainedModel):
-    def __init__(self, config: TnlConfig):
+class nGPTModel(nGPTPreTrainedModel):
+    def __init__(self, config: nGPTConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
@@ -167,16 +219,9 @@ class TnlModel(TnlPreTrainedModel):
             config.vocab_size, config.embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
-            [TnlLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
-        )
-        log_slope = get_log_slopes_general(config.num_heads, config.n_min, config.n_max)
-        self.register_buffer(
-            "log_slope",
-            torch.tensor(log_slope, dtype=torch.float32),
-            persistent=False,
+            [nGPTLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
 
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -247,20 +292,16 @@ class TnlModel(TnlPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            log_slope = self.log_slope * (1 - idx / (self.config.num_layers - 1) + 1e-5)
-
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     layer.__call__,
                     hidden_states,
-                    log_slope,
                     attention_mask,
                     past_key_values,
                 )
             else:
                 layer_outputs = layer(
                     hidden_states,
-                    log_slope=log_slope,
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                 )
@@ -269,8 +310,6 @@ class TnlModel(TnlPreTrainedModel):
 
             if use_cache:
                 next_decoder_cache = layer_outputs[-1]
-
-        hidden_states = self.final_norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -291,13 +330,20 @@ class TnlModel(TnlPreTrainedModel):
         )
 
 
-class TnlForCausalLM(TnlPreTrainedModel):
+class nGPTForCausalLM(nGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.model = TnlModel(config)
+        self.model = nGPTModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
+        # final norm
+        base_scale = 1.0 / (config.embed_dim**0.5)
+        self.sz_init_value = 1.00
+        self.sz_init_scaling = base_scale
+        self.sz = torch.nn.Parameter(
+            self.sz_init_scaling * torch.ones(config.vocab_size, dtype=torch.float32)
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -344,9 +390,9 @@ class TnlForCausalLM(TnlPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, TnlForCausalLM
+        >>> from transformers import AutoTokenizer, nGPTForCausalLM
 
-        >>> model = TnlForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = nGPTForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
@@ -385,6 +431,8 @@ class TnlForCausalLM(TnlPreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
+        sz = self.sz * (self.sz_init_value / self.sz_init_scaling)
+        logits = sz * logits
 
         loss = None
         if labels is not None:

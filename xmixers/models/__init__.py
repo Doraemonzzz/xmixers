@@ -16,4 +16,8 @@ from .transformer import (
     LLaMAForCausalLM,
     LLaMALayer,
     LLaMAModel,
+    nGPTConfig,
+    nGPTForCausalLM,
+    nGPTLayer,
+    nGPTModel,
 )
