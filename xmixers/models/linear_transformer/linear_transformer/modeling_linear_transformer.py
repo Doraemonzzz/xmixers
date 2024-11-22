@@ -130,7 +130,10 @@ class LinearTransformerPreTrainedModel(PreTrainedModel):
         #
         # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
         for name, p in module.named_parameters():
-            if name in ["out_proj.weight", "w3.weight"]:
+            if (self.config.rescale_type == 0 and name in ["w3.weight"]) or (
+                self.config.rescale_type == 1
+                and name in ["out_proj.weight", "w3.weight"]
+            ):
                 num_residuals_per_layer = 2
                 # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block

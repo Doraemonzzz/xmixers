@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 
 import torch
@@ -29,6 +30,8 @@ class Attention(nn.Module):
         base: int = 10000,
         max_position_embeddings: int = 1024,
         token_mixer_init_type: int = 0,
+        rescale_type: int = 0,
+        num_layers: int = 12,
         **kwargs,
     ):
         super().__init__()
@@ -62,6 +65,8 @@ class Attention(nn.Module):
             )
 
         self.token_mixer_init_type = token_mixer_init_type
+        self.rescale_type = rescale_type
+        self.num_layers = num_layers
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -80,6 +85,25 @@ class Attention(nn.Module):
                 nn.init.xavier_uniform_(module.weight, gain=2**-0.5)
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
+
+        if self.rescale_type == 1:
+            # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
+            #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
+            #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
+            #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
+            #
+            # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
+            for name, p in module.named_parameters():
+                if name in ["out_proj.weight"]:
+                    num_residuals_per_layer = 2
+                    # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
+                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                    # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
+                    # We need to reinit p since this code could be called multiple times
+                    # Having just p *= scale would repeatedly scale it down
+                    with torch.no_grad():
+                        p /= math.sqrt(num_residuals_per_layer * self.num_layers)
+
         module._is_hf_initialized = True
 
     def forward(

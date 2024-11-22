@@ -38,6 +38,8 @@ class nGPTLayer(nn.Module):
             layer_idx=layer_idx,
             base=config.base,
             token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
         )
         base_scale = 1.0 / (config.embed_dim**0.5)
         self.token_alpha_init_value = 0.05
@@ -180,8 +182,7 @@ class nGPTPreTrainedModel(PreTrainedModel):
         #
         # Reference: https://github.com/karpathy/nanonGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
         for name, p in module.named_parameters():
-            # if name.endswith("out_proj.weight") or name.endswith("w2.weight"):
-            if endswith(name, ["out_proj.weight", "w2.weight"]):
+            if name in ["w3.weight"]:
                 num_residuals_per_layer = 2
                 # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block

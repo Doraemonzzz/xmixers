@@ -36,6 +36,7 @@ class GPTConfig(PretrainedConfig):
         norm_type="layernorm",
         token_mixer_init_type=0,
         init_type=0,
+        rescale_type=0,
         use_embed_scale=False,
         **kwargs,
     ):
@@ -67,4 +68,5 @@ class GPTConfig(PretrainedConfig):
         self.norm_type = norm_type
         self.token_mixer_init_type = token_mixer_init_type
         self.init_type = init_type
+        self.rescale_type = rescale_type
         self.use_embed_scale = use_embed_scale
