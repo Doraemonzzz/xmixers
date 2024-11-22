@@ -49,6 +49,8 @@ class TnlLayer(nn.Module):
             norm_pos=config.norm_pos,
             max_position_embeddings=config.max_position_embeddings,
             token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
@@ -138,10 +140,7 @@ class TnlPreTrainedModel(PreTrainedModel):
         #
         # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
         for name, p in module.named_parameters():
-            if (self.config.rescale_type == 0 and name in ["w3.weight"]) or (
-                self.config.rescale_type == 1
-                and name in ["out_proj.weight", "w3.weight"]
-            ):
+            if name in ["w3.weight"]:
                 num_residuals_per_layer = 2
                 # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block

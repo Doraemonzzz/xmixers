@@ -42,6 +42,7 @@ class LinearTransformerConfig(PretrainedConfig):
         use_dense_memory=False,
         token_mixer_init_type=0,
         init_type=0,
+        rescale_type=0,
         **kwargs,
     ):
         super().__init__(
@@ -77,3 +78,4 @@ class LinearTransformerConfig(PretrainedConfig):
         self.use_dense_memory = use_dense_memory
         self.token_mixer_init_type = token_mixer_init_type
         self.init_type = init_type
+        self.rescale_type = rescale_type
