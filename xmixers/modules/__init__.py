@@ -4,6 +4,7 @@ from .normalizations import get_norm_fn
 from .pes import LearnablePe, Lrpe, MlpPe, SinCosPe, get_log_slopes_general
 from .token_mixers import (
     Attention,
+    FlexAttention,
     Gtu,
     Hgru3,
     LinearAttention,

@@ -8,6 +8,10 @@ from .linear_transformer import (
 )
 from .long_conv import *
 from .transformer import (
+    FlexGPTConfig,
+    FlexGPTForCausalLM,
+    FlexGPTLayer,
+    FlexGPTModel,
     GPTConfig,
     GPTForCausalLM,
     GPTLayer,

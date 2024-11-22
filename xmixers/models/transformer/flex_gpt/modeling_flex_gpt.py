@@ -1,5 +1,5 @@
 # coding=utf-8
-""" PyTorch LLaMA model."""
+""" PyTorch FlexGPT model."""
 import math
 from typing import Optional, Tuple, Union
 
@@ -18,24 +18,21 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import GLU, Attention, get_norm_fn
+from xmixers.modules import GLU, FlexAttention, get_log_slopes_general, get_norm_fn
 
-from .configuration_llama import LLaMAConfig
+from .configuration_flex_gpt import FlexGPTConfig
 
 
-class LLaMALayer(nn.Module):
-    def __init__(self, config: LLaMAConfig, layer_idx=0):
+class FlexGPTLayer(nn.Module):
+    def __init__(self, config: FlexGPTConfig, layer_idx=0):
         super().__init__()
 
-        self.token_mixer = Attention(
+        self.token_mixer = FlexAttention(
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,
             kv_heads=config.kv_heads,
             bias=config.bias,
-            use_lrpe=config.use_lrpe,
             layer_idx=layer_idx,
-            lrpe_type=config.lrpe_type,
-            base=config.base,
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
@@ -51,15 +48,13 @@ class LLaMALayer(nn.Module):
         )
 
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim)
-        self.use_postnorm = config.use_postnorm
-        if self.use_postnorm:
-            self.forward = self.forward_postnorm
 
     def forward(
         self,
         x,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        log_slope: Optional[torch.Tensor] = None,
     ):
         # token mixer
         residual = x
@@ -67,6 +62,7 @@ class LLaMALayer(nn.Module):
             x=self.token_norm(x),
             attention_mask=attention_mask,
             past_key_values=past_key_values,
+            log_slope=log_slope,
         )
         x = x + residual
 
@@ -77,33 +73,11 @@ class LLaMALayer(nn.Module):
 
         return outputs
 
-    def forward_postnorm(
-        self,
-        x,
-        attention_mask: Optional[torch.Tensor] = None,  # (b, m)
-        past_key_values: Optional[Cache] = None,
-    ):
-        # token mixer
-        residual = x
-        x, past_key_values = self.token_mixer(
-            x=x,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-        )
-        x = self.token_norm(x + residual)
 
-        # channel mixer
-        x = self.channel_norm(self.channel_mixer(x) + x)
-
-        outputs = (x, past_key_values)
-
-        return outputs
-
-
-class LLaMAPreTrainedModel(PreTrainedModel):
-    config_class = LLaMAConfig
+class FlexGPTPreTrainedModel(PreTrainedModel):
+    config_class = FlexGPTConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LLaMALayer"]
+    _no_split_modules = ["FlexGPTLayer"]
 
     def _init_weights(self, module):
         if self.config.init_type == 0:
@@ -162,12 +136,12 @@ class LLaMAPreTrainedModel(PreTrainedModel):
                     p /= math.sqrt(num_residuals_per_layer * self.config.num_layers)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LLaMAModel):
+        if isinstance(module, FlexGPTModel):
             module.gradient_checkpointing = value
 
 
-class LLaMAModel(LLaMAPreTrainedModel):
-    def __init__(self, config: LLaMAConfig):
+class FlexGPTModel(FlexGPTPreTrainedModel):
+    def __init__(self, config: FlexGPTConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
@@ -180,8 +154,21 @@ class LLaMAModel(LLaMAPreTrainedModel):
             config.vocab_size, config.embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
-            [LLaMALayer(config, layer_idx) for layer_idx in range(config.num_layers)]
+            [FlexGPTLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
+        self.rpe_type = config.rpe_type
+        assert self.rpe_type in [0, 1], f"{rpe_type} not supported"
+        if self.rpe_type == 0:
+            self.log_slope = 0
+        elif self.rpe_type == 1:
+            log_slope = -get_log_slopes_general(
+                config.num_heads, config.n_min, config.n_max
+            )
+            self.register_buffer(
+                "log_slope",
+                torch.tensor(log_slope, dtype=torch.float32),
+                persistent=False,
+            )
 
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
         # Initialize weights and apply final processing
@@ -260,12 +247,14 @@ class LLaMAModel(LLaMAPreTrainedModel):
                     hidden_states,
                     attention_mask,
                     past_key_values,
+                    self.log_slope,
                 )
             else:
                 layer_outputs = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
+                    log_slope=self.log_slope,
                 )
 
             hidden_states = layer_outputs[0]
@@ -294,10 +283,10 @@ class LLaMAModel(LLaMAPreTrainedModel):
         )
 
 
-class LLaMAForCausalLM(LLaMAPreTrainedModel):
+class FlexGPTForCausalLM(FlexGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.model = LLaMAModel(config)
+        self.model = FlexGPTModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
@@ -347,9 +336,9 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LLaMAForCausalLM
+        >>> from transformers import AutoTokenizer, FlexGPTForCausalLM
 
-        >>> model = LLaMAForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = FlexGPTForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
