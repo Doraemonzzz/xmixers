@@ -159,7 +159,7 @@ class FlexGPTModel(FlexGPTPreTrainedModel):
         self.rpe_type = config.rpe_type
         assert self.rpe_type in [0, 1], f"{rpe_type} not supported"
         if self.rpe_type == 0:
-            self.log_slope = 0
+            self.log_slope = None
         elif self.rpe_type == 1:
             log_slope = -get_log_slopes_general(
                 config.num_heads, config.n_min, config.n_max
