@@ -1,18 +1,14 @@
 from transformers import AutoConfig, AutoModel, AutoModelForCausalLM
 
-from .configuration_linear_transformer import LinearTransformerConfig
-from .modeling_linear_transformer import (
-    LinearTransformerForCausalLM,
-    LinearTransformerLayer,
-    LinearTransformerModel,
-)
+from .configuration_hgrn3 import Hgrn3Config
+from .modeling_hgrn3 import Hgrn3ForCausalLM, Hgrn3Layer, Hgrn3Model
 
-AutoConfig.register(LinearTransformerConfig.model_type, LinearTransformerConfig)
-AutoModel.register(LinearTransformerConfig, LinearTransformerModel)
-AutoModelForCausalLM.register(LinearTransformerConfig, LinearTransformerForCausalLM)
+AutoConfig.register(Hgrn3Config.model_type, Hgrn3Config)
+AutoModel.register(Hgrn3Config, Hgrn3Model)
+AutoModelForCausalLM.register(Hgrn3Config, Hgrn3ForCausalLM)
 
 __all__ = [
-    "LinearTransformerConfig",
-    "LinearTransformerModel",
-    "LinearTransformerForCausalLM",
+    "Hgrn3Config",
+    "Hgrn3Model",
+    "Hgrn3ForCausalLM",
 ]

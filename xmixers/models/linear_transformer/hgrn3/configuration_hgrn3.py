@@ -37,6 +37,8 @@ class Hgrn3Config(PretrainedConfig):
         beta_activation="silu",
         causal=True,
         use_dense_memory=True,
+        n_min=2,
+        n_max=256,
         **kwargs,
     ):
         super().__init__(
@@ -67,3 +69,5 @@ class Hgrn3Config(PretrainedConfig):
         self.beta_activation = beta_activation
         self.causal = causal
         self.use_dense_memory = use_dense_memory
+        self.n_min = n_min
+        self.n_max = n_max

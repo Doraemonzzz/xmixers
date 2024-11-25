@@ -18,16 +18,16 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import GLU, LinearAttention, get_norm_fn
+from xmixers.modules import GLU, Hgru3, get_log_slopes_general, get_norm_fn
 
-from .configuration_linear_transformer import Hgrn3Config
+from .configuration_hgrn3 import Hgrn3Config
 
 
 class Hgrn3Layer(nn.Module):
     def __init__(self, config: Hgrn3Config, layer_idx=0):
         super().__init__()
 
-        self.token_mixer = LinearAttention(
+        self.token_mixer = Hgru3(
             embed_dim=config.embed_dim,
             expand_ratio=config.expand_ratio,
             bias=config.bias,
@@ -55,9 +55,9 @@ class Hgrn3Layer(nn.Module):
     def forward(
         self,
         x,
-        log_lower_bound=0,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        log_lower_bound: Optional[torch.Tensor] = None,
     ):
         # token mixer
         residual = x
@@ -127,12 +127,19 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
-
         self.layers = nn.ModuleList(
             [Hgrn3Layer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+
+        # log lower bound
+        log_lower_bound = get_log_slopes_general(
+            config.expand_ratio, config.n_min, config.n_max
+        )
+        self.register_buffer(
+            "log_lower_bound", torch.tensor(log_lower_bound), persistent=False
+        )
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -200,6 +207,8 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         next_decoder_cache = () if use_cache else None
 
         for idx, layer in enumerate(self.layers):
+            log_lower_bound = self.log_lower_bound / (idx + 1)
+
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -209,12 +218,14 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
                     hidden_states,
                     attention_mask,
                     past_key_values,
+                    log_lower_bound,
                 )
             else:
                 layer_outputs = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
+                    log_lower_bound=log_lower_bound,
                 )
 
             hidden_states = layer_outputs[0]

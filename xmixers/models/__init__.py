@@ -1,4 +1,7 @@
 from .linear_transformer import (
+    Hgrn3Config,
+    Hgrn3ForCausalLM,
+    Hgrn3Model,
     LinearTransformerConfig,
     LinearTransformerForCausalLM,
     LinearTransformerModel,

@@ -35,7 +35,7 @@ class Hgru3(nn.Module):
             # print params
             print_params(**params)
 
-        assert not causal, f"Only causal={causal} is supported"
+        assert causal, f"Only causal={causal} is supported"
 
         self.layer_idx = layer_idx
         self.expand_ratio = expand_ratio
@@ -46,7 +46,6 @@ class Hgru3(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.f_proj = nn.Linear(embed_dim, embed_dim // expand_ratio, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
@@ -85,9 +84,9 @@ class Hgru3(nn.Module):
     def forward(
         self,
         x,
-        log_lower_bound: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        log_lower_bound: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         # x: b n d
