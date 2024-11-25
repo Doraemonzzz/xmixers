@@ -39,6 +39,7 @@ class Hgrn3Config(PretrainedConfig):
         use_dense_memory=True,
         n_min=2,
         n_max=256,
+        use_embed_scale=False,
         **kwargs,
     ):
         super().__init__(
@@ -71,3 +72,4 @@ class Hgrn3Config(PretrainedConfig):
         self.use_dense_memory = use_dense_memory
         self.n_min = n_min
         self.n_max = n_max
+        self.use_embed_scale = use_embed_scale

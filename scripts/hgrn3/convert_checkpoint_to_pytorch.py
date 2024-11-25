@@ -17,7 +17,7 @@ logger = logging.get_logger(__name__)
 def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
     """Checkpoint path should end in model.pt"""
     sd = torch.load(checkpoint_path, map_location="cpu")
-    # config_dict = {"vocab_size": 64000}
+
     config_dict = {
         "vocab_size": vocab_size,
         "q_activation": "silu",
@@ -29,7 +29,7 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
         print(f'{key}={sd["cfg"]["model"][key]},')
         if key == "share_decoder_input_output_embed":
             config_dict["tie_word_embeddings"] = sd["cfg"]["model"][key]
-    # print()
+
     config_keys = {
         "decoder_embed_dim",
         "expand_ratio",
@@ -53,14 +53,22 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
     print("======Get Model Config Start======")
     for key in sd["cfg"]["model"]:
         if key in config_keys:
-            if key in ["glu_dim", "decoder_layers"]:
+            if key in [
+                "glu_dim",
+                "decoder_layers",
+                "use_embed_scale",
+                "decoder_embed_dim",
+            ]:
                 if key == "glu_dim":
                     config_dict["mid_dim"] = int(sd["cfg"]["model"][key])
                     print(f'mid_dim = {config_dict["mid_dim"]}')
                 elif key == "decoder_layers":
                     config_dict["num_layers"] = int(sd["cfg"]["model"][key])
                     print(f'num_layers = {config_dict["num_layers"]}')
-
+                elif key == "no_scale_embedding":
+                    config_dict["use_embed_scale"] = sd["cfg"]["model"][key]
+                elif key == "decoder_embed_dim":
+                    config_dict["embed_dim"] = int(sd["cfg"]["model"][key])
             else:
                 if key == "expand_ratio":
                     config_dict[key] = int(sd["cfg"]["model"][key])

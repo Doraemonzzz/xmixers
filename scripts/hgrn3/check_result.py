@@ -3,7 +3,6 @@ import os
 
 import torch
 from metaseq.models.hgrn import HgrnLanguageModel
-from modeling_hgrn2 import Hgrn2ForCausalLM
 
 
 def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir):
@@ -16,10 +15,10 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir):
         },
     )
 
-    # dtype = torch.bfloat16
-    dtype = torch.float32
+    dtype = torch.bfloat16
+    # dtype = torch.float32
     metaseq_model = metaseq_model_info["models"][0].cuda().to(dtype)
-    layers = 14
+    layers = 25
     print(f"layers: {layers}")
     print(metaseq_model)
 
