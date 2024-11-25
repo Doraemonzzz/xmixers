@@ -134,12 +134,15 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
 
         # log lower bound
-        log_lower_bound = get_log_slopes_general(
-            config.expand_ratio, config.n_min, config.n_max
+        # a bit different from tnl
+        log_lower_bound = torch.log(
+            torch.tensor(
+                -get_log_slopes_general(
+                    config.embed_dim // config.expand_ratio, config.n_min, config.n_max
+                )
+            )
         )
-        self.register_buffer(
-            "log_lower_bound", torch.tensor(log_lower_bound), persistent=False
-        )
+        self.register_buffer("log_lower_bound", log_lower_bound, persistent=False)
 
         # Initialize weights and apply final processing
         self.post_init()
