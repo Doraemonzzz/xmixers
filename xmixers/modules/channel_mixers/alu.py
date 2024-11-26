@@ -18,7 +18,7 @@ class ALU(nn.Module):
         num_heads: int,
         activation: str,
         bias: bool = False,
-        use_scale=False,
+        use_scale: int = 0,
         use_output_gate: bool = False,
         output_gate_activation: str = "silu",
         channel_mixer_init_type=0,
@@ -72,12 +72,21 @@ class ALU(nn.Module):
             lambda x: rearrange(x, "... n (h d) -> ... h n d", h=self.num_heads),
             [q, k, v],
         )
-        if self.use_scale:
+
+        if self.use_scale == 1:
             scale = q.shape[-1] ** 0.5
+        elif self.use_scale == 2:
+            scale = x.shape[-1] ** 0.5
         else:
             scale = 1
 
-        energy = self.act(torch.einsum("... n d, ... m d -> ... n m", q, k) * scale)
+        # v1
+        # energy = self.act(torch.einsum("... n d, ... m d -> ... n m", q, k) * scale)
+
+        # v2
+        k = k * scale
+        v = v * scale
+        energy = self.act(torch.einsum("... n d, ... m d -> ... n m", q, k))
         output = torch.einsum("... n m, ... m d -> ... n d", energy, v)
 
         # reshape

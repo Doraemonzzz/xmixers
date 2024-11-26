@@ -37,7 +37,7 @@ class LLaMAConfig(PretrainedConfig):
         qk_dim=1024,
         v_dim=1024,
         mem_dim=1024,
-        use_scale=True,
+        use_scale=0,
         use_output_gate=False,
         output_gate_activation="silu",
         channel_mixer_init_type=0,
