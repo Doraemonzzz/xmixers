@@ -36,6 +36,18 @@ def get_activation_fn(activation: str) -> Callable[[torch.Tensor], torch.Tensor]
         return f
     elif activation in ["swish", "silu"]:
         return F.silu
+    elif activation == "softmax_1":
+
+        def f(x):
+            return F.softmax(x, dim=-1)
+
+        return f
+    elif activation == "softmax_2":
+
+        def f(x):
+            return F.softmax(x, dim=-2)
+
+        return f
     else:
         return lambda x: x
 

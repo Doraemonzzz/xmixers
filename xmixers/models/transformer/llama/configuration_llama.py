@@ -29,9 +29,18 @@ class LLaMAConfig(PretrainedConfig):
         use_lrpe=True,
         lrpe_type=1,
         base=10000,
-        # glu config
+        # channel mixer config
+        channel_mixer_type="glu",
         mid_dim=1024,
-        glu_activation="silu",
+        channel_mixer_activation="silu",
+        # for alu and lalu
+        qk_dim=1024,
+        v_dim=1024,
+        mem_dim=1024,
+        use_scale=True,
+        use_output_gate=False,
+        output_gate_activation="silu",
+        channel_mixer_init_type=0,
         # others
         num_layers=24,
         norm_type="layernorm",
@@ -62,9 +71,17 @@ class LLaMAConfig(PretrainedConfig):
         self.use_lrpe = use_lrpe
         self.lrpe_type = lrpe_type
         self.base = base
-        # glu config
+        # channel mixer config
+        self.channel_mixer_type = channel_mixer_type
         self.mid_dim = mid_dim
-        self.glu_activation = glu_activation
+        self.channel_mixer_activation = channel_mixer_activation
+        self.qk_dim = qk_dim
+        self.v_dim = v_dim
+        self.mem_dim = mem_dim
+        self.use_scale = use_scale
+        self.use_output_gate = use_output_gate
+        self.output_gate_activation = output_gate_activation
+        self.channel_mixer_init_type = channel_mixer_init_type
         # others
         self.num_layers = num_layers
         self.norm_type = norm_type

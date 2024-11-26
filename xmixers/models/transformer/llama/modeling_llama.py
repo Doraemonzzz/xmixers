@@ -18,7 +18,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import GLU, Attention, get_norm_fn
+from xmixers.modules import Attention, get_channel_mixer, get_norm_fn
 
 from .configuration_llama import LLaMAConfig
 
@@ -43,12 +43,7 @@ class LLaMALayer(nn.Module):
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
 
-        self.channel_mixer = GLU(
-            embed_dim=config.embed_dim,
-            mid_dim=config.mid_dim,
-            activation=config.glu_activation,
-            bias=config.bias,
-        )
+        self.channel_mixer = get_channel_mixer(config)
 
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim)
         self.use_postnorm = config.use_postnorm

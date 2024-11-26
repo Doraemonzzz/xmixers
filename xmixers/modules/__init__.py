@@ -1,5 +1,5 @@
 from .activations import ActLayer, get_activation_fn
-from .channel_mixers import FFN, GLU, nGLU
+from .channel_mixers import ALU, FFN, GLU, LALU, get_channel_mixer, nGLU
 from .normalizations import get_norm_fn
 from .pes import (
     LearnablePe,
