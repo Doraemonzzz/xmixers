@@ -15,13 +15,11 @@ def generate(model, x):
     y = []
     past_key_values = None
     for i in range(n):
-        # print("loop", i, past_key_values)
         output = model(
             input_ids=x[:, i : i + 1],
             past_key_values=past_key_values,
         )
         past_key_values = output["past_key_values"]
-        # print("state", past_key_values[0]["recurrent_state"])
         y.append(output["logits"])
 
     return torch.cat(y, dim=1)
