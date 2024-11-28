@@ -40,6 +40,7 @@ class LLaMAConfig(PretrainedConfig):
         use_scale=0,
         use_output_gate=False,
         output_gate_activation="silu",
+        use_low_rank_output_gate=False,
         channel_mixer_init_type=0,
         # others
         num_layers=24,
@@ -81,6 +82,7 @@ class LLaMAConfig(PretrainedConfig):
         self.use_scale = use_scale
         self.use_output_gate = use_output_gate
         self.output_gate_activation = output_gate_activation
+        self.use_low_rank_output_gate = use_low_rank_output_gate
         self.channel_mixer_init_type = channel_mixer_init_type
         # others
         self.num_layers = num_layers

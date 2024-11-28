@@ -21,7 +21,8 @@ class ALU(nn.Module):
         use_scale: int = 0,
         use_output_gate: bool = False,
         output_gate_activation: str = "silu",
-        channel_mixer_init_type=0,
+        use_low_rank_output_gate: bool = False,
+        channel_mixer_init_type: int = 0,
     ) -> None:
         super().__init__()
 
@@ -37,7 +38,14 @@ class ALU(nn.Module):
         self.out_proj = nn.Linear(v_dim, embed_dim, bias=bias)
         self.use_output_gate = use_output_gate
         if self.use_output_gate:
-            self.out_gate = nn.Linear(embed_dim, v_dim, bias=bias)
+            if use_low_rank_output_gate:
+                mid_dim = embed_dim // num_heads
+                self.output_gate = nn.Sequential(
+                    nn.Linear(embed_dim, mid_dim, bias=bias),
+                    nn.Linear(mid_dim, v_dim, bias=bias),
+                )
+            else:
+                self.output_gate = nn.Linear(embed_dim, v_dim, bias=bias)
             self.output_gate_act = get_activation_fn(output_gate_activation)
 
         self.num_heads = num_heads
@@ -93,7 +101,7 @@ class ALU(nn.Module):
         output = rearrange(output, "... h n d -> ... n (h d)")
 
         if self.use_output_gate:
-            output_gate = self.output_gate_act(self.out_gate(x))
+            output_gate = self.output_gate_act(self.output_gate(x))
             output = output * output_gate
 
         # outproj

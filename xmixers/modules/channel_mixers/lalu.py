@@ -19,7 +19,8 @@ class LALU(nn.Module):
         use_scale=False,
         use_output_gate: bool = False,
         output_gate_activation: str = "silu",
-        channel_mixer_init_type=0,
+        use_low_rank_output_gate: bool = False,
+        channel_mixer_init_type: int = 0,
     ) -> None:
         super().__init__()
 

@@ -34,5 +34,6 @@ def get_channel_mixer(config):
             use_scale=config.use_scale,
             use_output_gate=config.use_output_gate,
             output_gate_activation=config.output_gate_activation,
+            use_low_rank_output_gate=config.use_low_rank_output_gate,
             channel_mixer_init_type=config.channel_mixer_init_type,
         )
