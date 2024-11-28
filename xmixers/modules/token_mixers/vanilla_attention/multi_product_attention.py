@@ -9,7 +9,7 @@ from einops import rearrange
 from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
-from xmixers.utils import XMIXERS_DEBUG, print_params
+from xmixers.utils import XMIXERS_DEBUG, print_module, print_params
 
 from ...pes import Lrpe
 
@@ -19,7 +19,7 @@ except:
     flash_attn_func = None
 
 
-class Mpa(nn.Module):
+class MultiProductAttention(nn.Module):
     def __init__(
         self,
         embed_dim: int,
@@ -45,7 +45,6 @@ class Mpa(nn.Module):
             print_params(**params)
 
         self.layer_idx = layer_idx
-        self.kv_heads = kv_heads
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
         self.mpa_type = mpa_type
@@ -122,11 +121,15 @@ class Mpa(nn.Module):
 
         self._is_hf_initialized = True
 
+    def extra_repr(self):
+        return print_module(self)
+
     def forward(
         self,
         x,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
         **kwargs,
     ):
         # x: b n d
@@ -146,26 +149,31 @@ class Mpa(nn.Module):
         k_head = self.act(k_head)
         v_head = self.act(v_head)
 
-        k, v = map(
-            lambda arr: torch.einsum("... h, ... d -> ... h d", arr[0], arr[1]),
-            [(k, k_head), (v, v_head)],
-        )
-        q = rearrange(q, "... (h d) -> ... h d", h=self.num_heads)
-
-        q, k, v = map(
-            lambda x: rearrange(x, "... n h d -> ... h n d", d=self.head_dim),
-            [q, k, v],
-        )
-
-        # lrpe
-        # todo: update this
+        # for lrpe
         q_offset = 0
         if past_key_values is not None:
             q_offset = past_key_values.get_seq_length(self.layer_idx)
 
         # cache update
-        if past_key_values is not None:
-            k, v = past_key_values.update(k, v, self.layer_idx)
+        if past_key_values is not None and len(past_key_values) > self.layer_idx:
+            k, v, k_head, v_head = past_key_values.update(
+                mpa_state=(k, v, k_head, v_head),
+                layer_idx=self.layer_idx,
+                offset=x.shape[-2],
+            )
+
+        # construct k, v cache
+        # todo: add a fusion here
+        k, v = map(
+            lambda arr: torch.einsum("... d, ... h -> ... h d", arr[0], arr[1]),
+            [(k, k_head), (v, v_head)],
+        )
+        q = rearrange(q, "... (h d) -> ... h d", h=self.num_heads)
+
+        q, k, v = map(
+            lambda x: rearrange(x, "... n h d -> ... h n d"),
+            [q, k, v],
+        )
 
         if self.use_lrpe:
             q = self.lrpe(q, offset=q_offset)

@@ -22,6 +22,7 @@ class LLaMAConfig(PretrainedConfig):
         tie_word_embeddings=False,
         ##### model config
         # attention config
+        token_mixer_type="attn",
         embed_dim=1024,
         num_heads=8,
         kv_heads=-1,
@@ -29,6 +30,8 @@ class LLaMAConfig(PretrainedConfig):
         use_lrpe=True,
         lrpe_type=1,
         base=10000,
+        mpa_type=0,
+        mpa_activation="none",
         # channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
@@ -64,7 +67,7 @@ class LLaMAConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.init_std = init_std
         ##### add
-        # attention config
+        # token mixer config
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.kv_heads = kv_heads
@@ -72,6 +75,9 @@ class LLaMAConfig(PretrainedConfig):
         self.use_lrpe = use_lrpe
         self.lrpe_type = lrpe_type
         self.base = base
+        self.token_mixer_type = token_mixer_type
+        self.mpa_type = mpa_type
+        self.mpa_activation = mpa_activation
         # channel mixer config
         self.channel_mixer_type = channel_mixer_type
         self.mid_dim = mid_dim

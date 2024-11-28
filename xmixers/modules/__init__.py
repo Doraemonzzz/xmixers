@@ -15,6 +15,8 @@ from .token_mixers import (
     Gtu,
     Hgru3,
     LinearAttention,
+    MultiProductAttention,
     TnlAttention,
+    get_token_mixer,
     nAttention,
 )

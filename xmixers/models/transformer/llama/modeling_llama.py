@@ -18,7 +18,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import Attention, get_channel_mixer, get_norm_fn
+from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
 
 from .configuration_llama import LLaMAConfig
 
@@ -27,19 +27,7 @@ class LLaMALayer(nn.Module):
     def __init__(self, config: LLaMAConfig, layer_idx=0):
         super().__init__()
 
-        self.token_mixer = Attention(
-            embed_dim=config.embed_dim,
-            num_heads=config.num_heads,
-            kv_heads=config.kv_heads,
-            bias=config.bias,
-            use_lrpe=config.use_lrpe,
-            layer_idx=layer_idx,
-            lrpe_type=config.lrpe_type,
-            base=config.base,
-            token_mixer_init_type=config.token_mixer_init_type,
-            rescale_type=config.rescale_type,
-            num_layers=config.num_layers,
-        )
+        self.token_mixer = get_token_mixer(config, layer_idx)
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
 
