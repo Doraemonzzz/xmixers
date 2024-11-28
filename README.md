@@ -23,6 +23,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 -
 
 # ToDo
+- [ ] Update cache for token mixer.
 
 - [ ] Add special init.
 
