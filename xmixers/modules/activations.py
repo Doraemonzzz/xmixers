@@ -22,6 +22,12 @@ def get_activation_fn(activation: str) -> Callable[[torch.Tensor], torch.Tensor]
         return torch.exp
     elif activation == "leak":
         return F.leaky_relu
+    elif activation == "relu2":
+
+        def f(x):
+            return F.relu(x) ** 2
+
+        return f
     elif activation == "1+elu":
 
         def f(x):

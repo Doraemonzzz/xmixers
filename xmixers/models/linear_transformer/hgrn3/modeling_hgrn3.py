@@ -7,7 +7,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from transformers.cache_utils import Cache, DynamicCache
+from transformers.cache_utils import Cache
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -19,6 +19,7 @@ logger = logging.get_logger(__name__)
 
 
 from xmixers.modules import GLU, Hgru3, get_log_slopes_general, get_norm_fn
+from xmixers.utils import XmixersCache
 
 from .configuration_hgrn3 import Hgrn3Config
 
@@ -57,15 +58,17 @@ class Hgrn3Layer(nn.Module):
         x,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
         log_lower_bound: Optional[torch.Tensor] = None,
     ):
         # token mixer
         residual = x
         x, past_key_values = self.token_mixer(
             x=self.token_norm(x),
-            log_lower_bound=log_lower_bound,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            log_lower_bound=log_lower_bound,
         )
         x = x + residual
 
@@ -136,10 +139,8 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         # log lower bound
         # a bit different from tnl
         log_lower_bound = torch.log(
-            torch.tensor(
-                -get_log_slopes_general(
-                    config.embed_dim // config.expand_ratio, config.n_min, config.n_max
-                )
+            -get_log_slopes_general(
+                config.embed_dim // config.expand_ratio, config.n_min, config.n_max
             )
         )
         self.register_buffer("log_lower_bound", log_lower_bound, persistent=False)
@@ -188,10 +189,8 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
                 "You have to specify either decoder_input_ids or decoder_inputs_embeds"
             )
 
-        if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        if use_cache and not isinstance(past_key_values, XmixersCache):
+            past_key_values = XmixersCache.from_legacy_cache(past_key_values)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -217,25 +216,22 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
+                hidden_states, past_key_values = self._gradient_checkpointing_func(
                     layer.__call__,
                     hidden_states,
                     attention_mask,
                     past_key_values,
+                    use_cache,
                     log_lower_bound,
                 )
             else:
-                layer_outputs = layer(
+                hidden_states, past_key_values = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
+                    use_cache=use_cache,
                     log_lower_bound=log_lower_bound,
                 )
-
-            hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[-1]
 
         hidden_states = self.final_norm(hidden_states)
 
@@ -243,16 +239,22 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
+        next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                for v in [
+                    hidden_states,
+                    past_key_values,
+                    all_hidden_states,
+                    all_self_attns,
+                ]
                 if v is not None
             )
+
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
@@ -351,6 +353,7 @@ class Hgrn3ForCausalLM(Hgrn3PreTrainedModel):
         )
 
         hidden_states = outputs[0]
+
         logits = self.lm_head(hidden_states)
 
         loss = None

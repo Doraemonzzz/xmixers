@@ -5,8 +5,29 @@ import torch
 from metaseq.models.hgrn import HgrnLanguageModel
 from transformers import AutoModelForCausalLM
 
+import xmixers  # noqa
 
-def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir):
+AUTO_DTYPE_MAP = {"bf16": torch.bfloat16, "fp32": torch.float32}
+
+
+def generate(model, x):
+    b, n = x.shape
+    y = []
+    past_key_values = None
+    for i in range(n):
+        # print("loop", i, past_key_values)
+        output = model(
+            input_ids=x[:, i : i + 1],
+            past_key_values=past_key_values,
+        )
+        past_key_values = output["past_key_values"]
+        # print("state", past_key_values[0]["recurrent_state"])
+        y.append(output["logits"])
+
+    return torch.cat(y, dim=1)
+
+
+def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name):
     metaseq_model_info = HgrnLanguageModel.from_pretrained(
         metaseq_dir,
         checkpoint_name,
@@ -16,15 +37,28 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir):
         },
     )
 
-    dtype = torch.bfloat16
-    # dtype = torch.float32
+    dtype = AUTO_DTYPE_MAP[dtype_name]
     metaseq_model = metaseq_model_info["models"][0].cuda().to(dtype)
-    layers = 6
-    print(f"layers: {layers}")
     print(metaseq_model)
 
     hf_model = AutoModelForCausalLM.from_pretrained(hf_dir).cuda().to(dtype)
     print(hf_model)
+
+    layers = len(hf_model.model.layers)
+    print(f"layers: {layers}")
+
+    print("Check embedding and out proj")
+    print(
+        torch.norm(
+            metaseq_model.decoder.embed_tokens.weight
+            - hf_model.model.embed_tokens.weight
+        ),
+    )
+    print(
+        torch.norm(
+            metaseq_model.decoder.output_projection.weight - hf_model.lm_head.weight
+        ),
+    )
 
     print("Check average")
     print(
@@ -59,6 +93,7 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir):
         torch.norm(metaseq_model.decoder.lower_bound - hf_model.model.log_lower_bound)
     )
     for i in range(layers):
+        print(f"layer {i}")
         ##### token mixer
         print("qkv")
         # qkv
@@ -81,6 +116,34 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir):
             torch.norm(
                 metaseq_model.decoder.layers[i].token_mixer.hgru.in_proj.weight[2 * d :]
                 - hf_model.model.layers[i].token_mixer.v_proj.weight
+            )
+        )
+        print("output gate")
+        # output gate
+        print(
+            torch.norm(
+                metaseq_model.decoder.layers[i].token_mixer.hgru.output_gate[0].weight
+                - hf_model.model.layers[i].token_mixer.output_gate[0].weight
+            )
+        )
+        print(
+            torch.norm(
+                metaseq_model.decoder.layers[i].token_mixer.hgru.output_gate[1].weight
+                - hf_model.model.layers[i].token_mixer.output_gate[1].weight
+            )
+        )
+        print("beta proj")
+        # beta beta
+        print(
+            torch.norm(
+                metaseq_model.decoder.layers[i].token_mixer.hgru.beta_proj[0].weight
+                - hf_model.model.layers[i].token_mixer.bet_proj[0].weight
+            )
+        )
+        print(
+            torch.norm(
+                metaseq_model.decoder.layers[i].token_mixer.hgru.beta_proj[1].weight
+                - hf_model.model.layers[i].token_mixer.bet_proj[1].weight
             )
         )
         print("o proj")
@@ -116,33 +179,22 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir):
 
     b = 2
     m = 50272
-    hf_model.train()
 
-    # for n in [1, 2, 63, 127]:
-    # for n in [1, 5, 123, 1024]:
-    # for n in [512, 1024]:
-    # for n in [1, 5, 126]:
-    # for n in [5]:
+    # train test
     for n in [128]:
         input = torch.randint(0, m, (b, n)).cuda()
         o1 = metaseq_model(input)[0]
-        # hf_model.eval()
+        hf_model.train()
         o2 = hf_model(input)["logits"]
-        print(o1.shape, o2.shape)
-        print(f"n: {n}")
-        print(torch.norm(o1 - o2))
-        # print(o1.shape)
-        # print(o1[0, -1, -5:])
-        # print(o2[0, -1, -5:])
+        hf_model.eval()
+        print("generate")
+        o3 = generate(hf_model, input)
 
-    # hf_model.eval()
-    # input = torch.randint(0, m, (b, n)).cuda()
-    # print("generate")
-    # generated = hf_model.generate(
-    #     input,
-    #     max_length=5,
-    # )
-    # print(generated.shape)
+        print(f"n: {n}")
+        print("training diff")
+        print(torch.norm(o1 - o2))
+        print("inference diff")
+        print(torch.norm(o1 - o3))
 
 
 if __name__ == "__main__":
@@ -164,7 +216,12 @@ if __name__ == "__main__":
         "--tokenizer_dir",
         type=str,
     )
+    parser.add_argument("--dtype_name", type=str)
     args = parser.parse_args()
     check_result(
-        args.metaseq_dir, args.hf_dir, args.checkpoint_name, args.tokenizer_dir
+        args.metaseq_dir,
+        args.hf_dir,
+        args.checkpoint_name,
+        args.tokenizer_dir,
+        args.dtype_name,
     )

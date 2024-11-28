@@ -14,7 +14,7 @@ from xmixers.utils import XMIXERS_DEBUG, print_params
 
 
 class SRMSNorm(nn.Module):
-    def __init__(self, d: int, eps: float = 1e-8) -> None:
+    def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         if XMIXERS_DEBUG:
             # get local varables
@@ -23,32 +23,19 @@ class SRMSNorm(nn.Module):
             print_params(**params)
 
         self.eps = eps
-        self.d = d
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
     def forward(self, x):
-        norm_x = x.norm(2, dim=-1, keepdim=True)
-        d_x = self.d
+        output = self._norm(x.float()).type_as(x)
 
-        rms_x = norm_x * d_x ** (-1.0 / 2)
-        x_normed = x / (rms_x + self.eps)
-
-        return x_normed
+        return output
 
 
-class RMSNorm(nn.Module):
-    def __init__(
-        self, d: int, p: float = -1.0, eps: float = 1e-8, bias: bool = False
-    ) -> None:
-        """
-            Root Mean Square Layer Normalization
-        :param d: model size
-        :param p: partial RMSNorm, valid value [0, 1], default -1.0 (disabled)
-        :param eps:  epsilon value, default 1e-8
-        :param bias: whether use bias term for RMSNorm, disabled by
-            default because RMSNorm doesn't enforce re-centering invariance.
-        """
+class RMSNorm(torch.nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
-
         if XMIXERS_DEBUG:
             # get local varables
             params = locals()
@@ -56,35 +43,18 @@ class RMSNorm(nn.Module):
             print_params(**params)
 
         self.eps = eps
-        self.d = d
-        self.p = p
-        self.bias = bias
+        self.weight = nn.Parameter(torch.ones(dim))
 
-        self.scale = nn.Parameter(torch.ones(d))
-        self.register_parameter("scale", self.scale)
-
-        if self.bias:
-            self.offset = nn.Parameter(torch.zeros(d))
-            self.register_parameter("offset", self.offset)
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
     def forward(self, x):
-        if self.p < 0.0 or self.p > 1.0:
-            norm_x = x.norm(2, dim=-1, keepdim=True)
-            d_x = self.d
-        else:
-            partial_size = int(self.d * self.p)
-            partial_x, _ = torch.split(x, [partial_size, self.d - partial_size], dim=-1)
+        output = self._norm(x.float()).type_as(x) * self.weight
 
-            norm_x = partial_x.norm(2, dim=-1, keepdim=True)
-            d_x = partial_size
+        return output
 
-        rms_x = norm_x * d_x ** (-1.0 / 2)
-        x_normed = x / (rms_x + self.eps)
-
-        if self.bias:
-            return self.scale * x_normed + self.offset
-
-        return self.scale * x_normed
+    def extra_repr(self):
+        return print_module(self)
 
 
 class GatedRMSNorm(nn.Module):

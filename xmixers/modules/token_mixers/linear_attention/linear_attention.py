@@ -71,7 +71,7 @@ class LinearAttention(nn.Module):
 
         self.use_output_gate = use_output_gate
         if self.use_output_gate:
-            self.out_gate = nn.Sequential(
+            self.output_gate = nn.Sequential(
                 nn.Linear(embed_dim, self.head_dim, bias=bias),
                 nn.Linear(self.head_dim, embed_dim, bias=bias),
             )

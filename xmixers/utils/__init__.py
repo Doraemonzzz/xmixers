@@ -1,3 +1,4 @@
+from .cache import XmixersCache
 from .constants import XMIXERS_DEBUG
 from .utils import (
     endswith,

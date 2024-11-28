@@ -42,6 +42,7 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
         "use_norm",
         "norm_type",
         "no_scale_embedding",
+        "glu_act",
     }
     print("======Model Config======")
     for key in sd["cfg"]["model"]:
@@ -58,6 +59,7 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
                 "decoder_layers",
                 "use_embed_scale",
                 "decoder_embed_dim",
+                "glu_act",
             ]:
                 if key == "glu_dim":
                     config_dict["mid_dim"] = int(sd["cfg"]["model"][key])
@@ -69,6 +71,8 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
                     config_dict["use_embed_scale"] = sd["cfg"]["model"][key]
                 elif key == "decoder_embed_dim":
                     config_dict["embed_dim"] = int(sd["cfg"]["model"][key])
+                elif key == "glu_act":
+                    config_dict["glu_activation"] = sd["cfg"]["model"][key]
             else:
                 if key == "expand_ratio":
                     config_dict[key] = int(sd["cfg"]["model"][key])
@@ -113,7 +117,8 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
         new_key = new_key.replace("decoder.", "model.")
         # token mixer
         new_key = new_key.replace("lambda_proj", "f_proj")
-        new_key = new_key.replace("output_gate", "out_gate")
+        new_key = new_key.replace("output_gate", "output_gate")
+        new_key = new_key.replace("beta_proj", "bet_proj")
         # channel mixer
         new_key = new_key.replace("l1.weight", "w1.weight")
         new_key = new_key.replace("l2.weight", "w2.weight")
