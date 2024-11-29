@@ -185,9 +185,6 @@ class MultiProductAttention(nn.Module):
             # use causal when training or evaluation(not for generation) or prefill
             is_causal = True if self.training or q.shape[-2] == k.shape[-2] else False
             output = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
-            # q, k, v = map(lambda x: rearrange(x, "... h n d -> ... n h d"), [q, k, v])
-            # output = flash_attn_func(q, k, v, causal=is_causal)
-            # output = rearrange(output, "... n h d -> ... h n d")
         else:
             assert False, "flash_attn_varlen_qkvpacked_func current not support"
 

@@ -186,6 +186,8 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name
         print(torch.norm(o1 - o2))
         print("inference diff")
         print(torch.norm(o1 - o3))
+        print(o1[0, -1, :16])
+        print(o2[0, -1, :16])
 
 
 if __name__ == "__main__":

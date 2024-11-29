@@ -24,6 +24,17 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 
 # ToDo
 - [ ] Update cache for token mixer.
+  - linear attention
+    - [x] hgru3
+    - [ ] linear attention
+    - [ ] tnl attention
+  - long conv
+    - [ ] gtu
+  - vanilla attention
+    - [ ] attention
+    - [ ] flex attention
+    - [x] mpa
+    - [ ] n_attention
 
 - [ ] Add special init.
 
