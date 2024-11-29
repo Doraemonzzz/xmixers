@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Convert Hgrn checkpoint."""
+"""Convert llama_mpa checkpoint."""
 
 
 import argparse
@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 from transformers.utils import logging
 
-from xmixers.models import Hgrn3Config, Hgrn3ForCausalLM
+from xmixers.models import LLaMAConfig, LLaMAForCausalLM
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -20,9 +20,7 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
 
     config_dict = {
         "vocab_size": vocab_size,
-        "q_activation": "silu",
-        "k_activation": "silu",
-        "beta_activation": "silu",
+        "token_mixer_type": "mpa",
     }
     print("======Get Config Start======")
     for key in sd["cfg"]["model"]:
@@ -32,7 +30,7 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
 
     config_keys = {
         "decoder_embed_dim",
-        "expand_ratio",
+        "num_heads",
         "decoder_layers",
         "add_bos_token",
         "causal",
@@ -43,6 +41,8 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
         "norm_type",
         "no_scale_embedding",
         "glu_act",
+        "use_mpa",
+        "llama_core_matrix",
     }
     print("======Model Config======")
     for key in sd["cfg"]["model"]:
@@ -60,6 +60,8 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
                 "use_embed_scale",
                 "decoder_embed_dim",
                 "glu_act",
+                "use_mpa",
+                "llama_core_matrix",
                 "no_scale_embedding",
             ]:
                 if key == "glu_dim":
@@ -74,11 +76,25 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
                     config_dict["embed_dim"] = int(sd["cfg"]["model"][key])
                 elif key == "glu_act":
                     config_dict["glu_activation"] = sd["cfg"]["model"][key]
+                elif key == "use_mpa":
+                    mpa = sd["cfg"]["model"][key]
+                    if mpa in [2, 3]:
+                        config_dict["mpa_type"] = 0
+                    else:
+                        config_dict["mpa_type"] = 1
+                    if mpa in [2, 4]:
+                        config_dict["mpa_activation"] = "none"
+                    else:
+                        config_dict["mpa_activation"] = "sigmoid"
+                elif key == "llama_core_matrix":
+                    llama_core_matrix = int(sd["cfg"]["model"][key])
+                    if llama_core_matrix == 12:
+                        config_dict["lrpe_type"] = 1
             else:
-                if key == "expand_ratio":
-                    config_dict[key] = int(sd["cfg"]["model"][key])
-                elif key in ["q_activation", "k_activation", "beta_activation"]:
-                    config_dict[key] = "silu"
+                if key == "num_heads":
+                    config_dict[key] = int(
+                        sd["cfg"]["model"]["decoder_embed_dim"] // 128
+                    )
                 elif key == "norm_type":
                     config_dict[key] = sd["cfg"]["model"][key].replace(
                         "simplermsnorm", "srmsnorm"
@@ -99,9 +115,7 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
 
     for key in keys:
         value = origin_state_dict[key]
-        if "hgru.lambda_" in key and "lambda_proj" not in key:
-            continue
-        if "lower_bound" in key:
+        if "theta" in key:
             continue
         if key == "decoder.version":
             continue
@@ -114,25 +128,32 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
             print(torch.mean(value))
             state_dict[new_key] = value
             continue
-        new_key = key.replace("token_mixer.hgru.", "token_mixer.")
-        new_key = new_key.replace("decoder.", "model.")
-        # token mixer
-        new_key = new_key.replace("lambda_proj", "f_proj")
-        new_key = new_key.replace("output_gate", "output_gate")
-        new_key = new_key.replace("beta_proj", "bet_proj")
+        new_key = key.replace("decoder.", "model.")
         # channel mixer
         new_key = new_key.replace("l1.weight", "w1.weight")
         new_key = new_key.replace("l2.weight", "w2.weight")
         new_key = new_key.replace("l3.weight", "w3.weight")
 
-        if "in_proj" in new_key:
-            d = value.shape[1]
-            for i, name in enumerate(["q_proj", "k_proj", "v_proj"]):
-                state_dict[new_key.replace("in_proj", name)] = value[
+        if "kv2_proj" in new_key:
+            d = value.shape[0] // 2
+            for i, name in enumerate(["k_proj", "v_proj"]):
+                state_dict[new_key.replace("kv2_proj", name)] = value[
+                    i * d : (i + 1) * d
+                ]
+        elif "kv1_proj" in new_key:
+            d = value.shape[0] // 2
+            if len(value.shape) == 2:
+                keys = ["k_head_proj", "v_head_proj"]
+            else:
+                keys = ["k_head", "v_head"]
+
+            for i, name in enumerate(keys):
+                state_dict[new_key.replace("kv1_proj", name)] = value[
                     i * d : (i + 1) * d
                 ]
         else:
             state_dict[new_key] = value
+
     if "decoder.output_projection.weight" not in keys:
         if "model.embed_tokens.weight" in state_dict:
             # for 3b
@@ -165,8 +186,8 @@ def convert_checkpoint(
     state_dict, config_dict = load_checkpoint(
         checkpoint_path, tokenizer_path, vocab_size
     )
-    config = Hgrn3Config(**config_dict)
-    model = Hgrn3ForCausalLM(config)
+    config = LLaMAConfig(**config_dict)
+    model = LLaMAForCausalLM(config)
     print(model)
     res = model.load_state_dict(state_dict)
     print(res)

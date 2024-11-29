@@ -155,12 +155,12 @@ class MultiProductAttention(nn.Module):
             q_offset = past_key_values.get_seq_length(self.layer_idx)
 
         # cache update
-        if past_key_values is not None and len(past_key_values) > self.layer_idx:
+        if past_key_values is not None:
             k, v, k_head, v_head = past_key_values.update(
                 mpa_state=(k, v, k_head, v_head),
                 layer_idx=self.layer_idx,
                 offset=x.shape[-2],
-            )
+            )["mpa_state"]
 
         # construct k, v cache
         # todo: add a fusion here
@@ -185,6 +185,9 @@ class MultiProductAttention(nn.Module):
             # use causal when training or evaluation(not for generation) or prefill
             is_causal = True if self.training or q.shape[-2] == k.shape[-2] else False
             output = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
+            # q, k, v = map(lambda x: rearrange(x, "... h n d -> ... n h d"), [q, k, v])
+            # output = flash_attn_func(q, k, v, causal=is_causal)
+            # output = rearrange(output, "... n h d -> ... h n d")
         else:
             assert False, "flash_attn_varlen_qkvpacked_func current not support"
 

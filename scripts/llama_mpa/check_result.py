@@ -2,7 +2,7 @@ import argparse
 import os
 
 import torch
-from metaseq.models.hgrn import HgrnLanguageModel
+from metaseq.models.llama import LlamaLanguageModel
 from transformers import AutoModelForCausalLM
 
 import xmixers  # noqa
@@ -26,7 +26,7 @@ def generate(model, x):
 
 
 def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name):
-    metaseq_model_info = HgrnLanguageModel.from_pretrained(
+    metaseq_model_info = LlamaLanguageModel.from_pretrained(
         metaseq_dir,
         checkpoint_name,
         task={
@@ -67,12 +67,6 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name
         torch.mean(metaseq_model.decoder.output_projection.weight),
         torch.mean(hf_model.lm_head.weight),
     )
-    print("=====Start checking lower bound=====")
-    print(metaseq_model.decoder.lower_bound)
-    print(hf_model.model.log_lower_bound)
-    print(
-        torch.norm(metaseq_model.decoder.lower_bound - hf_model.model.log_lower_bound)
-    )
     print("=====Start checking weight diff=====")
     print(
         torch.norm(
@@ -85,68 +79,69 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name
             metaseq_model.decoder.output_projection.weight - hf_model.lm_head.weight
         )
     )
-    print(
-        torch.norm(metaseq_model.decoder.lower_bound - hf_model.model.log_lower_bound)
-    )
     for i in range(layers):
         print(f"layer {i}")
         ##### token mixer
         print("qkv")
         # qkv
-        d = metaseq_model.decoder.layers[i].token_mixer.hgru.in_proj.weight.shape[1]
+        # q
         print(
             torch.norm(
-                metaseq_model.decoder.layers[i].token_mixer.hgru.in_proj.weight[:d]
+                metaseq_model.decoder.layers[i].token_mixer.q_proj.weight
                 - hf_model.model.layers[i].token_mixer.q_proj.weight
             )
         )
+        # kv
+        d = hf_model.model.layers[i].token_mixer.k_proj.weight.shape[0]
         print(
             torch.norm(
-                metaseq_model.decoder.layers[i].token_mixer.hgru.in_proj.weight[
-                    d : 2 * d
-                ]
+                metaseq_model.decoder.layers[i].token_mixer.kv2_proj.weight[:d]
                 - hf_model.model.layers[i].token_mixer.k_proj.weight
             )
         )
         print(
             torch.norm(
-                metaseq_model.decoder.layers[i].token_mixer.hgru.in_proj.weight[2 * d :]
+                metaseq_model.decoder.layers[i].token_mixer.kv2_proj.weight[d:]
                 - hf_model.model.layers[i].token_mixer.v_proj.weight
             )
         )
-        print("output gate")
-        # output gate
-        print(
-            torch.norm(
-                metaseq_model.decoder.layers[i].token_mixer.hgru.output_gate[0].weight
-                - hf_model.model.layers[i].token_mixer.output_gate[0].weight
+        # kv head
+        if hasattr(hf_model.model.layers[i].token_mixer, "k_head_proj"):
+            d = (
+                metaseq_model.decoder.layers[i].token_mixer.kv1_proj.weight.shape[0]
+                // 2
             )
-        )
-        print(
-            torch.norm(
-                metaseq_model.decoder.layers[i].token_mixer.hgru.output_gate[1].weight
-                - hf_model.model.layers[i].token_mixer.output_gate[1].weight
+            print(
+                torch.norm(
+                    metaseq_model.decoder.layers[i].token_mixer.kv1_proj.weight[:d]
+                    - hf_model.model.layers[i].token_mixer.k_head_proj.weight
+                )
             )
-        )
-        print("beta proj")
-        # beta beta
-        print(
-            torch.norm(
-                metaseq_model.decoder.layers[i].token_mixer.hgru.beta_proj[0].weight
-                - hf_model.model.layers[i].token_mixer.bet_proj[0].weight
+            print(
+                torch.norm(
+                    metaseq_model.decoder.layers[i].token_mixer.kv1_proj.weight[d:]
+                    - hf_model.model.layers[i].token_mixer.v_head_proj.weight
+                )
             )
-        )
-        print(
-            torch.norm(
-                metaseq_model.decoder.layers[i].token_mixer.hgru.beta_proj[1].weight
-                - hf_model.model.layers[i].token_mixer.bet_proj[1].weight
+        else:
+            d = metaseq_model.decoder.layers[i].token_mixer.kv1_proj.shape[0] // 2
+            print(
+                torch.norm(
+                    metaseq_model.decoder.layers[i].token_mixer.kv1_proj[:d]
+                    - hf_model.model.layers[i].token_mixer.k_head
+                )
             )
-        )
+            print(
+                torch.norm(
+                    metaseq_model.decoder.layers[i].token_mixer.kv1_proj[d:]
+                    - hf_model.model.layers[i].token_mixer.v_head
+                )
+            )
         print("o proj")
         # o proj
         print(
             torch.norm(
-                metaseq_model.decoder.layers[i].token_mixer.hgru.out_proj.weight
+                metaseq_model.decoder.layers[i].token_mixer.out_proj.weight
                 - hf_model.model.layers[i].token_mixer.out_proj.weight
             )
         )

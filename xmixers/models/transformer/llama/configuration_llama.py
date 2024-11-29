@@ -46,6 +46,7 @@ class LLaMAConfig(PretrainedConfig):
         use_low_rank_output_gate=False,
         channel_mixer_init_type=0,
         # others
+        max_position_embeddings=1024,
         num_layers=24,
         norm_type="layernorm",
         token_mixer_init_type=0,
@@ -91,6 +92,7 @@ class LLaMAConfig(PretrainedConfig):
         self.use_low_rank_output_gate = use_low_rank_output_gate
         self.channel_mixer_init_type = channel_mixer_init_type
         # others
+        self.max_position_embeddings = max_position_embeddings
         self.num_layers = num_layers
         self.norm_type = norm_type
         self.token_mixer_init_type = token_mixer_init_type

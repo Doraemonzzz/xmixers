@@ -66,14 +66,22 @@ class XmixersCache(transformers.cache_utils.Cache):
 
         if attn_state is not None:
             input_size = attn_state[0].shape[-2]
-            window_size = cache_kwargs.get("window_size", None)
+            window_size = (
+                cache_kwargs.get("window_size", None)
+                if cache_kwargs is not None
+                else None
+            )
             if not isinstance(attn_state, Tuple) or len(attn_state) != 2:
                 raise ValueError(
                     "`attn_state` must be a tuple of two tensors for key/value states"
                 )
         if mpa_state is not None:
             input_size = mpa_state[0].shape[-2]
-            window_size = cache_kwargs.get("window_size", None)
+            window_size = (
+                cache_kwargs.get("window_size", None)
+                if cache_kwargs is not None
+                else None
+            )
             if not isinstance(mpa_state, Tuple) or len(mpa_state) != 4:
                 raise ValueError(
                     "`mpa_state` must be a tuple of four tensors for k, v, k_head, v_head states"
@@ -136,12 +144,20 @@ class XmixersCache(transformers.cache_utils.Cache):
                     mpa_state = tuple(new_mpa_state)
                 else:
                     k_state, v_state, k_head_state, v_head_state = state["mpa_state"]
-                    mpa_state = (
-                        torch.cat([k_state, mpa_state[0]], -2),
-                        torch.cat([v_state, mpa_state[1]], -2),
-                        torch.cat([k_head_state, mpa_state[2]], -2),
-                        torch.cat([v_head_state, mpa_state[3]], -2),
-                    )
+                    if len(k_head_state.shape) == 1:
+                        mpa_state = (
+                            torch.cat([k_state, mpa_state[0]], -2),
+                            torch.cat([v_state, mpa_state[1]], -2),
+                            k_head_state,
+                            v_head_state,
+                        )
+                    else:
+                        mpa_state = (
+                            torch.cat([k_state, mpa_state[0]], -2),
+                            torch.cat([v_state, mpa_state[1]], -2),
+                            torch.cat([k_head_state, mpa_state[2]], -2),
+                            torch.cat([v_head_state, mpa_state[3]], -2),
+                        )
                 state["mpa_state"] = mpa_state
 
         return state

@@ -29,6 +29,7 @@ class Hgrn3Config(PretrainedConfig):
         mid_dim=1024,
         glu_activation="silu",
         # others
+        max_position_embeddings=1024,
         num_layers=24,
         use_output_gate=True,
         norm_type="layernorm",
@@ -62,6 +63,7 @@ class Hgrn3Config(PretrainedConfig):
         self.mid_dim = mid_dim
         self.glu_activation = glu_activation
         # others
+        self.max_position_embeddings = max_position_embeddings
         self.num_layers = num_layers
         self.use_output_gate = use_output_gate
         self.norm_type = norm_type

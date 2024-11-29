@@ -207,7 +207,7 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        () if use_cache else None
 
         for idx, layer in enumerate(self.layers):
             log_lower_bound = self.log_lower_bound / (idx + 1)
@@ -239,7 +239,6 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
                 v

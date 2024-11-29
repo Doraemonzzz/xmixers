@@ -30,6 +30,7 @@ class FlexGPTConfig(PretrainedConfig):
         mid_dim=1024,
         glu_activation="silu",
         # others
+        max_position_embeddings=1024,
         num_layers=24,
         norm_type="layernorm",
         token_mixer_init_type=0,
@@ -62,6 +63,7 @@ class FlexGPTConfig(PretrainedConfig):
         self.mid_dim = mid_dim
         self.glu_activation = glu_activation
         # others
+        self.max_position_embeddings = max_position_embeddings
         self.num_layers = num_layers
         self.norm_type = norm_type
         self.token_mixer_init_type = token_mixer_init_type

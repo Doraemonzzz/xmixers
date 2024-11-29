@@ -7,7 +7,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from transformers.cache_utils import Cache, DynamicCache
+from transformers.cache_utils import Cache
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -19,6 +19,7 @@ logger = logging.get_logger(__name__)
 
 
 from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
+from xmixers.utils import XmixersCache
 
 from .configuration_llama import LLaMAConfig
 
@@ -43,6 +44,7 @@ class LLaMALayer(nn.Module):
         x,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
     ):
         # token mixer
         residual = x
@@ -50,6 +52,7 @@ class LLaMALayer(nn.Module):
             x=self.token_norm(x),
             attention_mask=attention_mask,
             past_key_values=past_key_values,
+            use_cache=use_cache,
         )
         x = x + residual
 
@@ -65,6 +68,7 @@ class LLaMALayer(nn.Module):
         x,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
     ):
         # token mixer
         residual = x
@@ -72,6 +76,7 @@ class LLaMALayer(nn.Module):
             x=x,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
+            use_cache=use_cache,
         )
         x = self.token_norm(x + residual)
 
@@ -211,10 +216,8 @@ class LLaMAModel(LLaMAPreTrainedModel):
                 "You have to specify either decoder_input_ids or decoder_inputs_embeds"
             )
 
-        if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        if use_cache and not isinstance(past_key_values, XmixersCache):
+            past_key_values = XmixersCache.from_legacy_cache(past_key_values)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -231,30 +234,27 @@ class LLaMAModel(LLaMAPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        () if use_cache else None
 
         for idx, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
+                hidden_states, past_key_values = self._gradient_checkpointing_func(
                     layer.__call__,
                     hidden_states,
                     attention_mask,
                     past_key_values,
+                    use_cache,
                 )
             else:
-                layer_outputs = layer(
+                hidden_states, past_key_values = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
+                    use_cache=use_cache,
                 )
-
-            hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[-1]
 
         hidden_states = self.final_norm(hidden_states)
 
@@ -262,16 +262,20 @@ class LLaMAModel(LLaMAPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                for v in [
+                    hidden_states,
+                    past_key_values,
+                    all_hidden_states,
+                    all_self_attns,
+                ]
                 if v is not None
             )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
