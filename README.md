@@ -31,7 +31,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
   - long conv
     - [ ] gtu
   - vanilla attention
-    - [ ] attention
+    - [x] attention
     - [ ] flex attention
     - [x] mpa
     - [ ] n_attention

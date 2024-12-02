@@ -131,7 +131,11 @@ class Attention(nn.Module):
 
         # cache update
         if past_key_values is not None:
-            k, v = past_key_values.update(k, v, self.layer_idx)
+            k, v = past_key_values.update(
+                attn_state=(k, v),
+                layer_idx=self.layer_idx,
+                offset=x.shape[-2],
+            )["attn_state"]
 
         if self.use_lrpe:
             q = self.lrpe(q, offset=q_offset)

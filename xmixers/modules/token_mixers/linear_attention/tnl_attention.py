@@ -78,7 +78,7 @@ class TnlAttention(nn.Module):
 
         self.use_output_gate = use_output_gate
         if self.use_output_gate:
-            self.out_gate = nn.Sequential(
+            self.output_gate = nn.Sequential(
                 nn.Linear(embed_dim, gate_dim, bias=bias),
                 nn.Linear(gate_dim, embed_dim, bias=bias),
             )
@@ -191,7 +191,7 @@ class TnlAttention(nn.Module):
             output = self.norm(output)
 
         if self.use_output_gate:
-            output_gate = F.sigmoid(self.out_gate(x))
+            output_gate = F.sigmoid(self.output_gate(x))
             output = output * output_gate
 
         if self.norm_pos == "ogate":
