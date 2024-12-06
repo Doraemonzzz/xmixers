@@ -1,7 +1,6 @@
 from .alu import ALU
 from .ffn import FFN
 from .glu import GLU
-from .lalu import LALU
 from .nglu import nGLU
 
 AUTO_CHANNEL_MIXER_MAPPING = {
@@ -9,7 +8,6 @@ AUTO_CHANNEL_MIXER_MAPPING = {
     "glu": GLU,
     "nglu": nGLU,
     "alu": ALU,
-    "lalu": LALU,
 }
 
 
@@ -22,7 +20,7 @@ def get_channel_mixer(config):
             activation=config.channel_mixer_activation,
             bias=config.bias,
         )
-    elif config.channel_mixer_type in ["alu", "lalu"]:
+    elif config.channel_mixer_type in ["alu"]:
         return cls(
             embed_dim=config.embed_dim,
             qk_dim=config.qk_dim,

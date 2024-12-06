@@ -2,6 +2,7 @@ from .linear_attention import Hgru3, LinearAttention, TnlAttention
 from .long_conv import Gtu
 from .vanilla_attention import (
     Attention,
+    CPAttention,
     FlexAttention,
     MultiProductAttention,
     nAttention,
@@ -13,6 +14,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "flex_attn": FlexAttention,
     "n_attn": nAttention,
     "mpa": MultiProductAttention,
+    "cpa": CPAttention,
     # linear attn
     "hgru3": Hgru3,
     "linear_attn": LinearAttention,
@@ -57,4 +59,21 @@ def get_token_mixer(config, layer_idx):
             num_layers=config.num_layers,
             mpa_type=config.mpa_type,
             mpa_activation=config.mpa_activation,
+        )
+    elif config.token_mixer_type in ["cpa"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            kv_heads=config.kv_heads,
+            bias=config.bias,
+            use_lrpe=config.use_lrpe,
+            layer_idx=layer_idx,
+            lrpe_type=config.lrpe_type,
+            base=config.base,
+            max_position_embeddings=config.max_position_embeddings,
+            kv_rank=config.kv_rank,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            cp_activation=config.cp_activation,
         )

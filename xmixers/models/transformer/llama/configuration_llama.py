@@ -32,6 +32,8 @@ class LLaMAConfig(PretrainedConfig):
         base=10000,
         mpa_type=0,
         mpa_activation="none",
+        kv_rank=2,
+        cp_activation="none",
         # channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
@@ -79,6 +81,8 @@ class LLaMAConfig(PretrainedConfig):
         self.token_mixer_type = token_mixer_type
         self.mpa_type = mpa_type
         self.mpa_activation = mpa_activation
+        self.kv_rank = kv_rank
+        self.cp_activation = cp_activation
         # channel mixer config
         self.channel_mixer_type = channel_mixer_type
         self.mid_dim = mid_dim
