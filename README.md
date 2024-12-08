@@ -37,6 +37,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
     - [ ] n_attention
 
 - [ ] Add special init.
+- [ ] Add causal.
 
 ## Model
 - [x] LLaMA.
