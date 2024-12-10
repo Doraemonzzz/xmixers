@@ -3,7 +3,10 @@
 
 
 import argparse
+import json
+import os
 from pathlib import Path
+from shutil import copy2
 
 import torch
 from transformers.utils import logging
@@ -12,6 +15,13 @@ from xmixers.models import Hgrn3Config, Hgrn3ForCausalLM
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
+
+AUTO_DTYPE_MAP = {
+    "fp32": torch.float32,
+    "bf16": torch.bfloat16,
+    "fp16": torch.float16,
+}
 
 
 def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
@@ -43,6 +53,7 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
         "norm_type",
         "no_scale_embedding",
         "glu_act",
+        "max_target_positions",
     }
     print("======Model Config======")
     for key in sd["cfg"]["model"]:
@@ -61,6 +72,7 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
                 "decoder_embed_dim",
                 "glu_act",
                 "no_scale_embedding",
+                "max_target_positions",
             ]:
                 if key == "glu_dim":
                     config_dict["mid_dim"] = int(sd["cfg"]["model"][key])
@@ -74,6 +86,10 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
                     config_dict["embed_dim"] = int(sd["cfg"]["model"][key])
                 elif key == "glu_act":
                     config_dict["glu_activation"] = sd["cfg"]["model"][key]
+                elif key == "max_target_positions":
+                    config_dict["max_position_embeddings"] = int(
+                        sd["cfg"]["model"][key]
+                    )
             else:
                 if key == "expand_ratio":
                     config_dict[key] = int(sd["cfg"]["model"][key])
@@ -161,20 +177,60 @@ def convert_checkpoint(
     pytorch_dump_folder_path,
     config=None,
     vocab_size=-1,
+    tie_weights=False,
+    dtype="bf16",
+    max_shard_size="5GB",
 ):
     state_dict, config_dict = load_checkpoint(
         checkpoint_path, tokenizer_path, vocab_size
     )
     config = Hgrn3Config(**config_dict)
     model = Hgrn3ForCausalLM(config)
+    if tie_weights:
+        model.tie_weights()  # ·Explicitly tie weights·if·necessary
     print(model)
     res = model.load_state_dict(state_dict)
     print(res)
     print(model)
     # Check results
     print(torch.mean(model.model.embed_tokens.weight), torch.mean(model.lm_head.weight))
+    model.to(AUTO_DTYPE_MAP[dtype])
     Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(pytorch_dump_folder_path)
+    model.save_pretrained(
+        pytorch_dump_folder_path, max_shard_size=max_shard_size, safe_serialization=True
+    )
+
+
+def check_max(path):
+    """Ensure model_max_length in tokenizer config matches max_position_embeddings in model config"""
+    config_path = os.path.join(path, "config.json")
+    tokenizer_path = os.path.join(path, "tokenizer_config.json")
+
+    config_max = get_json_key(config_path, "max_position_embeddings")
+    tokenizer_max = get_json_key(tokenizer_path, "model_max_length")
+
+    if config_max != tokenizer_max:
+        with open(tokenizer_path) as f:
+            tokenizer_config = json.load(f)
+
+        old_max = tokenizer_config["model_max_length"]
+        tokenizer_config["model_max_length"] = config_max
+
+        with open(tokenizer_path, "w") as f:
+            json.dump(tokenizer_config, f, ensure_ascii=False, indent=4)
+            f.write("\n")
+
+        print(f"Updated {tokenizer_path}: model_max_length {old_max} -> {config_max}")
+
+
+def update_codebase(path):
+    """Copy tokenizer files and sync configs"""
+
+    for file in os.listdir("./tokenizer"):
+        copy2(src=os.path.join("./tokenizer", file), dst=os.path.join(path, file))
+
+    # Ensure configs are in sync
+    check_max(path)
 
 
 if __name__ == "__main__":
@@ -210,3 +266,7 @@ if __name__ == "__main__":
         config=args.hf_config,
         vocab_size=args.vocab_size,
     )
+    try:
+        update_codebase(args.pytorch_dump_folder_path)
+    except:
+        pass
