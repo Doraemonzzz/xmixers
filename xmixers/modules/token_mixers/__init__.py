@@ -61,6 +61,7 @@ def get_token_mixer(config, layer_idx):
             num_layers=config.num_layers,
             mpa_type=config.mpa_type,
             mpa_activation=config.mpa_activation,
+            head_dim=config.head_dim,
         )
     elif config.token_mixer_type in ["cpa"]:
         return cls(

@@ -332,6 +332,8 @@ class nGPTModel(nGPTPreTrainedModel):
 
 
 class nGPTForCausalLM(nGPTPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.model = nGPTModel(config)

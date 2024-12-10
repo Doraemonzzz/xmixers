@@ -260,6 +260,8 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
 
 
 class Hgrn3ForCausalLM(Hgrn3PreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.model = Hgrn3Model(config)

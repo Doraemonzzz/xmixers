@@ -32,6 +32,7 @@ class LLaMAConfig(PretrainedConfig):
         base=10000,
         mpa_type=0,
         mpa_activation="none",
+        head_dim=-1,
         kv_rank=2,
         cp_activation="none",
         q_lora_rank=512,
@@ -89,6 +90,7 @@ class LLaMAConfig(PretrainedConfig):
         self.q_lora_rank = q_lora_rank
         self.kv_lora_rank = kv_lora_rank
         self.qk_rope_head_dim = qk_rope_head_dim
+        self.head_dim = head_dim
         # channel mixer config
         self.channel_mixer_type = channel_mixer_type
         self.mid_dim = mid_dim

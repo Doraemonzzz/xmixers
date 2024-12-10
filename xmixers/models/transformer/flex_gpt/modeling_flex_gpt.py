@@ -284,6 +284,8 @@ class FlexGPTModel(FlexGPTPreTrainedModel):
 
 
 class FlexGPTForCausalLM(FlexGPTPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.model = FlexGPTModel(config)

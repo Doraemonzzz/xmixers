@@ -35,6 +35,7 @@ class MultiProductAttention(nn.Module):
         num_layers: int = 12,
         mpa_type: int = 0,
         mpa_activation: str = "none",
+        head_dim=-1,
         **kwargs,
     ):
         super().__init__()
@@ -46,9 +47,10 @@ class MultiProductAttention(nn.Module):
 
         self.layer_idx = layer_idx
         self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
+        self.head_dim = embed_dim // num_heads if head_dim == -1 else head_dim
+        mid_dim = self.head_dim * self.num_heads
         self.mpa_type = mpa_type
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, self.head_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, self.head_dim, bias=bias)
         if self.mpa_type == 0:
@@ -59,7 +61,7 @@ class MultiProductAttention(nn.Module):
             self.v_head = nn.Parameter(torch.randn(num_heads) * 0.1, requires_grad=True)
         self.act = get_activation_fn(mpa_activation)
 
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(mid_dim, embed_dim, bias=bias)
 
         self.use_lrpe = use_lrpe
         if self.use_lrpe:
