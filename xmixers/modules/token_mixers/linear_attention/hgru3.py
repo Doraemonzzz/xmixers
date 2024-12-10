@@ -11,9 +11,12 @@ from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
 from xmixers.utils import XMIXERS_DEBUG, print_params
 
+from .srmsnorm import _SrmsNorm
 
-def l2_norm(x, eps):
-    return F.normalize(x, p=2.0, dim=-1, eps=eps)
+# def l2_norm(x, eps):
+#     return F.normalize(x, p=2.0, dim=-1, eps=eps)
+
+l2_norm = _SrmsNorm.apply
 
 
 class Hgru3(nn.Module):
@@ -108,10 +111,17 @@ class Hgru3(nn.Module):
 
         # dense memory
         # todo: make a fusion here
+        # if self.use_dense_memory:
+        #     # I - 2 beta beta ^ T
+        #     beta = self.beta_act(self.bet_proj(x))
+        #     beta = l2_norm(beta.float(), 1e-6).contiguous()
+        #     q_beta = (q * beta).sum(dim=-1, keepdim=True)
+        #     q = (q - 2 * q_beta * beta).to(q.dtype)
+
         if self.use_dense_memory:
             # I - 2 beta beta ^ T
             beta = self.beta_act(self.bet_proj(x))
-            beta = l2_norm(beta, 1e-6).contiguous()
+            beta = l2_norm(beta, 1e-6).contiguous() / (beta.shape[-1] ** 0.5)
             q_beta = (q * beta).sum(dim=-1, keepdim=True)
             q = q - 2 * q_beta * beta
 
