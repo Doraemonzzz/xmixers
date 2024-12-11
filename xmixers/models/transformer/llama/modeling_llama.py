@@ -234,7 +234,6 @@ class LLaMAModel(LLaMAPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        () if use_cache else None
 
         for idx, layer in enumerate(self.layers):
             if output_hidden_states:

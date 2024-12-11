@@ -207,7 +207,6 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        () if use_cache else None
 
         for idx, layer in enumerate(self.layers):
             log_lower_bound = self.log_lower_bound / (idx + 1)

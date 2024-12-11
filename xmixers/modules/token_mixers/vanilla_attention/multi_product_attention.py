@@ -35,7 +35,7 @@ class MultiProductAttention(nn.Module):
         num_layers: int = 12,
         mpa_type: int = 0,
         mpa_activation: str = "none",
-        head_dim=-1,
+        head_dim: int = -1,
         **kwargs,
     ):
         super().__init__()
