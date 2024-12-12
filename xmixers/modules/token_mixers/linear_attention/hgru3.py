@@ -148,8 +148,13 @@ class Hgru3(nn.Module):
 
         if self.causal:
             if self.training:
+                q = q.to(k.dtype)
                 fn = chunk_simple_gla
             else:
+                q = q.float()
+                k = k.float()
+                v = v.float()
+                log_f = log_f.float()
                 fn = fused_recurrent_simple_gla
 
             output, recurrent_state = fn(
