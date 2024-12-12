@@ -98,6 +98,7 @@ class _SrmsNorm(torch.autograd.Function):
         # Less than 64KB per feature: enqueue fused kernel
         MAX_FUSED_SIZE = 65536 // x.element_size()
         BLOCK_SIZE_N = min(MAX_FUSED_SIZE, triton.next_power_of_2(N))
+
         if N > BLOCK_SIZE_N:
             raise RuntimeError("This layer norm doesn't support feature dim >= 64KB.")
 
@@ -110,6 +111,7 @@ class _SrmsNorm(torch.autograd.Function):
 
         # enqueue kernel
         # fmt: off
+
         srms_norm_fw[(M,)](
             x_arg, y, rstd,
             x_arg.stride(0),
@@ -180,7 +182,7 @@ class _SrmsNorm(torch.autograd.Function):
         return dx, None, None
 
 
-class SimpleRMSNorm(torch.nn.Module):
+class SRMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps

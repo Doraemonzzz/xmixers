@@ -13,26 +13,6 @@ import torch.nn as nn
 from xmixers.utils import XMIXERS_DEBUG, print_params
 
 
-class SRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        if XMIXERS_DEBUG:
-            # get local varables
-            params = locals()
-            # print params
-            print_params(**params)
-
-        self.eps = eps
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
-        output = self._norm(x.float()).type_as(x)
-
-        return output
-
-
 class RMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()

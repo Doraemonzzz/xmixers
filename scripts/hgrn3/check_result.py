@@ -11,18 +11,21 @@ AUTO_DTYPE_MAP = {"bf16": torch.bfloat16, "fp32": torch.float32}
 
 
 def generate(model, x):
+    model.eval()
     b, n = x.shape
     y = []
-    past_key_values = None
-    for i in range(n):
-        output = model(
-            input_ids=x[:, i : i + 1],
-            past_key_values=past_key_values,
-        )
-        past_key_values = output["past_key_values"]
-        y.append(output["logits"])
+    with torch.inference_mode():
+        past_key_values = None
+        for i in range(n):
+            output = model(
+                input_ids=x[:, i : i + 1].contiguous(),
+                past_key_values=past_key_values,
+            )
+            past_key_values = output["past_key_values"]
+            y.append(output["logits"].contiguous())
 
-    return torch.cat(y, dim=1)
+    y = torch.cat(y, dim=1)
+    return y
 
 
 def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name):
@@ -177,12 +180,14 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name
     m = 50272
 
     # train test
+    # for n in [16]:
+    # for n in [8]:
     for n in [128]:
         input = torch.randint(0, m, (b, n)).cuda()
+
         o1 = metaseq_model(input)[0]
         hf_model.train()
         o2 = hf_model(input)["logits"]
-        hf_model.eval()
         print("generate")
         o3 = generate(hf_model, input)
 
@@ -191,6 +196,8 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name
         print(torch.norm(o1 - o2))
         print("inference diff")
         print(torch.norm(o1 - o3))
+        print(o1[0, 0, :8])
+        print(o3[0, 0, :8])
 
 
 if __name__ == "__main__":

@@ -72,7 +72,6 @@ class Hgrn3Layer(nn.Module):
         )
         x = x + residual
 
-        # channel mixer
         x = self.channel_mixer(self.channel_norm(x)) + x
 
         outputs = (x, past_key_values)
@@ -209,6 +208,8 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         all_self_attns = () if output_attentions else None
 
         for idx, layer in enumerate(self.layers):
+            # if idx == 1:
+            #     break
             log_lower_bound = self.log_lower_bound / (idx + 1)
 
             if output_hidden_states:

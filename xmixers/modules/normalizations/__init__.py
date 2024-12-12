@@ -1,6 +1,7 @@
 from .offset_scale import *
 from .rms_norm import *
 from .scale_norm import *
+from .srmsnorm import SRMSNorm
 
 
 def get_norm_fn(norm_type: str) -> nn.Module:

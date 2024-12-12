@@ -9,9 +9,10 @@ from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
-from xmixers.utils import XMIXERS_DEBUG, print_params
 
-from .srmsnorm import _SrmsNorm
+# from .srmsnorm import _SrmsNorm
+from xmixers.modules.normalizations.srmsnorm import _SrmsNorm
+from xmixers.utils import XMIXERS_DEBUG, print_params
 
 # def l2_norm(x, eps):
 #     return F.normalize(x, p=2.0, dim=-1, eps=eps)
@@ -147,14 +148,15 @@ class Hgru3(nn.Module):
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
 
         if self.causal:
-            if self.training:
+            if self.training or use_cache:
                 q = q.to(k.dtype)
                 fn = chunk_simple_gla
             else:
-                q = q.float()
-                k = k.float()
-                v = v.float()
-                log_f = log_f.float()
+                # q = q.to(k.dtype)
+                # q = q.float()
+                # k = k.float()
+                # v = v.float()
+                # log_f = log_f.float()
                 fn = fused_recurrent_simple_gla
 
             output, recurrent_state = fn(
@@ -165,6 +167,7 @@ class Hgru3(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
             )
+            output = output.to(x.dtype)
         else:
             assert False
 
