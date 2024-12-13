@@ -38,7 +38,8 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 
 - [ ] Add special init.
 - [ ] Add causal.
-- [ ] Clear next_decoder_cache.
+- [x] Clear next_decoder_cache.
+- [ ] Add varlen for softmax attn.
 
 ## Model
 - [x] LLaMA.

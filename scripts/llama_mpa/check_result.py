@@ -11,18 +11,21 @@ AUTO_DTYPE_MAP = {"bf16": torch.bfloat16, "fp32": torch.float32}
 
 
 def generate(model, x):
+    model.eval()
     b, n = x.shape
     y = []
     past_key_values = None
-    for i in range(n):
-        output = model(
-            input_ids=x[:, i : i + 1],
-            past_key_values=past_key_values,
-        )
-        past_key_values = output["past_key_values"]
-        y.append(output["logits"])
+    with torch.inference_mode():
+        for i in range(n):
+            output = model(
+                input_ids=x[:, i : i + 1],
+                past_key_values=past_key_values,
+            )
+            past_key_values = output["past_key_values"]
+            y.append(output["logits"])
 
-    return torch.cat(y, dim=1)
+    y = torch.cat(y, dim=1)
+    return y
 
 
 def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name):
@@ -92,51 +95,80 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name
             )
         )
         # kv
-        d = hf_model.model.layers[i].token_mixer.k_proj.weight.shape[0]
-        print(
-            torch.norm(
-                metaseq_model.decoder.layers[i].token_mixer.kv2_proj.weight[:d]
-                - hf_model.model.layers[i].token_mixer.k_proj.weight
+        try:
+            d = hf_model.model.layers[i].token_mixer.k_proj.weight.shape[0]
+            print(
+                torch.norm(
+                    metaseq_model.decoder.layers[i].token_mixer.kv2_proj.weight[:d]
+                    - hf_model.model.layers[i].token_mixer.k_proj.weight
+                )
             )
-        )
-        print(
-            torch.norm(
-                metaseq_model.decoder.layers[i].token_mixer.kv2_proj.weight[d:]
-                - hf_model.model.layers[i].token_mixer.v_proj.weight
+            print(
+                torch.norm(
+                    metaseq_model.decoder.layers[i].token_mixer.kv2_proj.weight[d:]
+                    - hf_model.model.layers[i].token_mixer.v_proj.weight
+                )
             )
-        )
+        except:
+            print("data dependent kv")
+            print(
+                torch.norm(
+                    metaseq_model.decoder.layers[i].token_mixer.kv2_proj.weight
+                    - hf_model.model.layers[i].token_mixer.kv_proj.weight
+                )
+            )
         # kv head
-        if hasattr(hf_model.model.layers[i].token_mixer, "k_head_proj"):
-            d = (
-                metaseq_model.decoder.layers[i].token_mixer.kv1_proj.weight.shape[0]
-                // 2
-            )
-            print(
-                torch.norm(
-                    metaseq_model.decoder.layers[i].token_mixer.kv1_proj.weight[:d]
-                    - hf_model.model.layers[i].token_mixer.k_head_proj.weight
+        if hasattr(metaseq_model.decoder.layers[i].token_mixer.kv1_proj, "weight"):
+            # data dependent
+            try:
+                d = (
+                    metaseq_model.decoder.layers[i].token_mixer.kv1_proj.weight.shape[0]
+                    // 2
                 )
-            )
-            print(
-                torch.norm(
-                    metaseq_model.decoder.layers[i].token_mixer.kv1_proj.weight[d:]
-                    - hf_model.model.layers[i].token_mixer.v_head_proj.weight
+                print(
+                    torch.norm(
+                        metaseq_model.decoder.layers[i].token_mixer.kv1_proj.weight[:d]
+                        - hf_model.model.layers[i].token_mixer.k_head_proj.weight
+                    )
                 )
-            )
+                print(
+                    torch.norm(
+                        metaseq_model.decoder.layers[i].token_mixer.kv1_proj.weight[d:]
+                        - hf_model.model.layers[i].token_mixer.v_head_proj.weight
+                    )
+                )
+            except:
+                print("data dependent kv head")
+                print(
+                    torch.norm(
+                        metaseq_model.decoder.layers[i].token_mixer.kv1_proj.weight
+                        - hf_model.model.layers[i].token_mixer.kv_head_proj.weight
+                    )
+                )
         else:
-            d = metaseq_model.decoder.layers[i].token_mixer.kv1_proj.shape[0] // 2
-            print(
-                torch.norm(
-                    metaseq_model.decoder.layers[i].token_mixer.kv1_proj[:d]
-                    - hf_model.model.layers[i].token_mixer.k_head
+            # data independent
+            try:
+                d = metaseq_model.decoder.layers[i].token_mixer.kv1_proj.shape[0] // 2
+                print(
+                    torch.norm(
+                        metaseq_model.decoder.layers[i].token_mixer.kv1_proj[:d]
+                        - hf_model.model.layers[i].token_mixer.k_head
+                    )
                 )
-            )
-            print(
-                torch.norm(
-                    metaseq_model.decoder.layers[i].token_mixer.kv1_proj[d:]
-                    - hf_model.model.layers[i].token_mixer.v_head
+                print(
+                    torch.norm(
+                        metaseq_model.decoder.layers[i].token_mixer.kv1_proj[d:]
+                        - hf_model.model.layers[i].token_mixer.v_head
+                    )
                 )
-            )
+            except:
+                print("data independent kv head")
+                print(
+                    torch.norm(
+                        metaseq_model.decoder.layers[i].token_mixer.kv1_proj
+                        - hf_model.model.layers[i].token_mixer.kv_head
+                    )
+                )
         print("o proj")
         # o proj
         print(
@@ -171,23 +203,23 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name
     b = 2
     m = 50272
 
+    hf_model.eval()
     # train test
-    for n in [128]:
+    for n in [8, 16, 128]:
         input = torch.randint(0, m, (b, n)).cuda()
-        o1 = metaseq_model(input)[0]
-        hf_model.train()
-        o2 = hf_model(input)["logits"]
-        hf_model.eval()
-        print("generate")
-        o3 = generate(hf_model, input)
 
+        o1 = metaseq_model(input)[0]
+        o2 = hf_model(input)["logits"]
         print(f"n: {n}")
         print("training diff")
         print(torch.norm(o1 - o2))
+
+        print("generate")
+        with torch.amp.autocast(device_type="cuda", dtype=dtype):
+            o2 = hf_model(input)["logits"]
+            o3 = generate(hf_model, input)
         print("inference diff")
-        print(torch.norm(o1 - o3))
-        print(o1[0, -1, :16])
-        print(o2[0, -1, :16])
+        print(torch.norm(o2 - o3))
 
 
 if __name__ == "__main__":

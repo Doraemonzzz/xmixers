@@ -14,8 +14,8 @@ def generate(model, x):
     model.eval()
     b, n = x.shape
     y = []
+    past_key_values = None
     with torch.inference_mode():
-        past_key_values = None
         for i in range(n):
             output = model(
                 input_ids=x[:, i : i + 1].contiguous(),
@@ -179,25 +179,23 @@ def check_result(metaseq_dir, hf_dir, checkpoint_name, tokenizer_dir, dtype_name
     b = 2
     m = 50272
 
+    hf_model.eval()
     # train test
-    # for n in [16]:
-    # for n in [8]:
-    for n in [128]:
+    for n in [8, 16, 128]:
         input = torch.randint(0, m, (b, n)).cuda()
 
         o1 = metaseq_model(input)[0]
-        hf_model.train()
         o2 = hf_model(input)["logits"]
-        print("generate")
-        o3 = generate(hf_model, input)
-
         print(f"n: {n}")
         print("training diff")
         print(torch.norm(o1 - o2))
+
+        print("generate")
+        with torch.amp.autocast(device_type="cuda", dtype=dtype):
+            o2 = hf_model(input)["logits"]
+            o3 = generate(hf_model, input)
         print("inference diff")
-        print(torch.norm(o1 - o3))
-        print(o1[0, 0, :8])
-        print(o3[0, 0, :8])
+        print(torch.norm(o2 - o3))
 
 
 if __name__ == "__main__":

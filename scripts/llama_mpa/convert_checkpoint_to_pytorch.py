@@ -53,6 +53,7 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
         "use_mpa",
         "llama_core_matrix",
         "max_target_positions",
+        "head_dim",
     }
     print("======Model Config======")
     for key in sd["cfg"]["model"]:
@@ -101,14 +102,23 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
                     llama_core_matrix = int(sd["cfg"]["model"][key])
                     if llama_core_matrix == 12:
                         config_dict["lrpe_type"] = 1
+                    elif llama_core_matrix == 4:
+                        config_dict["lrpe_type"] = 2
+                    elif llama_core_matrix == 13:
+                        config_dict["lrpe_type"] = 6
+                    elif llama_core_matrix == 16:
+                        config_dict["lrpe_type"] = 5
                 elif key == "max_target_positions":
                     config_dict["max_position_embeddings"] = int(
                         sd["cfg"]["model"][key]
                     )
             else:
                 if key == "num_heads":
+                    # config_dict[key] = int(
+                    #     sd["cfg"]["model"]["decoder_embed_dim"] // 128
+                    # )
                     config_dict[key] = int(
-                        sd["cfg"]["model"]["decoder_embed_dim"] // 128
+                        sd["cfg"]["model"]["decoder_attention_heads"]
                     )
                 elif key == "norm_type":
                     config_dict[key] = sd["cfg"]["model"][key].replace(
@@ -150,22 +160,30 @@ def load_checkpoint(checkpoint_path, tokenizer_path, vocab_size=-1):
         new_key = new_key.replace("l3.weight", "w3.weight")
 
         if "kv2_proj" in new_key:
-            d = value.shape[0] // 2
-            for i, name in enumerate(["k_proj", "v_proj"]):
-                state_dict[new_key.replace("kv2_proj", name)] = value[
-                    i * d : (i + 1) * d
-                ]
-        elif "kv1_proj" in new_key:
-            d = value.shape[0] // 2
-            if len(value.shape) == 2:
-                keys = ["k_head_proj", "v_head_proj"]
-            else:
-                keys = ["k_head", "v_head"]
+            state_dict[new_key.replace("kv2_proj", "kv_proj")] = value
 
-            for i, name in enumerate(keys):
-                state_dict[new_key.replace("kv1_proj", name)] = value[
-                    i * d : (i + 1) * d
-                ]
+            # old version
+            # d = value.shape[0] // 2
+            # for i, name in enumerate(["k_proj", "v_proj"]):
+            #     state_dict[new_key.replace("kv2_proj", name)] = value[
+            #         i * d : (i + 1) * d
+            #     ]
+        elif "kv1_proj" in new_key:
+            if len(value.shape) == 2:
+                state_dict[new_key.replace("kv1_proj", "kv_head_proj")] = value
+            else:
+                state_dict[new_key.replace("kv1_proj", "kv_head")] = value
+
+            # d = value.shape[0] // 2
+            # if len(value.shape) == 2:
+            #     keys = ["k_head_proj", "v_head_proj"]
+            # else:
+            #     keys = ["k_head", "v_head"]
+
+            # for i, name in enumerate(keys):
+            #     state_dict[new_key.replace("kv1_proj", name)] = value[
+            #         i * d : (i + 1) * d
+            #     ]
         else:
             state_dict[new_key] = value
 

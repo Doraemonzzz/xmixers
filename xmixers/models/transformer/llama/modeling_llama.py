@@ -35,6 +35,7 @@ class LLaMALayer(nn.Module):
         self.channel_mixer = get_channel_mixer(config)
 
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+
         self.use_postnorm = config.use_postnorm
         if self.use_postnorm:
             self.forward = self.forward_postnorm

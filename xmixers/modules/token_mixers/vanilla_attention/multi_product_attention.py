@@ -4,7 +4,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
 
@@ -51,14 +50,14 @@ class MultiProductAttention(nn.Module):
         mid_dim = self.head_dim * self.num_heads
         self.mpa_type = mpa_type
         self.q_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
-        self.k_proj = nn.Linear(embed_dim, self.head_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, self.head_dim, bias=bias)
+        self.kv_proj = nn.Linear(embed_dim, 2 * self.head_dim, bias=bias)
         if self.mpa_type == 0:
-            self.k_head_proj = nn.Linear(embed_dim, num_heads, bias=bias)
-            self.v_head_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+            self.kv_head_proj = nn.Linear(embed_dim, 2 * num_heads, bias=bias)
         else:
-            self.k_head = nn.Parameter(torch.randn(num_heads) * 0.1, requires_grad=True)
-            self.v_head = nn.Parameter(torch.randn(num_heads) * 0.1, requires_grad=True)
+            self.kv_head = nn.Parameter(
+                torch.randn(2 * num_heads) * 0.1, requires_grad=True
+            )
+
         self.act = get_activation_fn(mpa_activation)
 
         self.out_proj = nn.Linear(mid_dim, embed_dim, bias=bias)
@@ -137,16 +136,12 @@ class MultiProductAttention(nn.Module):
         # x: b n d
         # linear map
         q = self.q_proj(x)
-
-        k = self.k_proj(x)
-        v = self.v_proj(x)
+        k, v = self.kv_proj(x).chunk(2, dim=-1)
 
         if self.mpa_type == 0:
-            k_head = self.k_head_proj(x)
-            v_head = self.v_head_proj(x)
+            k_head, v_head = self.kv_head_proj(x).chunk(2, dim=-1)
         else:
-            k_head = self.k_head
-            v_head = self.v_head
+            k_head, v_head = self.kv_head.chunk(2, dim=-1)
 
         k_head = self.act(k_head)
         v_head = self.act(v_head)
@@ -181,12 +176,21 @@ class MultiProductAttention(nn.Module):
             q = self.lrpe(q, offset=q_offset)
             k = self.lrpe(k)
 
-        if (
-            attention_mask is None or attention_mask.all()
-        ):  # if attention mask is None or all elements are True, use sdpa
+        # if (
+        #     attention_mask is None or attention_mask.all()
+        # ):  # if attention mask is None or all elements are True, use sdpa
+        if True:
             # use causal when training or evaluation(not for generation) or prefill
             is_causal = True if self.training or q.shape[-2] == k.shape[-2] else False
-            output = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
+            # output = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
+            q, k, v = map(lambda x: rearrange(x, "... h n d -> ... n h d"), [q, k, v])
+            dtype = q.dtype
+            if dtype == torch.float32:
+                q = q.to(torch.bfloat16)
+                k = k.to(torch.bfloat16)
+                v = v.to(torch.bfloat16)
+            output = flash_attn_func(q, k, v, causal=is_causal).to(dtype)
+            output = rearrange(output, "... n h d -> ... h n d")
         else:
             assert False, "flash_attn_varlen_qkvpacked_func current not support"
 
