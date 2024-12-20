@@ -7,11 +7,12 @@ from einops import rearrange
 from fla.modules import FusedLinearCrossEntropyLoss
 from transformers.cache_utils import Cache
 from transformers.modeling_outputs import CausalLMOutputWithPast
-from transformers.models.llama.configuration_llama import LlamaConfig
 from transformers.models.llama.modeling_llama import (
     LlamaForCausalLM,
     apply_rotary_pos_emb,
 )
+
+from .configuration_llama_mpa import LlamaMpaConfig
 
 try:
     from flash_attn import flash_attn_func
@@ -22,7 +23,7 @@ except:
 class LlamaMpaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: LlamaConfig, layer_idx: int):
+    def __init__(self, config: LlamaMpaConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -103,7 +104,11 @@ class LlamaMpaAttention(nn.Module):
             [query_states, key_states, value_states],
         )
         attn_output = flash_attn_func(
-            query_states, key_states, value_states, softmax_scale=self.scaling
+            query_states,
+            key_states,
+            value_states,
+            causal=True,
+            softmax_scale=self.scaling,
         )
         attn_output = rearrange(attn_output, "b n h d -> b n (h d)")
 
@@ -112,6 +117,8 @@ class LlamaMpaAttention(nn.Module):
 
 
 class LlamaMpaForCausalLM(LlamaForCausalLM):
+    config_class = LlamaMpaConfig
+
     def __init__(self, config):
         super().__init__(config)
         for layer_idx, layer in enumerate(self.model.layers):

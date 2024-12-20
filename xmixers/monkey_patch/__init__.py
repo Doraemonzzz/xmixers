@@ -1,1 +1,1 @@
-from .mpa import LlamaMpaAttention, LlamaMpaForCausalLM
+from .mpa import LlamaMpaAttention, LlamaMpaConfig, LlamaMpaForCausalLM
