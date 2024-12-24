@@ -11,4 +11,5 @@ from .models import (
     TnlForCausalLM,
     TnlModel,
 )
+from .monkey_patch import LlamaMpaConfig, LlamaMpaForCausalLM
 from .ops import *
