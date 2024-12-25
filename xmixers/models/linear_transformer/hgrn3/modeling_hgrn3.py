@@ -40,9 +40,12 @@ class Hgrn3Layer(nn.Module):
             beta_activation=config.beta_activation,
             causal=config.causal,
             use_dense_memory=config.use_dense_memory,
+            rescale_type=config.rescale_type,
+            token_mixer_init_type=config.token_mixer_init_type,
+            num_layers=config.num_layers,
         )
 
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
         self.channel_mixer = GLU(
             embed_dim=config.embed_dim,
@@ -51,7 +54,7 @@ class Hgrn3Layer(nn.Module):
             bias=config.bias,
         )
 
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
     def forward(
         self,
@@ -86,14 +89,43 @@ class Hgrn3PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        if self.config.init_type == 0:
+            std = self.config.init_std
+            if isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+                if module.padding_idx is not None:
+                    nn.init.zeros_(module.weight[module.padding_idx])
+        elif (
+            self.config.init_type == 1
+        ):  # credit to https://arxiv.org/pdf/2409.02060#page=14.84
+            std = self.config.init_std
+            trunc_std = 3 * std
+            if isinstance(module, nn.Linear):
+                nn.init.trunc_normal_(
+                    module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
+                )
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.trunc_normal_(
+                    module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
+                )
+                if module.padding_idx is not None:
+                    nn.init.zeros_(module.weight[module.padding_idx])
+        elif self.config.init_type == 2:  # credit to https://arxiv.org/pdf/1910.05895
+            std = (2 / 5 / self.config.embed_dim) ** 0.5
+            if isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+                if module.padding_idx is not None:
+                    nn.init.zeros_(module.weight[module.padding_idx])
 
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
@@ -102,7 +134,7 @@ class Hgrn3PreTrainedModel(PreTrainedModel):
         #
         # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
         for name, p in module.named_parameters():
-            if name in ["out_proj.weight", "w3.weight"]:
+            if name in ["w3.weight"]:
                 num_residuals_per_layer = 2
                 # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
@@ -133,7 +165,7 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         self.layers = nn.ModuleList(
             [Hgrn3Layer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
         # log lower bound
         # a bit different from tnl

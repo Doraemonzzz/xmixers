@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 
 import torch
@@ -9,13 +10,8 @@ from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
-
-# from .srmsnorm import _SrmsNorm
 from xmixers.modules.normalizations.srmsnorm import _SrmsNorm
 from xmixers.utils import XMIXERS_DEBUG, print_params
-
-# def l2_norm(x, eps):
-#     return F.normalize(x, p=2.0, dim=-1, eps=eps)
 
 l2_norm = _SrmsNorm.apply
 
@@ -36,6 +32,7 @@ class Hgru3(nn.Module):
         use_dense_memory: bool = True,
         token_mixer_init_type: int = 0,
         rescale_type: int = 0,
+        num_layers: int = 12,
         **kwargs,
     ):
         super().__init__()
@@ -61,7 +58,7 @@ class Hgru3(nn.Module):
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
         self.beta_act = get_activation_fn(beta_activation)
-        self.norm = get_norm_fn(norm_type)(embed_dim)
+        self.norm = get_norm_fn(norm_type)(embed_dim, bias=False)
 
         if self.use_dense_memory:
             # !!! dont use beta as name in hf: https://github.com/huggingface/transformers/issues/29554
@@ -79,6 +76,7 @@ class Hgru3(nn.Module):
 
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
+        self.num_layers = num_layers
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -124,7 +122,7 @@ class Hgru3(nn.Module):
                     with torch.no_grad():
                         p /= math.sqrt(num_residuals_per_layer * self.num_layers)
 
-        self._is_hf_initialized = True
+        module._is_hf_initialized = True
 
     def forward(
         self,
