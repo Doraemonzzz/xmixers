@@ -37,7 +37,6 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
     - [ ] flex attention
     - [x] mpa
     - [ ] n_attention
-
 - [ ] Add special init.
 - [ ] Add causal.
 - [x] Clear next_decoder_cache.
