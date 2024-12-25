@@ -1,26 +1,19 @@
+import math
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
+from fla.ops.gla import chunk_gla, fused_recurrent_gla
 from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
-
-# from .srmsnorm import _SrmsNorm
-from xmixers.modules.normalizations.srmsnorm import _SrmsNorm
 from xmixers.utils import XMIXERS_DEBUG, print_params
 
-# def l2_norm(x, eps):
-#     return F.normalize(x, p=2.0, dim=-1, eps=eps)
 
-l2_norm = _SrmsNorm.apply
-
-
-class Hgru3(nn.Module):
+class Hgru2(nn.Module):
     def __init__(
         self,
         embed_dim: int,
@@ -30,12 +23,10 @@ class Hgru3(nn.Module):
         use_output_gate: bool = True,
         norm_type: str = "layernorm",
         q_activation: str = "silu",
-        k_activation: str = "silu",
-        beta_activation: str = "silu",
         causal: bool = True,
-        use_dense_memory: bool = True,
         token_mixer_init_type: int = 0,
         rescale_type: int = 0,
+        num_layers: int = 12,
         **kwargs,
     ):
         super().__init__()
@@ -50,26 +41,12 @@ class Hgru3(nn.Module):
         self.layer_idx = layer_idx
         self.expand_ratio = expand_ratio
         self.causal = causal
-        self.use_dense_memory = use_dense_memory
         self.use_output_gate = use_output_gate
 
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.f_proj = nn.Linear(embed_dim, embed_dim // expand_ratio, bias=bias)
+        self.in_proj = nn.Linear(embed_dim, 3 * embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
-        self.k_act = get_activation_fn(k_activation)
-        self.beta_act = get_activation_fn(beta_activation)
-        self.norm = get_norm_fn(norm_type)(embed_dim)
-
-        if self.use_dense_memory:
-            # !!! dont use beta as name in hf: https://github.com/huggingface/transformers/issues/29554
-            # I - 2 * beta beta ^ T
-            self.bet_proj = nn.Sequential(
-                nn.Linear(embed_dim, expand_ratio, bias=bias),
-                nn.Linear(expand_ratio, embed_dim, bias=bias),
-            )
+        self.norm = get_norm_fn(norm_type)(embed_dim, bias=False)
 
         if self.use_output_gate:
             self.output_gate = nn.Sequential(
@@ -79,6 +56,7 @@ class Hgru3(nn.Module):
 
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
+        self.num_layers = num_layers
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -92,19 +70,11 @@ class Hgru3(nn.Module):
                 nn.init.xavier_uniform_(module.weight, gain=2**-2.5)
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
-            if hasattr(module, "k_head"):
-                nn.init.xavier_uniform_(module.k_head, gain=2**-2.5)
-            if hasattr(module, "v_head"):
-                nn.init.xavier_uniform_(module.v_head, gain=2**-2.5)
         elif self.token_mixer_init_type == 2:  # fairseq init
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight, gain=2**-0.5)
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
-            if hasattr(module, "k_head"):
-                nn.init.xavier_uniform_(module.k_head, gain=2**-0.5)
-            if hasattr(module, "v_head"):
-                nn.init.xavier_uniform_(module.v_head, gain=2**-0.5)
 
         if self.rescale_type == 1:
             # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
@@ -124,7 +94,7 @@ class Hgru3(nn.Module):
                     with torch.no_grad():
                         p /= math.sqrt(num_residuals_per_layer * self.num_layers)
 
-        self._is_hf_initialized = True
+        module._is_hf_initialized = True
 
     def forward(
         self,
@@ -132,50 +102,30 @@ class Hgru3(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        log_lower_bound: Optional[torch.Tensor] = None,
+        lower_bound: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         # x: b n d
         # linear map
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
-        f = self.f_proj(x)
+        # !!! not q, log_f, v, this is for align with internel version
+        v, q, log_f = self.in_proj(x).chunk(3, dim=-1)
 
         # act
         q = self.q_act(q)
-        k = self.k_act(k)
-
-        # dense memory
-        # todo: make a fusion here
-        # if self.use_dense_memory:
-        #     # I - 2 beta beta ^ T
-        #     beta = self.beta_act(self.bet_proj(x))
-        #     beta = l2_norm(beta.float(), 1e-6).contiguous()
-        #     q_beta = (q * beta).sum(dim=-1, keepdim=True)
-        #     q = (q - 2 * q_beta * beta).to(q.dtype)
-
-        if self.use_dense_memory:
-            # I - 2 beta beta ^ T
-            beta = self.beta_act(self.bet_proj(x))
-            beta = l2_norm(beta, 1e-6).contiguous() / (beta.shape[-1] ** 0.5)
-            q_beta = (q * beta).sum(dim=-1, keepdim=True)
-            q = q - 2 * q_beta * beta
-
-        # h is num_head, d is head dimension
-        q, k, v = map(
-            lambda x: rearrange(x, "... (h d) -> ... h d", d=self.expand_ratio),
-            [q, k, v],
-        )
+        f = F.sigmoid(log_f)
 
         # todo: make a fusion here
         # l + (1 - l) * sigmoid(x)
-        lower_bound = torch.exp(log_lower_bound.float())
-        f = lower_bound + (1 - lower_bound) * F.sigmoid(f.float())
-        log_f = torch.log(f)
+        if lower_bound is not None:
+            f = lower_bound + (1 - lower_bound) * f
+            log_f = torch.log(f)
+
+        k = 1 - f
 
         q, k, v, log_f = map(
-            lambda x: rearrange(x, "b n h ... -> b h n ...").contiguous(),
+            lambda x: rearrange(
+                x, "b n (h d) -> b h n d", d=self.expand_ratio
+            ).contiguous(),
             [q, k, v, log_f],
         )
 
@@ -183,27 +133,24 @@ class Hgru3(nn.Module):
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
 
+        dtype = q.dtype
+        # dtype = torch.float32
+        q, k, v, log_f = map(lambda x: x.to(dtype), [q, k, v, log_f])
         if self.causal:
-            if self.training or use_cache:
-                q = q.to(k.dtype)
-                fn = chunk_simple_gla
+            if self.training or recurrent_state is None:  # training or prefilling
+                fn = chunk_gla
             else:
-                # q = q.to(k.dtype)
-                # q = q.float()
-                # k = k.float()
-                # v = v.float()
-                # log_f = log_f.float()
-                fn = fused_recurrent_simple_gla
+                fn = fused_recurrent_gla
 
             output, recurrent_state = fn(
                 q=q,
                 k=k,
                 v=v,
                 g=log_f,
+                scale=1,
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
             )
-            output = output.to(x.dtype)
         else:
             assert False
 

@@ -195,7 +195,7 @@ class LinearAttention(nn.Module):
         output = rearrange(output, "... h n d -> ... n (h d)")
 
         if self.use_output_gate:
-            output_gate = F.sigmoid(self.out_gate(x))
+            output_gate = F.sigmoid(self.output_gate(x))
             output = output * output_gate
 
         # use post norm here for better parallel when using tp

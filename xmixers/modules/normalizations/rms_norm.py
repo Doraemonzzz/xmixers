@@ -10,11 +10,11 @@ https://github.com/bzhangGo/zero/blob/master/modules/rela.py
 import torch
 import torch.nn as nn
 
-from xmixers.utils import XMIXERS_DEBUG, print_params
+from xmixers.utils import XMIXERS_DEBUG, print_module, print_params
 
 
 class RMSNorm(torch.nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, dim: int, eps: float = 1e-6, **kwargs):
         super().__init__()
         if XMIXERS_DEBUG:
             # get local varables
@@ -38,7 +38,7 @@ class RMSNorm(torch.nn.Module):
 
 
 class GatedRMSNorm(nn.Module):
-    def __init__(self, d: int, eps: float = 1e-8, bias: bool = False) -> None:
+    def __init__(self, d: int, eps: float = 1e-8, bias: bool = False, **kwargs) -> None:
         super().__init__()
 
         if XMIXERS_DEBUG:

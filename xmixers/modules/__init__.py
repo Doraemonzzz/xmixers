@@ -13,6 +13,7 @@ from .token_mixers import (
     Attention,
     FlexAttention,
     Gtu,
+    Hgru2,
     Hgru3,
     LinearAttention,
     MultiProductAttention,

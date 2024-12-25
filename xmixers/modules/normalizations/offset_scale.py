@@ -9,7 +9,7 @@ from xmixers.utils import XMIXERS_DEBUG, print_params
 
 
 class OffsetScale(nn.Module):
-    def __init__(self, dim: int) -> None:
+    def __init__(self, dim: int, **kwargs) -> None:
         super().__init__()
 
         if XMIXERS_DEBUG:
