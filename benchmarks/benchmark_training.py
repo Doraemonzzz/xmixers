@@ -49,6 +49,12 @@ def prepare_inputs(
     return tokens, offsets
 
 
+def print_res(res: List[dict], columns: List[str]):
+    print(",".join(columns))
+    for r in res:
+        print(",".join([str(r[c]).strip() for c in columns]))
+
+
 def profile(
     cfg_path: str,
     name: str,
@@ -95,6 +101,19 @@ def profile(
 
     model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
 
+    columns = [
+        "Model",
+        "Params",
+        "Params(non-embedding)",
+        "Tgs",
+        "Mem",
+        "Batch",
+        "Seq",
+        "Varlen",
+        "Warmup",
+        "Steps",
+    ]
+    res = []
     for seq_len, batch_size in zip(seq_len_list, batch_size_list):
         torch.cuda.synchronize(device)
         for _ in bar:
@@ -141,12 +160,22 @@ def profile(
                 f"Thoughput: {total_tokens / duration:10.2f} tokens/s"
             )
 
-        print(
-            f"Model,Params,Params(non-embedding),Tgs,Mem,Batch,Seq,Varlen,Warmup,Steps"
+        res.append(
+            {
+                "Model": name,
+                "Params": num_parameters / 1e6,
+                "Params(non-embedding)": non_embedding_parameters / 1e6,
+                "Tgs": total_tokens / duration,
+                "Mem": sizeof_fmt(max_memory_allocated(device)),
+                "Batch": batch_size,
+                "Seq": seq_len,
+                "Varlen": varlen,
+                "Warmup": warmup_steps,
+                "Steps": steps,
+            }
         )
-        print(
-            f"{name},{num_parameters / 1e6:10.2f},{non_embedding_parameters / 1e6:10.2f},{total_tokens / duration:10.2f},{sizeof_fmt(max_memory_allocated(device))},{batch_size},{seq_len},{varlen},{warmup_steps},{steps}"
-        )
+
+    print_res(res, columns)
 
 
 if __name__ == "__main__":

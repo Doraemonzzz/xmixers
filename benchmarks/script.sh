@@ -1,6 +1,10 @@
 cfg_path=../configs/transformer/llama/llama_86m.json
-cfg_path=../configs/transformer/llama/llama_310m.json
+# cfg_path=../configs/transformer/llama/llama_310m.json
 name=llama
+
+cfg_path=../configs/transformer/mla/mla_86m.json
+name=mla
+
 vocab_size=64000
 warmup_steps=16
 steps=64
