@@ -1,0 +1,19 @@
+{
+  "base": 10000,
+  "bias": false,
+  "embed_dim": 768,
+  "glu_activation": "silu",
+  "init_type": 1,
+  "kv_lora_rank": 128,
+  "lrpe_type": 1,
+  "mid_dim": 2048,
+  "model_type": "llama_",
+  "num_heads": 12,
+  "num_layers": 14,
+  "q_lora_rank": 128,
+  "qk_rope_head_dim": 64,
+  "tie_word_embeddings": true,
+  "token_mixer_init_type": 2,
+  "token_mixer_type": "mla",
+  "use_lrpe": true
+}
