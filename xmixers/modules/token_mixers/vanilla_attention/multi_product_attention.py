@@ -120,7 +120,7 @@ class MultiProductAttention(nn.Module):
                     with torch.no_grad():
                         p /= math.sqrt(num_residuals_per_layer * self.num_layers)
 
-        self._is_hf_initialized = True
+        module._is_hf_initialized = True
 
     def extra_repr(self):
         return print_module(self)
