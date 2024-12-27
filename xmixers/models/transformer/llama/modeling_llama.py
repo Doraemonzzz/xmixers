@@ -19,13 +19,9 @@ logger = logging.get_logger(__name__)
 
 from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
 from xmixers.utils import XmixersCache
+from xmixers.utils.loss_utils import loss_fct
 
 from .configuration_llama import LLaMAConfig
-
-try:
-    from fla.modules import FusedLinearCrossEntropyLoss
-except:
-    FusedLinearCrossEntropyLoss = None
 
 
 class LLaMALayer(nn.Module):
@@ -387,8 +383,9 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         )
 
         hidden_states = outputs[0]
+
         fuse_linear_and_cross_entropy = (
-            self.config.fuse_linear_and_cross_entropy and self.training
+            self.config.ce_type not in ["fla_fce", "naive"] and self.training
         )
         logits = (
             None
@@ -400,29 +397,31 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
 
         loss = None
         if labels is not None:
+            shift_labels = labels[..., 1:].contiguous()
+            shift_labels = shift_labels.view(-1)
+            shift_labels = shift_labels.to(hidden_states.device)
+
             if fuse_linear_and_cross_entropy:
-                loss_fct = FusedLinearCrossEntropyLoss()
-            else:
-                loss_fct = nn.CrossEntropyLoss()
-            # Enable model parallelism
-            labels = labels.to(hidden_states.device)
-            labels = torch.cat(
-                (
-                    labels[..., 1:],
-                    torch.full_like(labels[:, :1], loss_fct.ignore_index),
-                ),
-                1,
-            )
-            if fuse_linear_and_cross_entropy:
+                # Shift so that tokens < n predict n
+                shift_hidden_states = hidden_states[..., :-1, :].contiguous()
+                shift_hidden_states = shift_hidden_states.view(
+                    -1, self.config.embed_dim
+                )
                 loss = loss_fct(
-                    hidden_states.view(-1, self.config.embed_dim),
-                    labels.view(-1),
-                    self.lm_head.weight,
-                    self.lm_head.bias,
+                    ce_type=self.config.ce_type,
+                    labels=shift_labels,
+                    hidden_state=shift_hidden_states,
+                    weight=self.lm_head.weight,
+                    bias=self.lm_head.bias,
                 )
             else:
+                # Shift so that tokens < n predict n
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_logits = shift_logits.view(-1, self.config.vocab_size)
                 loss = loss_fct(
-                    logits.view(-1, self.config.vocab_size), labels.view(-1)
+                    ce_type=self.config.ce_type,
+                    labels=shift_labels,
+                    logits=shift_logits,
                 )
 
         if not return_dict:

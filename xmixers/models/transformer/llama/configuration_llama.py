@@ -60,7 +60,7 @@ class LLaMAConfig(PretrainedConfig):
         rescale_type=0,
         use_postnorm=False,
         use_embed_scale=False,
-        fuse_linear_and_cross_entropy=False,
+        ce_type="naive",
         **kwargs,
     ):
         super().__init__(
@@ -113,4 +113,4 @@ class LLaMAConfig(PretrainedConfig):
         self.rescale_type = rescale_type
         self.use_postnorm = use_postnorm
         self.use_embed_scale = use_embed_scale
-        self.fuse_linear_and_cross_entropy = fuse_linear_and_cross_entropy
+        self.ce_type = ce_type
