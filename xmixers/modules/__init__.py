@@ -16,6 +16,7 @@ from .token_mixers import (
     Hgru2,
     Hgru3,
     LinearAttention,
+    MetaLa,
     MultiProductAttention,
     TnlAttention,
     get_token_mixer,

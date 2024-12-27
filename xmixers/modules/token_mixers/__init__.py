@@ -1,4 +1,4 @@
-from .linear_attention import Hgru2, Hgru3, LinearAttention, TnlAttention
+from .linear_attention import Hgru2, Hgru3, LinearAttention, MetaLa, TnlAttention
 from .long_conv import Gtu
 from .vanilla_attention import (
     Attention,
@@ -22,6 +22,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "hgru3": Hgru3,
     "linear_attn": LinearAttention,
     "tnl_attn": TnlAttention,
+    "metala": MetaLa,
     # long conv
     "gtu": Gtu,
 }

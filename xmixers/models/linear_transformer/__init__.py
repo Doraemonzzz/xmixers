@@ -6,4 +6,5 @@ from .linear_transformer import (
     LinearTransformerLayer,
     LinearTransformerModel,
 )
+from .metala import MetaLaConfig, MetaLaForCausalLM, MetaLaLayer, MetaLaModel
 from .tnl import TnlConfig, TnlForCausalLM, TnlLayer, TnlModel
