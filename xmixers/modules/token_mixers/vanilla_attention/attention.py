@@ -3,7 +3,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
 
@@ -32,6 +31,7 @@ class Attention(nn.Module):
         token_mixer_init_type: int = 0,
         rescale_type: int = 0,
         num_layers: int = 12,
+        window_size: int = -1,
         **kwargs,
     ):
         super().__init__()
@@ -45,6 +45,7 @@ class Attention(nn.Module):
         self.kv_heads = kv_heads
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
+        self.window_size = window_size
         if self.kv_heads == -1:
             kv_dim = embed_dim
         else:
@@ -145,8 +146,11 @@ class Attention(nn.Module):
             attention_mask is None or attention_mask.all()
         ):  # if attention mask is None or all elements are True, use sdpa
             # use causal when training or evaluation(not for generation) or prefill
-            is_causal = True if self.training or q.shape[-2] == k.shape[-2] else False
-            output = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
+            # is_causal = True if self.training or q.shape[-2] == k.shape[-2] else False
+            # output = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
+            causal = True if self.training or q.shape[-2] == k.shape[-2] else False
+            window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)
+            output = flash_attn_func(q, k, v, causal=causal, window_size=window_size)
         else:
             assert False, "flash_attn_varlen_qkvpacked_func current not support"
 

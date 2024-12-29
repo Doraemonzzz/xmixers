@@ -27,6 +27,9 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "gtu": Gtu,
 }
 
+SOFTMAX_TOKEN_MIXER_LIST = ["attn", "flex_attn", "n_attn", "mpa", "cpa", "mla"]
+LINEAR_TOKEN_MIXER_LIST = ["hgru2", "hgru3", "linear_attn", "tnl_attn", "metala"]
+
 
 def get_token_mixer(config, layer_idx):
     cls = AUTO_TOKEN_MIXER_MAPPING[config.token_mixer_type]
@@ -44,6 +47,7 @@ def get_token_mixer(config, layer_idx):
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
+            window_size=config.window_size,
         )
     elif config.token_mixer_type in [
         "mpa",
@@ -97,5 +101,97 @@ def get_token_mixer(config, layer_idx):
             max_position_embeddings=config.max_position_embeddings,
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+        )
+    elif config.token_mixer_type in ["hgru2"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            expand_ratio=config.expand_ratio,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_output_gate=config.use_output_gate,
+            norm_type=config.norm_type,
+            q_activation=config.q_activation,
+            causal=config.causal,
+            rescale_type=config.rescale_type,
+            token_mixer_init_type=config.token_mixer_init_type,
+            num_layers=config.num_layers,
+        )
+    elif config.token_mixer_type in ["hgru3"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            expand_ratio=config.expand_ratio,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_output_gate=config.use_output_gate,
+            norm_type=config.norm_type,
+            q_activation=config.q_activation,
+            k_activation=config.k_activation,
+            beta_activation=config.beta_activation,
+            causal=config.causal,
+            use_dense_memory=config.use_dense_memory,
+            rescale_type=config.rescale_type,
+            token_mixer_init_type=config.token_mixer_init_type,
+            num_layers=config.num_layers,
+        )
+    elif config.token_mixer_type in ["linear_attn"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            kv_heads=config.kv_heads,
+            bias=config.bias,
+            use_lrpe=config.use_lrpe,
+            layer_idx=layer_idx,
+            lrpe_type=config.lrpe_type,
+            base=config.base,
+            use_output_gate=config.use_output_gate,
+            norm_type=config.norm_type,
+            linear_activation=config.linear_activation,
+            causal=config.causal,
+            max_position_embeddings=config.max_position_embeddings,
+            use_dense_memory=config.use_dense_memory,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+        )
+    elif config.token_mixer_type in ["tnl_attn"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            kv_heads=config.kv_heads,
+            bias=config.bias,
+            use_lrpe=config.use_lrpe_list[layer_idx]
+            if len(config.use_lrpe_list) > layer_idx
+            else config.use_lrpe_list[0],
+            layer_idx=layer_idx,
+            lrpe_type=config.lrpe_type,
+            base=config.base,
+            gate_dim=config.gate_dim,
+            use_output_gate=config.use_output_gate,
+            norm_type=config.norm_type,
+            q_activation=config.q_activation,
+            k_activation=config.k_activation,
+            v_activation=config.v_activation,
+            causal=config.causal,
+            norm_pos=config.norm_pos,
+            max_position_embeddings=config.max_position_embeddings,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+        )
+    elif config.token_mixer_type in ["metala"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            expand_ratio=config.expand_ratio,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_output_gate=config.use_output_gate,
+            non_sparse_ratio=config.non_sparse_ratio,
+            num_sparse=config.num_sparse,
+            norm_type=config.norm_type,
+            q_activation=config.q_activation,
+            causal=config.causal,
+            rescale_type=config.rescale_type,
+            token_mixer_init_type=config.token_mixer_init_type,
             num_layers=config.num_layers,
         )

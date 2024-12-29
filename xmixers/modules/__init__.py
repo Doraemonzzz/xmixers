@@ -10,6 +10,8 @@ from .pes import (
     get_log_slopes_general,
 )
 from .token_mixers import (
+    LINEAR_TOKEN_MIXER_LIST,
+    SOFTMAX_TOKEN_MIXER_LIST,
     Attention,
     FlexAttention,
     Gtu,

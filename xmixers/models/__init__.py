@@ -1,3 +1,9 @@
+from .hybrid.naive_hybrid import (
+    NaiveHybridConfig,
+    NaiveHybridForCausalLM,
+    NaiveHybridLayer,
+    NaiveHybridModel,
+)
 from .linear_transformer import (
     Hgrn2Config,
     Hgrn2ForCausalLM,

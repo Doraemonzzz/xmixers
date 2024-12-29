@@ -29,6 +29,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
     - [x] hgru3
   - [ ] vanilla attention
     - [x] attention
+- [ ] Add causal.
 - [ ] Update _initialize_weights.
   - [x] linear attention
   - [x] vanilla attention

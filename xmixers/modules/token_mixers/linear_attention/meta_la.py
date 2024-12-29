@@ -61,6 +61,7 @@ class MetaLa(nn.Module):
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.num_layers = num_layers
+        self.embed_dim = embed_dim
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -77,6 +78,13 @@ class MetaLa(nn.Module):
         elif self.token_mixer_init_type == 2:  # fairseq init
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight, gain=2**-0.5)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        elif self.token_mixer_init_type == 3:  # minicpm init
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(
+                    module.weight, gain=0.02 / (self.embed_dim**0.5)
+                )
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 
@@ -140,7 +148,9 @@ class MetaLa(nn.Module):
             )
             k_non_sparse = 1 - torch.exp(log_f_non_sparse)
             # sparse
+            # log_f_sparse = torch.clamp(log_f_sparse, min=-7, max=7)
             k_sparse = F.softmax(1 - log_f_sparse, dim=-1)
+            # k_sparse = 1 - torch.exp(log_f_sparse)
             # find topk smallest values and set to 0
             _, index = torch.topk(
                 k_sparse,
@@ -166,7 +176,6 @@ class MetaLa(nn.Module):
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
 
         dtype = q.dtype
-        # dtype = torch.float32
         q, k, v, log_f = map(lambda x: x.to(dtype), [q, k, v, log_f])
         if self.causal:
             if self.training or recurrent_state is None:  # training or prefilling
