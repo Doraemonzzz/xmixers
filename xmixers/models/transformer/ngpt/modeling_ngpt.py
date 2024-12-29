@@ -40,6 +40,7 @@ class nGPTLayer(nn.Module):
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
+            init_std=config.init_std,
         )
         base_scale = 1.0 / (config.embed_dim**0.5)
         self.token_alpha_init_value = 0.05

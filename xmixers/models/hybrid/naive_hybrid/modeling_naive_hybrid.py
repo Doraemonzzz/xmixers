@@ -36,11 +36,11 @@ class NaiveHybridLayer(nn.Module):
 
         self.token_mixer = get_token_mixer(config, layer_idx)
 
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
         self.channel_mixer = get_channel_mixer(config)
 
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
         self.use_postnorm = config.use_postnorm
         if self.use_postnorm:

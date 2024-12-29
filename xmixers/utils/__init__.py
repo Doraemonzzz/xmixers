@@ -1,5 +1,5 @@
 from .cache import XmixersCache
-from .constants import XMIXERS_DEBUG
+from .constants import EMBED_DIM_BASE, XMIXERS_DEBUG
 from .utils import (
     endswith,
     logger,

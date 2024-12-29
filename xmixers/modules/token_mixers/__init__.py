@@ -48,6 +48,7 @@ def get_token_mixer(config, layer_idx):
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
             window_size=config.window_size,
+            init_std=config.init_std,
         )
     elif config.token_mixer_type in [
         "mpa",
@@ -68,6 +69,7 @@ def get_token_mixer(config, layer_idx):
             mpa_type=config.mpa_type,
             mpa_activation=config.mpa_activation,
             head_dim=config.head_dim,
+            init_std=config.init_std,
         )
     elif config.token_mixer_type in ["cpa"]:
         return cls(
@@ -85,6 +87,7 @@ def get_token_mixer(config, layer_idx):
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
             cp_activation=config.cp_activation,
+            init_std=config.init_std,
         )
     elif config.token_mixer_type in ["mla"]:
         return cls(
@@ -102,6 +105,7 @@ def get_token_mixer(config, layer_idx):
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
+            init_std=config.init_std,
         )
     elif config.token_mixer_type in ["hgru2"]:
         return cls(
@@ -116,6 +120,7 @@ def get_token_mixer(config, layer_idx):
             rescale_type=config.rescale_type,
             token_mixer_init_type=config.token_mixer_init_type,
             num_layers=config.num_layers,
+            init_std=config.init_std,
         )
     elif config.token_mixer_type in ["hgru3"]:
         return cls(
@@ -133,6 +138,7 @@ def get_token_mixer(config, layer_idx):
             rescale_type=config.rescale_type,
             token_mixer_init_type=config.token_mixer_init_type,
             num_layers=config.num_layers,
+            init_std=config.init_std,
         )
     elif config.token_mixer_type in ["linear_attn"]:
         return cls(
@@ -153,6 +159,7 @@ def get_token_mixer(config, layer_idx):
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
+            init_std=config.init_std,
         )
     elif config.token_mixer_type in ["tnl_attn"]:
         return cls(
@@ -178,6 +185,7 @@ def get_token_mixer(config, layer_idx):
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
+            init_std=config.init_std,
         )
     elif config.token_mixer_type in ["metala"]:
         return cls(
@@ -194,4 +202,5 @@ def get_token_mixer(config, layer_idx):
             rescale_type=config.rescale_type,
             token_mixer_init_type=config.token_mixer_init_type,
             num_layers=config.num_layers,
+            init_std=config.init_std,
         )

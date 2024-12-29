@@ -43,7 +43,7 @@ class TnnLayer(nn.Module):
             lower_bound=config.lower_bound,
         )
 
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
         self.channel_mixer = GLU(
             embed_dim=config.embed_dim,
@@ -52,7 +52,7 @@ class TnnLayer(nn.Module):
             bias=config.bias,
         )
 
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
     def forward(
         self,

@@ -6,7 +6,7 @@ import torch.nn as nn
 from einops import rearrange
 from transformers.cache_utils import Cache
 
-from xmixers.utils import XMIXERS_DEBUG, print_params
+from xmixers.utils import EMBED_DIM_BASE, XMIXERS_DEBUG, print_params
 
 from ...pes import Lrpe
 
@@ -32,6 +32,7 @@ class Attention(nn.Module):
         rescale_type: int = 0,
         num_layers: int = 12,
         window_size: int = -1,
+        init_std: float = 0.02,
         **kwargs,
     ):
         super().__init__()
@@ -68,6 +69,8 @@ class Attention(nn.Module):
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.num_layers = num_layers
+        self.embed_dim = embed_dim
+        self.init_std = init_std
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -84,6 +87,14 @@ class Attention(nn.Module):
         elif self.token_mixer_init_type == 2:  # fairseq init
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight, gain=2**-0.5)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        elif self.token_mixer_init_type == 3:  # minicpm init
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(
+                    module.weight,
+                    gain=self.init_std / ((self.embed_dim / EMBED_DIM_BASE) ** 0.5),
+                )
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 

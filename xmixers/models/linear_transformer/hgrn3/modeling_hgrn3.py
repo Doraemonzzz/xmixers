@@ -43,6 +43,7 @@ class Hgrn3Layer(nn.Module):
             rescale_type=config.rescale_type,
             token_mixer_init_type=config.token_mixer_init_type,
             num_layers=config.num_layers,
+            init_std=config.init_std,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)

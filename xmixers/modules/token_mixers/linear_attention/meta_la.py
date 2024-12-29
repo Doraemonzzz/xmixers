@@ -10,7 +10,7 @@ from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
-from xmixers.utils import XMIXERS_DEBUG, print_params
+from xmixers.utils import EMBED_DIM_BASE, XMIXERS_DEBUG, print_params
 
 
 class MetaLa(nn.Module):
@@ -29,6 +29,7 @@ class MetaLa(nn.Module):
         token_mixer_init_type: int = 0,
         rescale_type: int = 0,
         num_layers: int = 12,
+        init_std: float = 0.02,
         **kwargs,
     ):
         super().__init__()
@@ -62,6 +63,7 @@ class MetaLa(nn.Module):
         self.rescale_type = rescale_type
         self.num_layers = num_layers
         self.embed_dim = embed_dim
+        self.init_std = init_std
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -83,7 +85,8 @@ class MetaLa(nn.Module):
         elif self.token_mixer_init_type == 3:  # minicpm init
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(
-                    module.weight, gain=0.02 / (self.embed_dim**0.5)
+                    module.weight,
+                    gain=self.init_std / ((self.embed_dim / EMBED_DIM_BASE) ** 0.5),
                 )
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
@@ -148,9 +151,7 @@ class MetaLa(nn.Module):
             )
             k_non_sparse = 1 - torch.exp(log_f_non_sparse)
             # sparse
-            # log_f_sparse = torch.clamp(log_f_sparse, min=-7, max=7)
             k_sparse = F.softmax(1 - log_f_sparse, dim=-1)
-            # k_sparse = 1 - torch.exp(log_f_sparse)
             # find topk smallest values and set to 0
             _, index = torch.topk(
                 k_sparse,
