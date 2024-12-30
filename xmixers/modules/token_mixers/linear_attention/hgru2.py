@@ -28,6 +28,7 @@ class Hgru2(nn.Module):
         rescale_type: int = 0,
         num_layers: int = 12,
         init_std: float = 0.02,
+        gain: float = 0.02,
         **kwargs,
     ):
         super().__init__()
@@ -60,6 +61,7 @@ class Hgru2(nn.Module):
         self.num_layers = num_layers
         self.embed_dim = embed_dim
         self.init_std = init_std
+        self.gain = gain
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -87,26 +89,11 @@ class Hgru2(nn.Module):
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
         elif self.token_mixer_init_type == 4:  # for test
+            print("aaa", self.gain)
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(
                     module.weight,
-                    gain=0.05,
-                )
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-        elif self.token_mixer_init_type == 5:  # for test
-            if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(
-                    module.weight,
-                    gain=0.02,
-                )
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-        elif self.token_mixer_init_type == 6:  # for test
-            if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(
-                    module.weight,
-                    gain=0.01,
+                    gain=self.gain,
                 )
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)

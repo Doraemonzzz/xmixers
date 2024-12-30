@@ -42,6 +42,7 @@ class Hgrn2Layer(nn.Module):
             token_mixer_init_type=config.token_mixer_init_type,
             num_layers=config.num_layers,
             init_std=config.init_std,
+            gain=config.gain,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)

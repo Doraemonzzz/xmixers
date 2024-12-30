@@ -41,6 +41,7 @@ class Hgrn2Config(PretrainedConfig):
         token_mixer_init_type=0,
         rescale_type=0,
         channel_mixer_init_type=0,
+        gain=0.02,
         **kwargs,
     ):
         super().__init__(
@@ -75,3 +76,4 @@ class Hgrn2Config(PretrainedConfig):
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.channel_mixer_init_type = channel_mixer_init_type
+        self.gain = gain
