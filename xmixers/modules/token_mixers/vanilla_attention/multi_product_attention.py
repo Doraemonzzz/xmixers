@@ -4,6 +4,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
 
@@ -35,6 +36,7 @@ class MultiProductAttention(nn.Module):
         mpa_type: int = 0,
         mpa_activation: str = "none",
         head_dim: int = -1,
+        gate_type: int = 0,
         **kwargs,
     ):
         super().__init__()
@@ -57,6 +59,11 @@ class MultiProductAttention(nn.Module):
             self.kv_head = nn.Parameter(
                 torch.randn(2 * num_heads) * 0.1, requires_grad=True
             )
+        self.gate_type = gate_type
+        if self.gate_type == 1:
+            self.gate_proj = nn.Linear(embed_dim, self.num_heads * 2, bias=bias)
+        elif self.gate_type == 2:
+            self.gate_proj = nn.Linear(embed_dim, self.head_dim * 2, bias=bias)
 
         self.act = get_activation_fn(mpa_activation)
 
@@ -133,25 +140,46 @@ class MultiProductAttention(nn.Module):
         use_cache: Optional[bool] = False,
         **kwargs,
     ):
+        b = x.shape[0]
         # x: b n d
         # linear map
         q = self.q_proj(x)
-        k, v = self.kv_proj(x).chunk(2, dim=-1)
-
+        kv = self.kv_proj(x)
         if self.mpa_type == 0:
-            k_head, v_head = self.kv_head_proj(x).chunk(2, dim=-1)
+            kv_head = self.act(self.kv_head_proj(x))
         else:
-            k_head, v_head = self.kv_head.chunk(2, dim=-1)
+            kv_head = self.act(self.kv_head)
 
-        k_head = self.act(k_head)
-        v_head = self.act(v_head)
+        # TODO: add a kernel here
+        if self.gate_type == 1:
+            # b n h
+            kv_head_gate = self.gate_proj(x).float()
+            zero = torch.zeros(
+                [b, 1, self.num_heads],
+                device=kv_head_gate.device,
+                dtype=kv_head_gate.dtype,
+            )
+            log_f = torch.cat([zero, F.logsigmoid(kv_head_gate)], dim=1)
+            log_f_cumsum = torch.cumsum(log_f, dim=-2)[:, :-1]
+            kv_head = kv_head * torch.exp(log_f_cumsum)
+            kv_head = torch.cumsum(kv_head, dim=-2).to(kv_head.dtype)
+        elif self.gate_type == 2:
+            # b n d
+            kv_gate = self.gate_proj(x)
+            zero = torch.zeros(
+                [b, 1, self.head_dim], device=kv_gate.device, dtype=kv_gate.dtype
+            )
+            log_f = torch.cat([zero, F.logsigmoid(kv_gate)], dim=1)
+            log_f_cumsum = torch.cumsum(log_f, dim=-2)[:, :-1]
+            kv = (kv * torch.exp(log_f_cumsum)).to(kv_head.dtype)
+            kv = torch.cumsum(kv, dim=-2).to(kv_head.dtype)
 
         # for lrpe
         q_offset = 0
         if past_key_values is not None:
             q_offset = past_key_values.get_seq_length(self.layer_idx)
 
-        # cache update
+        # TODO: upate cache update
         if past_key_values is not None:
             k, v, k_head, v_head = past_key_values.update(
                 mpa_state=(k, v, k_head, v_head),

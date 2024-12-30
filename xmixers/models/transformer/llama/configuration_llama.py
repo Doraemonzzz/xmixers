@@ -32,6 +32,7 @@ class LLaMAConfig(PretrainedConfig):
         base=10000,
         mpa_type=0,
         mpa_activation="none",
+        gate_type=0,
         head_dim=-1,
         kv_rank=2,
         cp_activation="none",
@@ -87,6 +88,7 @@ class LLaMAConfig(PretrainedConfig):
         self.token_mixer_type = token_mixer_type
         self.mpa_type = mpa_type
         self.mpa_activation = mpa_activation
+        self.gate_type = gate_type
         self.kv_rank = kv_rank
         self.cp_activation = cp_activation
         self.q_lora_rank = q_lora_rank
