@@ -172,7 +172,7 @@ class LLaMAModel(LLaMAPreTrainedModel):
             [LLaMALayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
 
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
         # Initialize weights and apply final processing
         self.post_init()
 

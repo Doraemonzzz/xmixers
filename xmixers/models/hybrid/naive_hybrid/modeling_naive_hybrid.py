@@ -194,7 +194,7 @@ class NaiveHybridModel(NaiveHybridPreTrainedModel):
             layers.append(NaiveHybridLayer(config, layer_idx))
         self.layers = nn.ModuleList(layers)
 
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim)
+        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
         # Initialize weights and apply final processing
         self.post_init()
 

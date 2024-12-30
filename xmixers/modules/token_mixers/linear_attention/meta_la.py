@@ -71,7 +71,7 @@ class MetaLa(nn.Module):
             return
 
         if self.token_mixer_init_type == 0:
-            pass
+            return
         elif self.token_mixer_init_type == 1:  # fla init
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight, gain=2**-2.5)
@@ -209,10 +209,10 @@ class MetaLa(nn.Module):
             output_gate = F.sigmoid(self.output_gate(x))
             output = output * output_gate
 
-        # out proj
-        output = self.out_proj(output)
-
         # use post norm here for better parallel when using tp
         output = self.norm(output)
+
+        # out proj
+        output = self.out_proj(output)
 
         return output, past_key_values

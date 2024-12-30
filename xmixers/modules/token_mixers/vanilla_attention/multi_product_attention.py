@@ -82,7 +82,7 @@ class MultiProductAttention(nn.Module):
             return
 
         if self.token_mixer_init_type == 0:
-            pass
+            return
         elif self.token_mixer_init_type == 1:  # fla init
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight, gain=2**-2.5)

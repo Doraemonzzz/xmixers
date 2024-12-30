@@ -10,7 +10,7 @@ from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
-from xmixers.utils import XMIXERS_DEBUG, print_params
+from xmixers.utils import EMBED_DIM_BASE, XMIXERS_DEBUG, print_params
 
 
 class Hgru2(nn.Module):
@@ -27,6 +27,7 @@ class Hgru2(nn.Module):
         token_mixer_init_type: int = 0,
         rescale_type: int = 0,
         num_layers: int = 12,
+        init_std: float = 0.02,
         **kwargs,
     ):
         super().__init__()
@@ -57,6 +58,8 @@ class Hgru2(nn.Module):
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.num_layers = num_layers
+        self.embed_dim = embed_dim
+        self.init_std = init_std
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -64,7 +67,7 @@ class Hgru2(nn.Module):
             return
 
         if self.token_mixer_init_type == 0:
-            pass
+            return
         elif self.token_mixer_init_type == 1:  # fla init
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight, gain=2**-2.5)
@@ -73,6 +76,38 @@ class Hgru2(nn.Module):
         elif self.token_mixer_init_type == 2:  # fairseq init
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight, gain=2**-0.5)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        elif self.token_mixer_init_type == 3:  # minicpm init
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(
+                    module.weight,
+                    gain=self.init_std / ((self.embed_dim / EMBED_DIM_BASE) ** 0.5),
+                )
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        elif self.token_mixer_init_type == 4:  # for test
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(
+                    module.weight,
+                    gain=0.05,
+                )
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        elif self.token_mixer_init_type == 5:  # for test
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(
+                    module.weight,
+                    gain=0.02,
+                )
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        elif self.token_mixer_init_type == 6:  # for test
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(
+                    module.weight,
+                    gain=0.01,
+                )
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 
@@ -167,10 +202,10 @@ class Hgru2(nn.Module):
             output_gate = F.sigmoid(self.output_gate(x))
             output = output * output_gate
 
-        # out proj
-        output = self.out_proj(output)
-
         # use post norm here for better parallel when using tp
         output = self.norm(output)
+
+        # out proj
+        output = self.out_proj(output)
 
         return output, past_key_values
