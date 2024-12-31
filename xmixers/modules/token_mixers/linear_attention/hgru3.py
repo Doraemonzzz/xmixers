@@ -9,11 +9,8 @@ from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
 from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
-from xmixers.modules.normalizations import get_norm_fn
-from xmixers.modules.normalizations.srmsnorm import _SrmsNorm
+from xmixers.modules.normalizations import get_norm_fn, l2_norm
 from xmixers.utils import EMBED_DIM_BASE, XMIXERS_DEBUG, print_params
-
-l2_norm = _SrmsNorm.apply
 
 
 class Hgru3(nn.Module):

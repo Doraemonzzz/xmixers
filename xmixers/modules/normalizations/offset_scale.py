@@ -5,7 +5,7 @@ Offset scale: y = gamma * x + beta
 import torch
 import torch.nn as nn
 
-from xmixers.utils import XMIXERS_DEBUG, print_params
+from xmixers.utils import XMIXERS_DEBUG, print_module, print_params
 
 
 class OffsetScale(nn.Module):
@@ -22,6 +22,9 @@ class OffsetScale(nn.Module):
         self.beta = nn.Parameter(torch.zeros(dim))
         nn.init.normal_(self.gamma, std=0.02)
 
+    def extra_repr(self) -> str:
+        return print_module(self)
+
     def forward(self, x):
-        out = torch.einsum("... d, d -> ... d", x, self.gamma) + self.beta
+        out = x * self.gamma + self.beta
         return out

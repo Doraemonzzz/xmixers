@@ -9,8 +9,22 @@ https://github.com/bzhangGo/zero/blob/master/modules/rela.py
 """
 import torch
 import torch.nn as nn
+from xopes.ops.normalize import normalize_fn
 
 from xmixers.utils import XMIXERS_DEBUG, print_module, print_params
+
+
+def rmsnorm_fn(x, weight, dim, eps=1e-6, residual=None):
+    return normalize_fn(
+        x=x,
+        weight=weight,
+        bias=None,
+        residual=residual,
+        c=dim**0.5,
+        eps=eps,
+        use_mean=False,
+        num_groups=1,
+    )
 
 
 class RMSNorm(torch.nn.Module):
@@ -23,22 +37,26 @@ class RMSNorm(torch.nn.Module):
             print_params(**params)
 
         self.eps = eps
+        self.dim = dim
         self.weight = nn.Parameter(torch.ones(dim))
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+    def extra_repr(self) -> str:
+        return print_module(self)
 
-    def forward(self, x):
-        output = self._norm(x.float()).type_as(x) * self.weight
+    def forward(self, x, residual=None):
+        output = rmsnorm_fn(
+            x=x,
+            weight=self.weight,
+            dim=self.dim,
+            eps=self.eps,
+            residual=residual,
+        )
 
         return output
 
-    def extra_repr(self):
-        return print_module(self)
-
 
 class GatedRMSNorm(nn.Module):
-    def __init__(self, d: int, eps: float = 1e-8, bias: bool = False, **kwargs) -> None:
+    def __init__(self, d: int, eps: float = 1e-6, bias: bool = False, **kwargs) -> None:
         super().__init__()
 
         if XMIXERS_DEBUG:
@@ -56,7 +74,11 @@ class GatedRMSNorm(nn.Module):
         self.gate = nn.Parameter(torch.ones(d))
         self.register_parameter("scale", self.scale)
 
+    def extra_repr(self) -> str:
+        return print_module(self)
+
     def forward(self, x):
+        # TODO: add fusion here
         norm_x = x.norm(2, dim=-1, keepdim=True)
         d_x = self.d
 

@@ -9,7 +9,7 @@ from xmixers.utils import XMIXERS_DEBUG, print_params
 
 
 class ScaleNorm(nn.Module):
-    def __init__(self, d: int, eps: float = 1e-5, **kwargs) -> None:
+    def __init__(self, d: int, eps: float = 1e-6, **kwargs) -> None:
         super().__init__()
         if XMIXERS_DEBUG:
             # get local varables
@@ -21,7 +21,11 @@ class ScaleNorm(nn.Module):
         self.eps = eps
         self.scala = nn.Parameter(torch.ones(1))
 
+    def extra_repr(self) -> str:
+        return print_module(self)
+
     def forward(self, x):
+        # TODO: add fusion here
         mean_square = (x**2).mean(dim=-1, keepdim=True)
         x = x * torch.rsqrt(mean_square + self.eps) * self.scala
         return x
