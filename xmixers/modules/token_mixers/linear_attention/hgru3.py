@@ -7,9 +7,10 @@ import torch.nn.functional as F
 from einops import rearrange
 from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
 from transformers.cache_utils import Cache
+from xopes.ops import householder_fn
 
 from xmixers.modules.activations import get_activation_fn
-from xmixers.modules.normalizations import get_norm_fn, l2_norm
+from xmixers.modules.normalizations import get_norm_fn
 from xmixers.utils import EMBED_DIM_BASE, XMIXERS_DEBUG, print_params
 
 
@@ -152,21 +153,14 @@ class Hgru3(nn.Module):
         q = self.q_act(q)
         k = self.k_act(k)
 
-        # dense memory
-        # todo: make a fusion here
-        # if self.use_dense_memory:
-        #     # I - 2 beta beta ^ T
-        #     beta = self.beta_act(self.bet_proj(x))
-        #     beta = l2_norm(beta.float(), 1e-6).contiguous()
-        #     q_beta = (q * beta).sum(dim=-1, keepdim=True)
-        #     q = (q - 2 * q_beta * beta).to(q.dtype)
-
         if self.use_dense_memory:
             # I - 2 beta beta ^ T
             beta = self.beta_act(self.bet_proj(x))
-            beta = l2_norm(beta, 1e-6).contiguous() / (beta.shape[-1] ** 0.5)
-            q_beta = (q * beta).sum(dim=-1, keepdim=True)
-            q = q - 2 * q_beta * beta
+            q = householder_fn(q, beta)
+            # print(q.shape, beta.shape)
+            # beta = l2_norm(beta, 1e-6).contiguous() / (beta.shape[-1] ** 0.5)
+            # q_beta = (q * beta).sum(dim=-1, keepdim=True)
+            # q = q - 2 * q_beta * beta
 
         # h is num_head, d is head dimension
         q, k, v = map(
