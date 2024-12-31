@@ -1,3 +1,5 @@
+import torch.nn as nn
+
 from .l2_norm import l2_norm
 from .offset_scale import OffsetScale
 from .rms_norm import GatedRMSNorm, RMSNorm

@@ -1,18 +1,5 @@
 import torch
-from xopes.ops.normalize import normalize_fn
-
-
-def srmsnorm_fn(x, dim, eps=1e-6, residual=None):
-    return normalize_fn(
-        x=x,
-        weight=None,
-        bias=None,
-        residual=residual,
-        c=dim**0.5,
-        eps=eps,
-        use_mean=False,
-        num_groups=1,
-    )
+from xopes.ops.normalize import srmsnorm_fn
 
 
 class SRMSNorm(torch.nn.Module):

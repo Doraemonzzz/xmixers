@@ -9,22 +9,9 @@ https://github.com/bzhangGo/zero/blob/master/modules/rela.py
 """
 import torch
 import torch.nn as nn
-from xopes.ops.normalize import normalize_fn
+from xopes.ops.normalize import rmsnorm_fn
 
 from xmixers.utils import XMIXERS_DEBUG, print_module, print_params
-
-
-def rmsnorm_fn(x, weight, dim, eps=1e-6, residual=None):
-    return normalize_fn(
-        x=x,
-        weight=weight,
-        bias=None,
-        residual=residual,
-        c=dim**0.5,
-        eps=eps,
-        use_mean=False,
-        num_groups=1,
-    )
 
 
 class RMSNorm(torch.nn.Module):
