@@ -153,6 +153,11 @@ class Attention(nn.Module):
             q = self.lrpe(q, offset=q_offset)
             k = self.lrpe(k)
 
+        q, k, v = map(
+            lambda x: rearrange(x, "... h n d -> ... n h d"),
+            [q, k, v],
+        )
+
         if (
             attention_mask is None or attention_mask.all()
         ):  # if attention mask is None or all elements are True, use sdpa
@@ -166,7 +171,7 @@ class Attention(nn.Module):
             assert False, "flash_attn_varlen_qkvpacked_func current not support"
 
         # reshape
-        output = rearrange(output, "... h n d -> ... n (h d)")
+        output = rearrange(output, "... n h d -> ... n (h d)")
         # outproj
         output = self.out_proj(output)
 
