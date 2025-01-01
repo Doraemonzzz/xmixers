@@ -89,7 +89,6 @@ class Hgru2(nn.Module):
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
         elif self.token_mixer_init_type == 4:  # for test
-            print("aaa", self.gain)
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(
                     module.weight,

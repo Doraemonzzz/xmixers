@@ -44,6 +44,7 @@ class Hgrn3Layer(nn.Module):
             token_mixer_init_type=config.token_mixer_init_type,
             num_layers=config.num_layers,
             init_std=config.init_std,
+            gain=config.gain,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
@@ -135,7 +136,7 @@ class Hgrn3PreTrainedModel(PreTrainedModel):
         #
         # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
         for name, p in module.named_parameters():
-            if name in ["w3.weight"]:
+            if name in ["out_proj.weight", "w3.weight"]:
                 num_residuals_per_layer = 2
                 # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block

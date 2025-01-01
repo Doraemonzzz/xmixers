@@ -32,6 +32,7 @@ class Hgru3(nn.Module):
         rescale_type: int = 0,
         num_layers: int = 12,
         init_std: float = 0.02,
+        gain: float = 0.02,
         **kwargs,
     ):
         super().__init__()
@@ -78,6 +79,7 @@ class Hgru3(nn.Module):
         self.num_layers = num_layers
         self.embed_dim = embed_dim
         self.init_std = init_std
+        self.gain = gain
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -109,6 +111,14 @@ class Hgru3(nn.Module):
                 nn.init.xavier_uniform_(
                     module.weight,
                     gain=self.init_std / ((self.embed_dim / EMBED_DIM_BASE) ** 0.5),
+                )
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        elif self.token_mixer_init_type == 4:  # for test
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(
+                    module.weight,
+                    gain=self.gain,
                 )
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
@@ -157,10 +167,6 @@ class Hgru3(nn.Module):
             # I - 2 beta beta ^ T
             beta = self.beta_act(self.bet_proj(x))
             q = householder_fn(q, beta)
-            # print(q.shape, beta.shape)
-            # beta = l2_norm(beta, 1e-6).contiguous() / (beta.shape[-1] ** 0.5)
-            # q_beta = (q * beta).sum(dim=-1, keepdim=True)
-            # q = q - 2 * q_beta * beta
 
         # h is num_head, d is head dimension
         q, k, v = map(

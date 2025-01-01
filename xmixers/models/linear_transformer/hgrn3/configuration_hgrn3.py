@@ -41,6 +41,12 @@ class Hgrn3Config(PretrainedConfig):
         n_min=2,
         n_max=256,
         use_embed_scale=False,
+        # init
+        init_type=0,
+        token_mixer_init_type=0,
+        rescale_type=0,
+        channel_mixer_init_type=0,
+        gain=0.02,
         **kwargs,
     ):
         super().__init__(
@@ -75,3 +81,9 @@ class Hgrn3Config(PretrainedConfig):
         self.n_min = n_min
         self.n_max = n_max
         self.use_embed_scale = use_embed_scale
+        # init
+        self.init_type = init_type
+        self.token_mixer_init_type = token_mixer_init_type
+        self.rescale_type = rescale_type
+        self.channel_mixer_init_type = channel_mixer_init_type
+        self.gain = gain
