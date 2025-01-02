@@ -1,6 +1,7 @@
 import torch.nn as nn
 
 from .l2_norm import l2_norm
+from .layer_norm import LayerNorm
 from .offset_scale import OffsetScale
 from .rms_norm import GatedRMSNorm, RMSNorm
 from .scale_norm import ScaleNorm
@@ -17,4 +18,4 @@ def get_norm_fn(norm_type: str):
     elif norm_type == "scalenorm":
         return ScaleNorm
     else:
-        return nn.LayerNorm
+        return LayerNorm

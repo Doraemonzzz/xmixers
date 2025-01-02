@@ -1,8 +1,14 @@
+import numbers
 from typing import List, Union
 
 import torch
+import torch.nn as nn
+import torch.nn.init as init
+from torch import Size
 
 _shape_t = Union[int, List[int], Size]
+
+from xopes.ops.normalize import layernorm_fn
 
 
 class LayerNorm(torch.nn.Module):
@@ -24,11 +30,11 @@ class LayerNorm(torch.nn.Module):
         self.eps = eps
         self.elementwise_affine = elementwise_affine
         if self.elementwise_affine:
-            self.weight = Parameter(
+            self.weight = nn.Parameter(
                 torch.empty(self.normalized_shape, **factory_kwargs)
             )
             if bias:
-                self.bias = Parameter(
+                self.bias = nn.Parameter(
                     torch.empty(self.normalized_shape, **factory_kwargs)
                 )
             else:
@@ -45,9 +51,14 @@ class LayerNorm(torch.nn.Module):
             if self.bias is not None:
                 init.zeros_(self.bias)
 
-    def forward(self, input, residual=None):
-        return F.layer_norm(
-            input, self.normalized_shape, self.weight, self.bias, self.eps
+    def forward(self, x, residual=None):
+        return layernorm_fn(
+            x=x,
+            weight=self.weight,
+            bias=self.bias,
+            dim=x.shape[-1],
+            eps=self.eps,
+            residual=residual,
         )
 
     def extra_repr(self) -> str:
