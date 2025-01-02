@@ -30,13 +30,14 @@ class RMSNorm(torch.nn.Module):
     def extra_repr(self) -> str:
         return print_module(self)
 
-    def forward(self, x, residual=None):
+    def forward(self, x, residual=None, return_residual=False):
         return rmsnorm_fn(
             x=x,
             weight=self.weight,
             dim=self.dim,
             eps=self.eps,
             residual=residual,
+            return_residual=return_residual,
         )
 
 

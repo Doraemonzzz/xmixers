@@ -68,10 +68,12 @@ class LLaMALayer(nn.Module):
             x_channel = self.channel_mixer(x_channel) + residual_channel
         else:
             # token mixer
-            x_attn, residual_attn = self.token_norm(x, residual=residual)
-            # !!! for the first layer, the residual is the input x
-            if self.layer_idx == 0:
-                residual_attn = x
+            # !!! for the first layer, the residual input is None, so we need to set return_residual=True
+            x_attn, residual_attn = self.token_norm(
+                x, residual=residual, return_residual=True
+            )
+            # if self.layer_idx == 0:
+            #     residual_attn = x
 
             x_attn, past_key_values = self.token_mixer(
                 x=x_attn,
