@@ -33,6 +33,7 @@ class Attention(nn.Module):
         num_layers: int = 12,
         window_size: int = -1,
         init_std: float = 0.02,
+        gain: float = 0.02,
         **kwargs,
     ):
         super().__init__()
@@ -71,6 +72,7 @@ class Attention(nn.Module):
         self.num_layers = num_layers
         self.embed_dim = embed_dim
         self.init_std = init_std
+        self.gain = gain
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -94,6 +96,14 @@ class Attention(nn.Module):
                 nn.init.xavier_uniform_(
                     module.weight,
                     gain=self.init_std / ((self.embed_dim / EMBED_DIM_BASE) ** 0.5),
+                )
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        elif self.token_mixer_init_type == 4:  # for test
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(
+                    module.weight,
+                    gain=self.gain,
                 )
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)

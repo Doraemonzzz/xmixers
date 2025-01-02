@@ -64,6 +64,7 @@ class LLaMAConfig(PretrainedConfig):
         use_embed_scale=False,
         ce_type="naive",
         fuse_norm_add=False,
+        gain=0.02,
         **kwargs,
     ):
         super().__init__(
@@ -120,3 +121,4 @@ class LLaMAConfig(PretrainedConfig):
         self.use_embed_scale = use_embed_scale
         self.ce_type = ce_type
         self.fuse_norm_add = fuse_norm_add
+        self.gain = gain
