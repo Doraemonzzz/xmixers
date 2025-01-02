@@ -63,6 +63,7 @@ class LLaMAConfig(PretrainedConfig):
         use_postnorm=False,
         use_embed_scale=False,
         ce_type="naive",
+        fuse_norm_add=False,
         **kwargs,
     ):
         super().__init__(
@@ -118,3 +119,4 @@ class LLaMAConfig(PretrainedConfig):
         self.use_postnorm = use_postnorm
         self.use_embed_scale = use_embed_scale
         self.ce_type = ce_type
+        self.fuse_norm_add = fuse_norm_add

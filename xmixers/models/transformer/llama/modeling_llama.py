@@ -39,6 +39,7 @@ class LLaMALayer(nn.Module):
         self.use_postnorm = config.use_postnorm
         if self.use_postnorm:
             self.forward = self.forward_postnorm
+        self.fuse_norm_add = config.fuse_norm_add
 
     def forward(
         self,
@@ -46,21 +47,39 @@ class LLaMALayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
+        residual: Optional[torch.Tensor] = None,
     ):
-        # token mixer
-        residual = x
-        x, past_key_values = self.token_mixer(
-            x=self.token_norm(x),
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-        )
-        x = x + residual
+        if not self.fuse_norm_add:
+            # token mixer
+            residual_attn = x
+            x, _ = self.token_norm(x)
+            x, past_key_values = self.token_mixer(
+                x=x,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+            )
+            x = x + residual
 
-        # channel mixer
-        x = self.channel_mixer(self.channel_norm(x)) + x
+            # channel mixer
+            residual_channel = x
+            x, _ = self.channel_norm(x)
+            x = self.channel_mixer(x) + residual_channel
+        else:
+            # token mixer
+            x, residual_attn = self.token_norm(x, residual=residual)
+            x, past_key_values = self.token_mixer(
+                x=x,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+            )
 
-        outputs = (x, past_key_values)
+            # channel mixer
+            x, residual_channel = self.channel_norm(x, residual=residual_attn)
+            x = self.channel_mixer(x)
+
+        outputs = (x, past_key_values, residual_channel)
 
         return outputs
 
@@ -235,25 +254,32 @@ class LLaMAModel(LLaMAPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        residual = None
 
         for idx, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                hidden_states, past_key_values = self._gradient_checkpointing_func(
+                (
+                    hidden_states,
+                    past_key_values,
+                    residual,
+                ) = self._gradient_checkpointing_func(
                     layer.__call__,
                     hidden_states,
                     attention_mask,
                     past_key_values,
                     use_cache,
+                    residual,
                 )
             else:
-                hidden_states, past_key_values = layer(
+                hidden_states, past_key_values, residual = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
+                    residual=residual,
                 )
 
         hidden_states = self.final_norm(hidden_states)
