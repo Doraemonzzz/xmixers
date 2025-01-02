@@ -30,7 +30,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
   - [ ] vanilla attention
     - [x] attention
 - [ ] Add causal.
-- [ ] Update _initialize_weights.
+- [ ] Update _initialize_weights, _init_weights.
   - [x] linear attention
   - [x] vanilla attention
   - [ ] long conv
