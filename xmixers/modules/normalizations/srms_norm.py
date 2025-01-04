@@ -12,10 +12,14 @@ class SRMSNorm(torch.nn.Module):
         return f"dim={self.dim}, eps={self.eps}"
 
     def forward(self, x, residual=None, return_residual=False):
-        return srmsnorm_fn(
+        o, updated_residual = srmsnorm_fn(
             x=x,
             dim=self.dim,
             eps=self.eps,
             residual=residual,
             return_residual=return_residual,
         )
+
+        if updated_residual is not None:
+            return o, updated_residual
+        return o

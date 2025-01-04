@@ -31,7 +31,7 @@ class RMSNorm(torch.nn.Module):
         return print_module(self)
 
     def forward(self, x, residual=None, return_residual=False):
-        return rmsnorm_fn(
+        o, updated_residual = rmsnorm_fn(
             x=x,
             weight=self.weight,
             dim=self.dim,
@@ -39,6 +39,10 @@ class RMSNorm(torch.nn.Module):
             residual=residual,
             return_residual=return_residual,
         )
+
+        if updated_residual is not None:
+            return o, updated_residual
+        return o
 
 
 class GatedRMSNorm(nn.Module):

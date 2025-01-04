@@ -40,7 +40,6 @@ class LLaMALayer(nn.Module):
         if self.use_postnorm:
             self.forward = self.forward_postnorm
         self.fuse_norm_add = config.fuse_norm_add
-        self.layer_idx = layer_idx
 
     def forward(
         self,
@@ -53,7 +52,7 @@ class LLaMALayer(nn.Module):
         if not self.fuse_norm_add:
             # token mixer
             residual_attn = x
-            x_attn = self.token_norm(x)[0]
+            x_attn = self.token_norm(x)
             x_attn, past_key_values = self.token_mixer(
                 x=x_attn,
                 attention_mask=attention_mask,
@@ -64,7 +63,7 @@ class LLaMALayer(nn.Module):
 
             # channel mixer
             residual_channel = x_attn
-            x_channel = self.channel_norm(x_attn)[0]
+            x_channel = self.channel_norm(x_attn)
             x_channel = self.channel_mixer(x_channel) + residual_channel
         else:
             # token mixer
@@ -72,8 +71,6 @@ class LLaMALayer(nn.Module):
             x_attn, residual_attn = self.token_norm(
                 x, residual=residual, return_residual=True
             )
-            # if self.layer_idx == 0:
-            #     residual_attn = x
 
             x_attn, past_key_values = self.token_mixer(
                 x=x_attn,

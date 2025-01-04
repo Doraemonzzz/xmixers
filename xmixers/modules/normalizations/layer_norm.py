@@ -52,7 +52,7 @@ class LayerNorm(torch.nn.Module):
                 init.zeros_(self.bias)
 
     def forward(self, x, residual=None, return_residual=False):
-        return layernorm_fn(
+        o, updated_residual = layernorm_fn(
             x=x,
             weight=self.weight,
             bias=self.bias,
@@ -61,6 +61,10 @@ class LayerNorm(torch.nn.Module):
             residual=residual,
             return_residual=return_residual,
         )
+
+        if updated_residual is not None:
+            return o, updated_residual
+        return o
 
     def extra_repr(self) -> str:
         return (
