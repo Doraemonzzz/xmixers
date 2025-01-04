@@ -51,20 +51,17 @@ class LLaMALayer(nn.Module):
     ):
         if not self.fuse_norm_add:
             # token mixer
-            residual_attn = x
-            x_attn = self.token_norm(x)
-            x_attn, past_key_values = self.token_mixer(
-                x=x_attn,
+            residual = x
+            x, past_key_values = self.token_mixer(
+                x=self.token_norm(x),
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
             )
-            x_attn = x_attn + residual_attn
+            x = x + residual
 
             # channel mixer
-            residual_channel = x_attn
-            x_channel = self.channel_norm(x_attn)
-            x_channel = self.channel_mixer(x_channel) + residual_channel
+            x = self.channel_mixer(self.channel_norm(x)) + x
+            residual_channel = None
         else:
             # token mixer
             # !!! for the first layer, the residual input is None, so we need to set return_residual=True
@@ -83,9 +80,9 @@ class LLaMALayer(nn.Module):
             x_channel, residual_channel = self.channel_norm(
                 x_attn, residual=residual_attn
             )
-            x_channel = self.channel_mixer(x_channel)
+            x = self.channel_mixer(x_channel)
 
-        outputs = (x_channel, past_key_values, residual_channel)
+        outputs = (x, past_key_values, residual_channel)
 
         return outputs
 
@@ -288,7 +285,10 @@ class LLaMAModel(LLaMAPreTrainedModel):
                     residual=residual,
                 )
 
-        hidden_states = self.final_norm(hidden_states, residual=residual)[0]
+        if residual is not None:
+            hidden_states = self.final_norm(hidden_states, residual=residual)[0]
+        else:
+            hidden_states = self.final_norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
