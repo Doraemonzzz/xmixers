@@ -4,7 +4,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
 
@@ -17,6 +16,8 @@ try:
     from flash_attn import flash_attn_func
 except:
     flash_attn_func = None
+
+from xopes.ops.out_product_linear_recurrence import oplr_fn
 
 
 class MultiProductAttention(nn.Module):
@@ -60,10 +61,6 @@ class MultiProductAttention(nn.Module):
                 torch.randn(2 * num_heads) * 0.1, requires_grad=True
             )
         self.gate_type = gate_type
-        if self.gate_type == 1:
-            self.gate_proj = nn.Linear(embed_dim, self.num_heads * 2, bias=bias)
-        elif self.gate_type == 2:
-            self.gate_proj = nn.Linear(embed_dim, self.head_dim * 2, bias=bias)
 
         self.act = get_activation_fn(mpa_activation)
 
@@ -140,7 +137,7 @@ class MultiProductAttention(nn.Module):
         use_cache: Optional[bool] = False,
         **kwargs,
     ):
-        b = x.shape[0]
+        b, n, d = x.shape
         # x: b n d
         # linear map
         q = self.q_proj(x)
@@ -150,29 +147,29 @@ class MultiProductAttention(nn.Module):
         else:
             kv_head = self.act(self.kv_head)
 
+        k, v = kv.chunk(2, dim=-1)
+        k_head, v_head = kv_head.chunk(2, dim=-1)
+
         # TODO: add a kernel here
+        if self.gate_type == 0:
+            k, v = map(
+                lambda arr: torch.einsum("... d, ... h -> ... h d", arr[0], arr[1]),
+                [(k, k_head), (v, v_head)],
+            )
         if self.gate_type == 1:
-            # b n h
-            kv_head_gate = self.gate_proj(x).float()
-            zero = torch.zeros(
-                [b, 1, self.num_heads],
-                device=kv_head_gate.device,
-                dtype=kv_head_gate.dtype,
+            index = 1 + torch.arange(
+                0, n, dtype=torch.float32, device=k.device
+            ).unsqueeze(-1).unsqueeze(-1)
+            # cumsum
+            k = (oplr_fn(k_head, k, log_decay=None, decay_type="no_decay") / index).to(
+                q.dtype
             )
-            log_f = torch.cat([zero, F.logsigmoid(kv_head_gate)], dim=1)
-            log_f_cumsum = torch.cumsum(log_f, dim=-2)[:, :-1]
-            kv_head = kv_head * torch.exp(log_f_cumsum)
-            kv_head = torch.cumsum(kv_head, dim=-2).to(kv_head.dtype)
+            v = (oplr_fn(v_head, v, log_decay=None, decay_type="no_decay") / index).to(
+                q.dtype
+            )
         elif self.gate_type == 2:
-            # b n d
-            kv_gate = self.gate_proj(x)
-            zero = torch.zeros(
-                [b, 1, self.head_dim], device=kv_gate.device, dtype=kv_gate.dtype
-            )
-            log_f = torch.cat([zero, F.logsigmoid(kv_gate)], dim=1)
-            log_f_cumsum = torch.cumsum(log_f, dim=-2)[:, :-1]
-            kv = (kv * torch.exp(log_f_cumsum)).to(kv_head.dtype)
-            kv = torch.cumsum(kv, dim=-2).to(kv_head.dtype)
+            k = oplr_fn(k_head, k, log_decay=None, decay_type="data_dependent_decay")
+            v = oplr_fn(v_head, v, log_decay=None, decay_type="data_dependent_decay")
 
         # for lrpe
         q_offset = 0
@@ -189,10 +186,6 @@ class MultiProductAttention(nn.Module):
 
         # construct k, v cache
         # todo: add a fusion here
-        k, v = map(
-            lambda arr: torch.einsum("... d, ... h -> ... h d", arr[0], arr[1]),
-            [(k, k_head), (v, v_head)],
-        )
         q = rearrange(q, "... (h d) -> ... h d", h=self.num_heads)
 
         q, k, v = map(
