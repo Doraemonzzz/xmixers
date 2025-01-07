@@ -162,7 +162,7 @@ class LLaMAPreTrainedModel(PreTrainedModel):
         #
         # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
         for name, p in module.named_parameters():
-            if name in ["w3.weight"]:
+            if name in ["out_proj.weight", "w3.weight"]:
                 num_residuals_per_layer = 2
                 # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
@@ -171,6 +171,10 @@ class LLaMAPreTrainedModel(PreTrainedModel):
                 # Having just p *= scale would repeatedly scale it down
                 with torch.no_grad():
                     p /= math.sqrt(num_residuals_per_layer * self.config.num_layers)
+
+                if self.config.rescale_type == 2:
+                    with torch.no_grad():
+                        p *= 0
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, LLaMAModel):

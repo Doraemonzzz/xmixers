@@ -146,6 +146,10 @@ class Hgrn3PreTrainedModel(PreTrainedModel):
                 with torch.no_grad():
                     p /= math.sqrt(num_residuals_per_layer * self.config.num_layers)
 
+                if self.config.rescale_type == 2:
+                    with torch.no_grad():
+                        p *= 0
+
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, Hgrn3Model):
             module.gradient_checkpointing = value

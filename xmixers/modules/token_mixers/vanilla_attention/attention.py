@@ -125,6 +125,11 @@ class Attention(nn.Module):
                     # Having just p *= scale would repeatedly scale it down
                     with torch.no_grad():
                         p /= math.sqrt(num_residuals_per_layer * self.num_layers)
+        elif self.rescale_type == 2:
+            for name, p in module.named_parameters():
+                if name in ["out_proj.weight"]:
+                    with torch.no_grad():
+                        p *= 0
 
         module._is_hf_initialized = True
 
