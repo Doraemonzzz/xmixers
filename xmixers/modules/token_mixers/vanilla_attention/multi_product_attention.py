@@ -18,6 +18,8 @@ except:
 
 from xopes.ops.out_product_linear_recurrence import oplr_fn
 
+from xmixers.modules.normalizations import l2_norm
+
 
 class MultiProductAttention(nn.Module):
     def __init__(
@@ -123,15 +125,15 @@ class MultiProductAttention(nn.Module):
                 0, n, dtype=torch.float32, device=k.device
             ).unsqueeze(-1).unsqueeze(-1)
             # cumsum
-            k = (oplr_fn(k_head, k, log_decay=None, decay_type="no_decay") / index).to(
-                q.dtype
+            k = l2_norm(
+                (oplr_fn(k_head, k, log_decay=None, decay_type="no_decay")).to(q.dtype)
             )
             v = (oplr_fn(v_head, v, log_decay=None, decay_type="no_decay") / index).to(
                 q.dtype
             )
         elif self.gate_type == 2:
-            k = oplr_fn(
-                k_head, k, log_decay=None, decay_type="data_dependent_decay"
+            k = l2_norm(
+                (oplr_fn(k_head, k, log_decay=None, decay_type="data_dependent_decay"))
             ).to(q.dtype)
             v = oplr_fn(
                 v_head, v, log_decay=None, decay_type="data_dependent_decay"
