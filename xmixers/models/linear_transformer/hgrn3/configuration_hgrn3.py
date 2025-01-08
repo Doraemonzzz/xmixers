@@ -41,6 +41,7 @@ class Hgrn3Config(PretrainedConfig):
         n_min=2,
         n_max=256,
         use_embed_scale=False,
+        lower_bound_type=0,
         # init
         init_type=0,
         token_mixer_init_type=0,
@@ -81,6 +82,7 @@ class Hgrn3Config(PretrainedConfig):
         self.n_min = n_min
         self.n_max = n_max
         self.use_embed_scale = use_embed_scale
+        self.lower_bound_type = lower_bound_type
         # init
         self.init_type = init_type
         self.token_mixer_init_type = token_mixer_init_type

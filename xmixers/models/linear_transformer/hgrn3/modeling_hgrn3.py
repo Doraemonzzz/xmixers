@@ -4,6 +4,7 @@ import math
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -19,7 +20,7 @@ logger = logging.get_logger(__name__)
 
 
 from xmixers.modules import GLU, Hgru3, get_log_slopes_general, get_norm_fn
-from xmixers.utils import XmixersCache
+from xmixers.utils import XmixersCache, print_module
 
 from .configuration_hgrn3 import Hgrn3Config
 
@@ -174,16 +175,28 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
         # log lower bound
-        # a bit different from tnl
-        log_lower_bound = torch.log(
-            -get_log_slopes_general(
-                config.embed_dim // config.expand_ratio, config.n_min, config.n_max
+        self.lower_bound_type = config.lower_bound_type
+        if self.lower_bound_type == 1:
+            self.log_lower_bounds = nn.Parameter(
+                torch.ones(config.num_layers, config.embed_dim // config.expand_ratio),
+                requires_grad=True,
             )
-        )
-        self.register_buffer("log_lower_bound", log_lower_bound, persistent=False)
+        else:
+            # a bit different from tnl
+            log_lower_bound = torch.log(
+                -get_log_slopes_general(
+                    config.embed_dim // config.expand_ratio, config.n_min, config.n_max
+                )
+            )
+            index = torch.arange(config.num_layers).reshape(-1, 1)
+            log_lower_bounds = log_lower_bound / (index + 1)
+            self.register_buffer("log_lower_bounds", log_lower_bounds, persistent=False)
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def extra_repr(self):
+        return print_module(self)
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -245,8 +258,17 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
+        if self.lower_bound_type == 1:
+            # lower bound
+            lower_bounds = F.softmax(self.log_lower_bounds.float(), dim=0)
+            lower_bounds = torch.cumsum(lower_bounds, dim=0)
+            lower_bounds -= lower_bounds[0, ...].clone()
+            log_lower_bounds = torch.log(lower_bounds + 1e-6)
+        else:
+            log_lower_bounds = self.log_lower_bounds
+
         for idx, layer in enumerate(self.layers):
-            log_lower_bound = self.log_lower_bound / (idx + 1)
+            log_lower_bound = log_lower_bounds[idx]
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
