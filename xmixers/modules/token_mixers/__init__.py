@@ -72,6 +72,7 @@ def get_token_mixer(config, layer_idx):
             gate_type=config.gate_type,
             head_dim=config.head_dim,
             init_std=config.init_std,
+            gain=config.gain,
         )
     elif config.token_mixer_type in ["cpa"]:
         return cls(

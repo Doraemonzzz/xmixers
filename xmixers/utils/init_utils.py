@@ -1,0 +1,120 @@
+import math
+
+import torch
+import torch.nn as nn
+
+from .constants import EMBED_DIM_BASE
+
+
+# for token mixer
+def _initialize_weights(self, module):
+    if getattr(module, "_is_hf_initialized", False):
+        return
+
+    if self.token_mixer_init_type == 0:
+        return
+    elif self.token_mixer_init_type in [1, 2, 3, 4]:
+        if self.token_mixer_init_type == 1:  # fla init
+            gain = 2**-2.5
+        elif self.token_mixer_init_type == 2:  # fairseq init
+            gain = 2**-0.5
+        elif self.token_mixer_init_type == 3:  # minicpm init
+            gain = self.init_std / ((self.embed_dim / EMBED_DIM_BASE) ** 0.5)
+        elif self.token_mixer_init_type == 4:  # for test
+            gain = self.gain
+
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight, gain=gain)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        if hasattr(module, "k_head"):
+            nn.init.xavier_uniform_(module.k_head, gain=gain)
+        if hasattr(module, "v_head"):
+            nn.init.xavier_uniform_(module.v_head, gain=gain)
+
+    if self.rescale_type == 1:
+        # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
+        #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
+        #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
+        #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
+        #
+        # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
+        for name, p in module.named_parameters():
+            if name in ["out_proj.weight"]:
+                num_residuals_per_layer = 2
+                # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
+                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
+                # We need to reinit p since this code could be called multiple times
+                # Having just p *= scale would repeatedly scale it down
+                with torch.no_grad():
+                    p /= math.sqrt(num_residuals_per_layer * self.num_layers)
+    elif self.rescale_type == 2:
+        for name, p in module.named_parameters():
+            if name in ["out_proj.weight"]:
+                with torch.no_grad():
+                    p *= 0
+
+    module._is_hf_initialized = True
+
+
+# for PreTrainedModel
+def _init_weights(self, module):
+    if self.config.init_type == 0:
+        std = self.config.init_std
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.padding_idx is not None:
+                nn.init.zeros_(module.weight[module.padding_idx])
+    elif (
+        self.config.init_type == 1
+    ):  # credit to https://arxiv.org/pdf/2409.02060#page=14.84
+        std = self.config.init_std
+        trunc_std = 3 * std
+        if isinstance(module, nn.Linear):
+            nn.init.trunc_normal_(
+                module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
+            )
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.trunc_normal_(
+                module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
+            )
+            if module.padding_idx is not None:
+                nn.init.zeros_(module.weight[module.padding_idx])
+    elif self.config.init_type == 2:  # credit to https://arxiv.org/pdf/1910.05895
+        std = (2 / 5 / self.config.embed_dim) ** 0.5
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.padding_idx is not None:
+                nn.init.zeros_(module.weight[module.padding_idx])
+
+    # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
+    #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
+    #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
+    #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
+    #
+    # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
+    for name, p in module.named_parameters():
+        if name in ["out_proj.weight", "w3.weight"]:
+            num_residuals_per_layer = 2
+            # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
+            # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+            # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
+            # We need to reinit p since this code could be called multiple times
+            # Having just p *= scale would repeatedly scale it down
+            with torch.no_grad():
+                p /= math.sqrt(num_residuals_per_layer * self.config.num_layers)
+
+            if self.config.rescale_type == 2:
+                with torch.no_grad():
+                    p *= 0
