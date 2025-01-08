@@ -22,9 +22,9 @@ except:
     linear_cross_entropy = None
 
 try:
-    from xopes.ops.cross_entropy import linear_cross_entropy_baseline
+    from xopes.ops.cross_entropy import cross_entropy_parallel_triton
 except:
-    linear_cross_entropy_baseline = None
+    cross_entropy_parallel_triton = None
 
 AUTO_LOSS_MAPPING = {
     "naive": nn.CrossEntropyLoss(),
@@ -32,7 +32,7 @@ AUTO_LOSS_MAPPING = {
     "cut_ce": linear_cross_entropy,
     "fla_flce": FusedLinearCrossEntropyLoss(),
     "liger_flce": LigerFusedLinearCrossEntropyLoss(),
-    "lce_baseline": linear_cross_entropy_baseline,
+    "xopes_ce": cross_entropy_parallel_triton,
 }
 
 
@@ -67,5 +67,5 @@ def loss_fct(ce_type, labels, logits=None, hidden_state=None, weight=None, bias=
             c=weight.to(torch.bfloat16),
             targets=labels,
         )
-    elif ce_type == "lce_baseline":
-        return loss_fct(x=hidden_state, y=labels, At=weight.transpose(0, 1))
+    elif ce_type == "xopes_ce":
+        return loss_fct(z=logits, y=labels)

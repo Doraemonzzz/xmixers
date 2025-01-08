@@ -363,7 +363,8 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         hidden_states = outputs[0]
 
         fuse_linear_and_cross_entropy = (
-            self.config.ce_type not in ["fla_fce", "naive"] and self.training
+            self.config.ce_type not in ["fla_fce", "naive", "xopes_ce"]
+            and self.training
         )
         logits = (
             None
