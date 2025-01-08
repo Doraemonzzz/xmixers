@@ -168,8 +168,12 @@ class MultiProductAttention(nn.Module):
                 q.dtype
             )
         elif self.gate_type == 2:
-            k = oplr_fn(k_head, k, log_decay=None, decay_type="data_dependent_decay")
-            v = oplr_fn(v_head, v, log_decay=None, decay_type="data_dependent_decay")
+            k = oplr_fn(
+                k_head, k, log_decay=None, decay_type="data_dependent_decay"
+            ).to(q.dtype)
+            v = oplr_fn(
+                v_head, v, log_decay=None, decay_type="data_dependent_decay"
+            ).to(q.dtype)
 
         # for lrpe
         q_offset = 0
