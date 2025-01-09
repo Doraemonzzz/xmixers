@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from fla.ops.gla import chunk_gla, fused_recurrent_gla
 from transformers.cache_utils import Cache
+from xopes.ops import householder_fn
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
@@ -19,7 +20,7 @@ class Hgru2(nn.Module):
         expand_ratio: int,
         bias: bool = False,
         layer_idx: int = 0,
-        use_output_gate: bool = True,
+        use_output_gate: bool = False,
         norm_type: str = "layernorm",
         q_activation: str = "silu",
         causal: bool = True,
@@ -28,6 +29,8 @@ class Hgru2(nn.Module):
         num_layers: int = 12,
         init_std: float = 0.02,
         gain: float = 0.02,
+        beta_activation: str = "silu",
+        use_dense_memory: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -43,6 +46,7 @@ class Hgru2(nn.Module):
         self.expand_ratio = expand_ratio
         self.causal = causal
         self.use_output_gate = use_output_gate
+        self.use_dense_memory = use_dense_memory
 
         self.in_proj = nn.Linear(embed_dim, 3 * embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -54,6 +58,15 @@ class Hgru2(nn.Module):
                 nn.Linear(embed_dim, expand_ratio, bias=bias),
                 nn.Linear(expand_ratio, embed_dim, bias=bias),
             )
+
+        if self.use_dense_memory:
+            # !!! dont use beta as name in hf: https://github.com/huggingface/transformers/issues/29554
+            # I - 2 * beta beta ^ T
+            self.bet_proj = nn.Sequential(
+                nn.Linear(embed_dim, expand_ratio, bias=bias),
+                nn.Linear(expand_ratio, embed_dim, bias=bias),
+            )
+            self.beta_act = get_activation_fn(beta_activation)
 
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
@@ -83,6 +96,11 @@ class Hgru2(nn.Module):
         # act
         q = self.q_act(q)
         f = F.sigmoid(log_f)
+
+        if self.use_dense_memory:
+            # I - 2 beta beta ^ T
+            beta = self.beta_act(self.bet_proj(x))
+            q = householder_fn(q, beta)
 
         # todo: make a fusion here
         # l + (1 - l) * sigmoid(x)

@@ -42,6 +42,8 @@ class Hgrn2Layer(nn.Module):
             num_layers=config.num_layers,
             init_std=config.init_std,
             gain=config.gain,
+            use_dense_memory=config.use_dense_memory,
+            beta_activation=config.beta_activation,
         )
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)

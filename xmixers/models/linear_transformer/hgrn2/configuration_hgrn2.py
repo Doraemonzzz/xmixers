@@ -36,6 +36,8 @@ class Hgrn2Config(PretrainedConfig):
         q_activation="silu",
         causal=True,
         use_embed_scale=False,
+        use_dense_memory=False,
+        beta_activation="silu",
         # init
         init_type=0,
         token_mixer_init_type=0,
@@ -71,6 +73,8 @@ class Hgrn2Config(PretrainedConfig):
         self.q_activation = q_activation
         self.causal = causal
         self.use_embed_scale = use_embed_scale
+        self.use_dense_memory = use_dense_memory
+        self.beta_activation = beta_activation
         # init
         self.init_type = init_type
         self.token_mixer_init_type = token_mixer_init_type
