@@ -1,7 +1,7 @@
 from xopes.ops.normalize import normalize_fn
 
 
-def l2_norm(x, eps=1e-6):
+def l2_norm(x, eps=1e-5):
     return normalize_fn(
         x=x,
         weight=None,

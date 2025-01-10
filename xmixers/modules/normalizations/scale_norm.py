@@ -9,7 +9,7 @@ from xmixers.utils import XMIXERS_DEBUG, print_params
 
 
 class ScaleNorm(nn.Module):
-    def __init__(self, d: int, eps: float = 1e-6, **kwargs) -> None:
+    def __init__(self, d: int, eps: float = 1e-5, **kwargs) -> None:
         super().__init__()
         if XMIXERS_DEBUG:
             # get local varables

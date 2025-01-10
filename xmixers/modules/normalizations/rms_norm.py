@@ -15,7 +15,7 @@ from xmixers.utils import XMIXERS_DEBUG, print_module, print_params
 
 
 class RMSNorm(torch.nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, **kwargs):
+    def __init__(self, dim: int, eps: float = 1e-5, **kwargs):
         super().__init__()
         if XMIXERS_DEBUG:
             # get local varables
@@ -46,7 +46,7 @@ class RMSNorm(torch.nn.Module):
 
 
 class GatedRMSNorm(nn.Module):
-    def __init__(self, d: int, eps: float = 1e-6, bias: bool = False, **kwargs) -> None:
+    def __init__(self, d: int, eps: float = 1e-5, bias: bool = False, **kwargs) -> None:
         super().__init__()
 
         if XMIXERS_DEBUG:

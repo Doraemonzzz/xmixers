@@ -3,7 +3,7 @@ from xopes.ops.normalize import srms_norm_fn
 
 
 class SRMSNorm(torch.nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, **kwargs):
+    def __init__(self, dim: int, eps: float = 1e-5, **kwargs):
         super().__init__()
         self.dim = dim
         self.eps = eps

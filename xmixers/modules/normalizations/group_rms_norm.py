@@ -34,7 +34,10 @@ class GroupRMSNorm(torch.nn.Module):
         self.affine = affine
         if self.affine:
             self.weight = nn.Parameter(torch.empty(num_channels, **factory_kwargs))
-            self.bias = nn.Parameter(torch.empty(num_channels, **factory_kwargs))
+            if bias:
+                self.bias = nn.Parameter(torch.empty(num_channels, **factory_kwargs))
+            else:
+                self.register_parameter("bias", None)
         else:
             self.register_parameter("weight", None)
             self.register_parameter("bias", None)
@@ -44,7 +47,8 @@ class GroupRMSNorm(torch.nn.Module):
     def reset_parameters(self) -> None:
         if self.affine:
             init.ones_(self.weight)
-            init.zeros_(self.bias)
+            if self.bias is not None:
+                init.zeros_(self.bias)
 
     def forward(self, x, residual=None, return_residual=False):
         o, updated_residual = group_rms_norm_fn(
