@@ -20,6 +20,7 @@ class LayerNorm(torch.nn.Module):
         bias: bool = True,
         device=None,
         dtype=None,
+        **kwargs,
     ) -> None:
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
