@@ -21,7 +21,7 @@ class Hgru2(nn.Module):
         bias: bool = False,
         layer_idx: int = 0,
         use_output_gate: bool = False,
-        norm_type: str = "layernorm",
+        token_mixer_norm_type: str = "layernorm",
         q_activation: str = "silu",
         causal: bool = True,
         token_mixer_init_type: int = 0,
@@ -31,6 +31,7 @@ class Hgru2(nn.Module):
         gain: float = 0.02,
         beta_activation: str = "silu",
         use_dense_memory: bool = False,
+        norm_pos: str = "ogate",  # choose from ["attn", "ogate"]
         **kwargs,
     ):
         super().__init__()
@@ -51,7 +52,11 @@ class Hgru2(nn.Module):
         self.in_proj = nn.Linear(embed_dim, 3 * embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
-        self.norm = get_norm_fn(norm_type)(embed_dim, bias=False)
+        num_groups = embed_dim // expand_ratio
+        self.norm = get_norm_fn(token_mixer_norm_type)(
+            embed_dim, bias=False, num_groups=num_groups
+        )
+        self.norm_pos = norm_pos
 
         if self.use_output_gate:
             self.output_gate = nn.Sequential(
@@ -122,7 +127,6 @@ class Hgru2(nn.Module):
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
 
         dtype = q.dtype
-        # dtype = torch.float32
         q, k, v, log_f = map(lambda x: x.to(dtype), [q, k, v, log_f])
         if self.causal:
             if self.training or recurrent_state is None:  # training or prefilling
@@ -149,14 +153,18 @@ class Hgru2(nn.Module):
                 offset=x.shape[-2],
             )
 
+        # reshape
         output = rearrange(output, "b h n d -> b n (h d)")
+
+        if self.norm_pos == "attn":
+            output = self.norm(output)
 
         if self.use_output_gate:
             output_gate = F.sigmoid(self.output_gate(x))
             output = output * output_gate
 
-        # use post norm here for better parallel when using tp
-        output = self.norm(output)
+        if self.norm_pos == "ogate":
+            output = self.norm(output)
 
         # out proj
         output = self.out_proj(output)

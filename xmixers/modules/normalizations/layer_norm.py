@@ -8,7 +8,7 @@ from torch import Size
 
 _shape_t = Union[int, List[int], Size]
 
-from xopes.ops.normalize import layernorm_fn
+from xopes.ops.normalize import layer_norm_fn
 
 
 class LayerNorm(torch.nn.Module):
@@ -52,7 +52,7 @@ class LayerNorm(torch.nn.Module):
                 init.zeros_(self.bias)
 
     def forward(self, x, residual=None, return_residual=False):
-        o, updated_residual = layernorm_fn(
+        o, updated_residual = layer_norm_fn(
             x=x,
             weight=self.weight,
             bias=self.bias,

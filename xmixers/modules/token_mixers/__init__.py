@@ -124,6 +124,11 @@ def get_token_mixer(config, layer_idx):
             token_mixer_init_type=config.token_mixer_init_type,
             num_layers=config.num_layers,
             init_std=config.init_std,
+            gain=config.gain,
+            beta_activation=config.beta_activation,
+            use_dense_memory=config.use_dense_memory,
+            token_mixer_norm_type=config.token_mixer_norm_type,
+            norm_pos=config.norm_pos,
         )
     elif config.token_mixer_type in ["hgru3"]:
         return cls(

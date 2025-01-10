@@ -33,7 +33,7 @@ class TnlAttention(nn.Module):
         k_activation: str = "silu",
         v_activation: str = "silu",
         causal: bool = True,
-        norm_pos: str = "post",  # choose from ["attn", "ogate", "post"]
+        norm_pos: str = "post",  # choose from ["attn", "ogate"]
         max_position_embeddings: int = 1024,
         token_mixer_init_type: int = 0,
         rescale_type: int = 0,
@@ -199,9 +199,5 @@ class TnlAttention(nn.Module):
 
         # outproj
         output = self.out_proj(output)
-
-        if self.norm_pos == "post":
-            # use post norm here for better parallel when using tp
-            output = self.norm(output)
 
         return output, past_key_values

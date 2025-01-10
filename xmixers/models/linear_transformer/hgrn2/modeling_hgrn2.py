@@ -18,7 +18,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import GLU, Hgru2, get_norm_fn
+from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
 from xmixers.utils import XmixersCache, _init_weights, print_module
 
 from .configuration_hgrn2 import Hgrn2Config
@@ -28,32 +28,11 @@ class Hgrn2Layer(nn.Module):
     def __init__(self, config: Hgrn2Config, layer_idx=0):
         super().__init__()
 
-        self.token_mixer = Hgru2(
-            embed_dim=config.embed_dim,
-            expand_ratio=config.expand_ratio,
-            bias=config.bias,
-            layer_idx=layer_idx,
-            use_output_gate=config.use_output_gate,
-            norm_type=config.norm_type,
-            q_activation=config.q_activation,
-            causal=config.causal,
-            rescale_type=config.rescale_type,
-            token_mixer_init_type=config.token_mixer_init_type,
-            num_layers=config.num_layers,
-            init_std=config.init_std,
-            gain=config.gain,
-            use_dense_memory=config.use_dense_memory,
-            beta_activation=config.beta_activation,
-        )
+        self.token_mixer = get_token_mixer(config, layer_idx)
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
-        self.channel_mixer = GLU(
-            embed_dim=config.embed_dim,
-            mid_dim=config.mid_dim,
-            activation=config.glu_activation,
-            bias=config.bias,
-        )
+        self.channel_mixer = get_channel_mixer(config)
 
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
@@ -110,6 +89,8 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
+        config.token_mixer_type = "hgru2"
+        config.channel_mixer_type = "glu"
         self.layers = nn.ModuleList(
             [Hgrn2Layer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )

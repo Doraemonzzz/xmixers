@@ -25,9 +25,10 @@ class Hgrn2Config(PretrainedConfig):
         embed_dim=1024,
         expand_ratio=8,
         bias=False,
+        token_mixer_norm_type="layernorm",
         # glu config
         mid_dim=1024,
-        glu_activation="silu",
+        channel_mixer_activation="silu",
         # others
         max_position_embeddings=1024,
         num_layers=24,
@@ -38,6 +39,7 @@ class Hgrn2Config(PretrainedConfig):
         use_embed_scale=False,
         use_dense_memory=False,
         beta_activation="silu",
+        norm_pos="ogate",
         # init
         init_type=0,
         token_mixer_init_type=0,
@@ -62,9 +64,10 @@ class Hgrn2Config(PretrainedConfig):
         self.embed_dim = embed_dim
         self.expand_ratio = expand_ratio
         self.bias = bias
+        self.token_mixer_norm_type = token_mixer_norm_type
         # glu config
         self.mid_dim = mid_dim
-        self.glu_activation = glu_activation
+        self.channel_mixer_activation = channel_mixer_activation
         # others
         self.max_position_embeddings = max_position_embeddings
         self.num_layers = num_layers
@@ -75,6 +78,7 @@ class Hgrn2Config(PretrainedConfig):
         self.use_embed_scale = use_embed_scale
         self.use_dense_memory = use_dense_memory
         self.beta_activation = beta_activation
+        self.norm_pos = norm_pos
         # init
         self.init_type = init_type
         self.token_mixer_init_type = token_mixer_init_type

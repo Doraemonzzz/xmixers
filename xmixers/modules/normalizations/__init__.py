@@ -1,5 +1,8 @@
 import torch.nn as nn
 
+from .group_norm import GroupNorm
+from .group_rms_norm import GroupRMSNorm
+from .group_srms_norm import GroupSRMSNorm
 from .l2_norm import l2_norm
 from .layer_norm import LayerNorm
 from .offset_scale import OffsetScale
@@ -17,5 +20,11 @@ def get_norm_fn(norm_type: str):
         return SRMSNorm
     elif norm_type == "scalenorm":
         return ScaleNorm
+    elif norm_type == "groupnorm":
+        return GroupNorm
+    elif norm_type == "grouprmsnorm":
+        return GroupRMSNorm
+    elif norm_type == "groupsrmsnorm":
+        return GroupSRMSNorm
     else:
         return LayerNorm
