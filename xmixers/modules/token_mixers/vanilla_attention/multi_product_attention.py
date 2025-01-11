@@ -41,6 +41,7 @@ class MultiProductAttention(nn.Module):
         gate_type: int = 0,
         init_std: float = 0.02,
         gain: float = 0.02,
+        use_l2_norm: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -85,6 +86,7 @@ class MultiProductAttention(nn.Module):
         self.embed_dim = embed_dim
         self.init_std = init_std
         self.gain = gain
+        self.use_l2_norm = use_l2_norm
         self.apply(self._initialize_weights)
 
     def extra_repr(self):
@@ -125,19 +127,15 @@ class MultiProductAttention(nn.Module):
                 0, n, dtype=torch.float32, device=k.device
             ).unsqueeze(-1).unsqueeze(-1)
             # cumsum
-            k = l2_norm(
-                (oplr_fn(k_head, k, log_decay=None, decay_type="no_decay")).to(q.dtype)
-            )
-            v = (oplr_fn(v_head, v, log_decay=None, decay_type="no_decay") / index).to(
-                q.dtype
-            )
+            k = (oplr_fn(k_head, k, log_decay=None, decay_type="no_decay")).to(q.dtype)
+            v = (oplr_fn(v_head, v, log_decay=None, decay_type="no_decay")).to(q.dtype)
+            if self.use_l2_norm:
+                k = l2_norm(k)
         elif self.gate_type == 2:
-            k = l2_norm(
-                (oplr_fn(k_head, k, log_decay=None, decay_type="data_dependent_decay"))
-            ).to(q.dtype)
-            v = oplr_fn(
-                v_head, v, log_decay=None, decay_type="data_dependent_decay"
-            ).to(q.dtype)
+            k = oplr_fn(k_head, k, log_decay=None, decay_type="data_dependent_decay")
+            v = oplr_fn(v_head, v, log_decay=None, decay_type="data_dependent_decay")
+            if self.use_l2_norm:
+                k = l2_norm(k)
 
         # for lrpe
         q_offset = 0

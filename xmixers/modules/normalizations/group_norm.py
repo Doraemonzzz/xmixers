@@ -51,6 +51,8 @@ class GroupNorm(torch.nn.Module):
                 init.zeros_(self.bias)
 
     def forward(self, x, residual=None, return_residual=False):
+        # x_shape = x.shape
+        # return F.group_norm(x.reshape(-1, x.shape[-1]), self.num_groups, self.weight, self.bias, self.eps).reshape(x_shape)
         o, updated_residual = group_norm_fn(
             x=x,
             weight=self.weight,
