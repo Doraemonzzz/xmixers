@@ -2,13 +2,11 @@ from typing import List, Union
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.init as init
 from torch import Size
 
 _shape_t = Union[int, List[int], Size]
-
-
-from xopes.ops.normalize import group_norm_fn
 
 
 class GroupNorm(torch.nn.Module):
@@ -51,22 +49,28 @@ class GroupNorm(torch.nn.Module):
                 init.zeros_(self.bias)
 
     def forward(self, x, residual=None, return_residual=False):
-        # x_shape = x.shape
-        # return F.group_norm(x.reshape(-1, x.shape[-1]), self.num_groups, self.weight, self.bias, self.eps).reshape(x_shape)
-        o, updated_residual = group_norm_fn(
-            x=x,
-            weight=self.weight,
-            bias=self.bias,
-            dim=x.shape[-1],
-            eps=self.eps,
-            residual=residual,
-            return_residual=return_residual,
-            num_groups=self.num_groups,
-        )
+        x_shape = x.shape
+        return F.group_norm(
+            x.reshape(-1, x.shape[-1]),
+            self.num_groups,
+            self.weight,
+            self.bias,
+            self.eps,
+        ).reshape(x_shape)
+        # o, updated_residual = group_norm_fn(
+        #     x=x,
+        #     weight=self.weight,
+        #     bias=self.bias,
+        #     dim=x.shape[-1],
+        #     eps=self.eps,
+        #     residual=residual,
+        #     return_residual=return_residual,
+        #     num_groups=self.num_groups,
+        # )
 
-        if updated_residual is not None:
-            return o, updated_residual
-        return o
+        # if updated_residual is not None:
+        #     return o, updated_residual
+        # return o
 
     def extra_repr(self) -> str:
         return "num_groups={num_groups}, num_channels={num_channels}, eps={eps}, affine={affine}".format(
