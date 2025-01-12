@@ -122,20 +122,34 @@ class MultiProductAttention(nn.Module):
                 lambda arr: torch.einsum("... d, ... h -> ... h d", arr[0], arr[1]),
                 [(k, k_head), (v, v_head)],
             )
-        if self.gate_type == 1:
+        elif self.gate_type == 1:
             index = 1 + torch.arange(
                 0, n, dtype=torch.float32, device=k.device
             ).unsqueeze(-1).unsqueeze(-1)
             # cumsum
-            k = (oplr_fn(k_head, k, log_decay=None, decay_type="no_decay")).to(q.dtype)
-            v = (oplr_fn(v_head, v, log_decay=None, decay_type="no_decay")).to(q.dtype)
+            k = (oplr_fn(k_head, k, log_decay=None, decay_type="nd")).to(q.dtype)
+            v = (oplr_fn(v_head, v, log_decay=None, decay_type="nd")).to(q.dtype)
             if self.use_l2_norm:
                 k = l2_norm(k)
         elif self.gate_type == 2:
-            k = oplr_fn(k_head, k, log_decay=None, decay_type="data_dependent_decay")
-            v = oplr_fn(v_head, v, log_decay=None, decay_type="data_dependent_decay")
+            k = oplr_fn(k_head, k, log_decay=None, decay_type="ddd")
+            v = oplr_fn(v_head, v, log_decay=None, decay_type="ddd")
             if self.use_l2_norm:
                 k = l2_norm(k)
+        elif self.gate_type == 3:
+            k = oplr_fn(k_head, k, log_decay=None, decay_type="ddd")
+            v = torch.einsum("... d, ... h -> ... h d", v, v_head)
+        elif self.gate_type == 4:
+            k = torch.einsum("... d, ... h -> ... h d", k, k_head)
+            v = oplr_fn(v_head, v, log_decay=None, decay_type="ddd")
+        elif self.gate_type == 5:
+            index = 1 + torch.arange(
+                0, n, dtype=torch.float32, device=k.device
+            ).unsqueeze(-1).unsqueeze(-1)
+            k = (oplr_fn(k_head, k, log_decay=None, decay_type="ddd") / index).to(
+                q.dtype
+            )
+            v = oplr_fn(v_head, v, log_decay=None, decay_type="ddd")
 
         # for lrpe
         q_offset = 0
