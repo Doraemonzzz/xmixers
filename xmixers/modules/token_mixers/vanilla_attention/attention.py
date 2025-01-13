@@ -2,6 +2,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
 
@@ -125,7 +126,12 @@ class Attention(nn.Module):
             # output = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
             causal = True if self.training or q.shape[-2] == k.shape[-2] else False
             window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)
-            output = flash_attn_func(q, k, v, causal=causal, window_size=window_size)
+            if k.shape[-1] == v.shape[-1]:
+                output = flash_attn_func(
+                    q, k, v, causal=causal, window_size=window_size
+                )
+            else:
+                output = F.scaled_dot_product_attention(q, k, v, is_causal=causal)
         else:
             assert False, "flash_attn_varlen_qkvpacked_func current not support"
 

@@ -36,19 +36,19 @@ class Lrpe(nn.Module):
 
         d = self.num_heads * self.head_dim
         if self.lrpe_type == 1:
-            logging_info("standard rope")
+            logging_info("lrpe rope")
             theta = base ** (
                 -2 / d * torch.arange(d // 2, dtype=torch.int64)
             ).float().reshape(num_heads, 1, -1)
             self.register_buffer("theta", theta, persistent=False)
         elif lrpe_type == 2:
-            logging_info("mix rope")
+            logging_info("lrpe mix rope")
             theta = base ** (
                 -2 / d * torch.arange(d // 2 // 2, dtype=torch.int64)
             ).float().reshape(num_heads, 1, -1)
             self.register_buffer("theta", theta, persistent=False)
         elif lrpe_type == 3:
-            logging_info("complex transform")
+            logging_info("lrpe complex transform")
             theta = base ** (
                 -2 / d * torch.arange(d, dtype=torch.int64)
             ).float().reshape(num_heads, 1, -1)
@@ -62,7 +62,7 @@ class Lrpe(nn.Module):
             )
             self.theta = nn.Parameter(theta)
         elif lrpe_type == 5:
-            logging_info("share rope")
+            logging_info("share rope, standard version")
             d = head_dim
             theta = base ** (
                 -2 / d * torch.arange(d // 2, dtype=torch.int64)
