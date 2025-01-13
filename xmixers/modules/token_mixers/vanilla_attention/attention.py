@@ -131,7 +131,12 @@ class Attention(nn.Module):
                     q, k, v, causal=causal, window_size=window_size
                 )
             else:
+                q, k, v = map(
+                    lambda x: rearrange(x, "... n h d -> ... h n d"),
+                    [q, k, v],
+                )
                 output = F.scaled_dot_product_attention(q, k, v, is_causal=causal)
+                output = rearrange(output, "... h n d -> ... n h d")
         else:
             assert False, "flash_attn_varlen_qkvpacked_func current not support"
 
