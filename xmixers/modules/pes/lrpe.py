@@ -75,6 +75,24 @@ class Lrpe(nn.Module):
                 -2 / (d * num_heads) * torch.arange(d // 2, dtype=torch.int64)
             ).float().reshape(1, 1, -1)
             self.register_buffer("theta", theta, persistent=False)
+        elif lrpe_type == 7:
+            logging_info("lrpe complex transform, theta very small")
+            theta = base ** (
+                -2 / head_dim * torch.arange(d, dtype=torch.int64)
+            ).float().reshape(num_heads, 1, -1)
+            self.theta = nn.Parameter(theta)
+        elif lrpe_type == 8:
+            logging_info("lrpe rope, theta very small")
+            theta = base ** (
+                -2 / head_dim * torch.arange(d // 2, dtype=torch.int64)
+            ).float().reshape(num_heads, 1, -1)
+            self.register_buffer("theta", theta, persistent=False)
+        elif lrpe_type == 9:
+            logging_info("lrpe mix rope, theta very small")
+            theta = base ** (
+                -2 / head_dim * torch.arange(d // 2 // 2, dtype=torch.int64)
+            ).float().reshape(num_heads, 1, -1)
+            self.register_buffer("theta", theta, persistent=False)
         else:
             raise ValueError(f"lrpe_type: {lrpe_type} has not been support!")
 
@@ -109,14 +127,14 @@ class Lrpe(nn.Module):
                 .to(self.theta.device)
             )
 
-        if self.lrpe_type in [1, 5, 6]:
+        if self.lrpe_type in [1, 5, 6, 8]:
             theta = (self.index[:, :n] + offset) * self.theta
             theta_ = torch.polar(
                 torch.ones_like(theta).to(torch.float32), theta.to(torch.float32)
             )
             x_ = torch.view_as_complex(x.float().reshape(*x.shape[:-1], -1, 2))
             x_out = torch.view_as_real(x_ * theta_).flatten(3).type_as(x)
-        elif self.lrpe_type == 2:
+        elif self.lrpe_type in [2, 9]:
             index = self.index[:, :n] + offset
             # only support even number
             e = d // 2 + d % 2
@@ -132,7 +150,7 @@ class Lrpe(nn.Module):
             x_half = torch.stack([-x[..., 1::2], x[..., ::2]], dim=-1).reshape_as(x)
             x_transform = x * torch.cos(theta) + x_half * torch.sin(theta)
             x_out = torch.cat([x_transform, x1], dim=-1).to(x.dtype)
-        elif self.lrpe_type in [3, 4]:
+        elif self.lrpe_type in [3, 4, 7]:
             index = self.index[:, :n] + offset
             theta = self.theta.float() * index
             x_out = torch.concat(
