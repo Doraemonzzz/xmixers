@@ -97,8 +97,8 @@ class Lrpe(nn.Module):
             )
             theta = torch.cat(
                 [
-                    torch.zeros_like(theta),
                     theta,
+                    torch.zeros_like(theta),
                 ],
                 dim=-1,
             )
