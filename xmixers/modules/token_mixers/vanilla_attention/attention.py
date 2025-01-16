@@ -64,7 +64,6 @@ class Attention(nn.Module):
                 num_heads=self.num_heads,
                 lrpe_type=lrpe_type,
                 base=base,
-                max_position_embeddings=max_position_embeddings,
             )
 
         self.token_mixer_init_type = token_mixer_init_type
@@ -92,7 +91,7 @@ class Attention(nn.Module):
         v = self.v_proj(x)
 
         q, k, v = map(
-            lambda x: rearrange(x, "... n (h d) -> ... h n d", d=self.head_dim),
+            lambda x: rearrange(x, "... n (h d) -> ... n h d", d=self.head_dim),
             [q, k, v],
         )
 
@@ -112,11 +111,6 @@ class Attention(nn.Module):
         if self.use_lrpe:
             q = self.lrpe(q, offset=q_offset)
             k = self.lrpe(k)
-
-        q, k, v = map(
-            lambda x: rearrange(x, "... h n d -> ... n h d"),
-            [q, k, v],
-        )
 
         if (
             attention_mask is None or attention_mask.all()
