@@ -22,6 +22,7 @@ class LinearTransformerConfig(PretrainedConfig):
         tie_word_embeddings=False,
         ##### model config
         # attention config
+        token_mixer_type="linear_attn",
         embed_dim=1024,
         num_heads=8,
         kv_heads=-1,
@@ -44,6 +45,7 @@ class LinearTransformerConfig(PretrainedConfig):
         token_mixer_init_type=0,
         init_type=0,
         rescale_type=0,
+        gain=0.02,
         **kwargs,
     ):
         super().__init__(
@@ -59,6 +61,7 @@ class LinearTransformerConfig(PretrainedConfig):
         self.init_std = init_std
         ##### add
         # attention config
+        self.token_mixer_type = token_mixer_type
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.kv_heads = kv_heads
@@ -81,3 +84,4 @@ class LinearTransformerConfig(PretrainedConfig):
         self.token_mixer_init_type = token_mixer_init_type
         self.init_type = init_type
         self.rescale_type = rescale_type
+        self.gain = gain

@@ -163,12 +163,13 @@ def get_token_mixer(config, layer_idx):
             norm_type=config.norm_type,
             linear_activation=config.linear_activation,
             causal=config.causal,
-            max_position_embeddings=config.max_position_embeddings,
             use_dense_memory=config.use_dense_memory,
+            max_position_embeddings=config.max_position_embeddings,
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
             init_std=config.init_std,
+            gain=config.gain,
         )
     elif config.token_mixer_type in ["tnl_attn"]:
         return cls(

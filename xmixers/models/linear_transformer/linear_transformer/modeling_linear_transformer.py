@@ -18,7 +18,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import GLU, LearnablePe, LinearAttention, SinCosPe, get_norm_fn
+from xmixers.modules import GLU, LearnablePe, SinCosPe, get_norm_fn, get_token_mixer
 
 from .configuration_linear_transformer import LinearTransformerConfig
 
@@ -27,26 +27,7 @@ class LinearTransformerLayer(nn.Module):
     def __init__(self, config: LinearTransformerConfig, layer_idx=0):
         super().__init__()
 
-        self.token_mixer = LinearAttention(
-            embed_dim=config.embed_dim,
-            num_heads=config.num_heads,
-            kv_heads=config.kv_heads,
-            bias=config.bias,
-            use_lrpe=config.use_lrpe,
-            layer_idx=layer_idx,
-            lrpe_type=config.lrpe_type,
-            base=config.base,
-            use_output_gate=config.use_output_gate,
-            norm_type=config.norm_type,
-            linear_activation=config.linear_activation,
-            causal=config.causal,
-            max_position_embeddings=config.max_position_embeddings,
-            use_dense_memory=config.use_dense_memory,
-            token_mixer_init_type=config.token_mixer_init_type,
-            rescale_type=config.rescale_type,
-            num_layers=config.num_layers,
-            init_std=config.init_std,
-        )
+        self.token_mixer = get_token_mixer(config, layer_idx)
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
