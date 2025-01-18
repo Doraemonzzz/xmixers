@@ -85,6 +85,34 @@ class LLaMALayer(nn.Module):
 
         return outputs
 
+    # def forward_postnorm(
+    #     self,
+    #     x,
+    #     attention_mask: Optional[torch.Tensor] = None,  # (b, m)
+    #     past_key_values: Optional[Cache] = None,
+    #     use_cache: Optional[bool] = False,
+    #     residual: Optional[torch.Tensor] = None,
+    # ):
+    #     # token mixer
+    #     residual = x
+    #     x, past_key_values = self.token_mixer(
+    #         x=x,
+    #         attention_mask=attention_mask,
+    #         past_key_values=past_key_values,
+    #         use_cache=use_cache,
+    #     )
+    #     x, _ = self.token_norm(
+    #         x,
+    #         residual=residual,
+    #     )
+
+    #     # channel mixer
+    #     x, _ = self.channel_norm(self.channel_mixer(x), residual=x)
+
+    #     outputs = (x, past_key_values, None)
+
+    #     return outputs
+
     def forward_postnorm(
         self,
         x,
@@ -101,41 +129,14 @@ class LLaMALayer(nn.Module):
             past_key_values=past_key_values,
             use_cache=use_cache,
         )
-        x, _ = self.token_norm(
-            x,
-            residual=residual,
-        )
+        x = self.token_norm(x + residual)
 
         # channel mixer
-        x, _ = self.channel_norm(self.channel_mixer(x), residual=x)
+        x = self.channel_norm(self.channel_mixer(x) + x)
 
-        outputs = (x, past_key_values, None)
+        outputs = (x, past_key_values)
 
         return outputs
-
-    # def forward_postnorm(
-    #     self,
-    #     x,
-    #     attention_mask: Optional[torch.Tensor] = None,  # (b, m)
-    #     past_key_values: Optional[Cache] = None,
-    #     use_cache: Optional[bool] = False,
-    # ):
-    #     # token mixer
-    #     residual = x
-    #     x, past_key_values = self.token_mixer(
-    #         x=x,
-    #         attention_mask=attention_mask,
-    #         past_key_values=past_key_values,
-    #         use_cache=use_cache,
-    #     )
-    #     x = self.token_norm(x + residual)
-
-    #     # channel mixer
-    #     x = self.channel_norm(self.channel_mixer(x) + x)
-
-    #     outputs = (x, past_key_values)
-
-    #     return outputs
 
 
 class LLaMAPreTrainedModel(PreTrainedModel):
