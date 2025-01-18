@@ -22,9 +22,9 @@ except:
     linear_cross_entropy = None
 
 try:
-    from xopes.ops.cross_entropy import cross_entropy_parallel_triton
+    from xopes.ops.cross_entropy import cross_entropy_fn
 except:
-    cross_entropy_parallel_triton = None
+    cross_entropy_fn = None
 
 AUTO_LOSS_MAPPING = {
     "naive": nn.CrossEntropyLoss(),
@@ -32,7 +32,7 @@ AUTO_LOSS_MAPPING = {
     "cut_ce": linear_cross_entropy,
     "fla_flce": FusedLinearCrossEntropyLoss(),
     "liger_flce": LigerFusedLinearCrossEntropyLoss(),
-    "xopes_ce": cross_entropy_parallel_triton,
+    "xopes_ce": cross_entropy_fn,
 }
 
 
