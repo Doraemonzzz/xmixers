@@ -67,7 +67,7 @@ class LinearAttention(nn.Module):
                 num_heads=self.num_heads,
                 lrpe_type=lrpe_type,
                 base=base,
-                act=linear_activation,
+                # act=linear_activation, # test this
             )
 
         self.use_output_gate = use_output_gate
@@ -115,6 +115,9 @@ class LinearAttention(nn.Module):
             lambda x: rearrange(x, "... n (h d) -> ... n h d", d=self.head_dim),
             [q, k, v],
         )
+
+        q = self.act(q)
+        k = self.act(k)
 
         # lrpe
         q_offset = 0
