@@ -134,7 +134,7 @@ class LLaMALayer(nn.Module):
         # channel mixer
         x = self.channel_norm(self.channel_mixer(x) + x)
 
-        outputs = (x, past_key_values)
+        outputs = (x, past_key_values, None)
 
         return outputs
 
