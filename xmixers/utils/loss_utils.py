@@ -26,6 +26,11 @@ try:
 except:
     cross_entropy_fn = None
 
+try:
+    from xopes.ops.linear_cross_entropy import linear_cross_entropy_fn
+except:
+    linear_cross_entropy_fn = None
+
 AUTO_LOSS_MAPPING = {
     "naive": nn.CrossEntropyLoss(),
     "fla_fce": FusedCrossEntropyLoss(inplace_backward=True),
@@ -33,6 +38,7 @@ AUTO_LOSS_MAPPING = {
     "fla_flce": FusedLinearCrossEntropyLoss(),
     "liger_flce": LigerFusedLinearCrossEntropyLoss(),
     "xopes_ce": cross_entropy_fn,
+    "xopes_flce": linear_cross_entropy_fn,
 }
 
 
@@ -69,3 +75,5 @@ def loss_fct(ce_type, labels, logits=None, hidden_state=None, weight=None, bias=
         )
     elif ce_type == "xopes_ce":
         return loss_fct(z=logits, y=labels)
+    elif ce_type == "xopes_flce":
+        return loss_fct(x=hidden_state, y=labels, W=weight, bias=bias)
