@@ -6,7 +6,6 @@ import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
 
-from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
@@ -57,7 +56,6 @@ class LinearAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.norm = get_norm_fn(norm_type)(embed_dim)
-        self.act = get_activation_fn(linear_activation)
         self.causal = causal
 
         self.use_lrpe = use_lrpe
@@ -67,7 +65,7 @@ class LinearAttention(nn.Module):
                 num_heads=self.num_heads,
                 lrpe_type=lrpe_type,
                 base=base,
-                # act=linear_activation, # test this
+                act=linear_activation,
             )
 
         self.use_output_gate = use_output_gate
@@ -115,9 +113,6 @@ class LinearAttention(nn.Module):
             lambda x: rearrange(x, "... n (h d) -> ... n h d", d=self.head_dim),
             [q, k, v],
         )
-
-        q = self.act(q)
-        k = self.act(k)
 
         # lrpe
         q_offset = 0
