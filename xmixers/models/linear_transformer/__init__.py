@@ -7,4 +7,5 @@ from .linear_transformer import (
     LinearTransformerModel,
 )
 from .metala import MetaLaConfig, MetaLaForCausalLM, MetaLaLayer, MetaLaModel
+from .polar_rnn import PolarRnnConfig, PolarRnnForCausalLM, PolarRnnLayer, PolarRnnModel
 from .tnl import TnlConfig, TnlForCausalLM, TnlLayer, TnlModel

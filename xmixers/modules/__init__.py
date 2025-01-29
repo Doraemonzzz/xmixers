@@ -20,6 +20,7 @@ from .token_mixers import (
     LinearAttention,
     MetaLa,
     MultiProductAttention,
+    PolarRnn,
     TnlAttention,
     get_token_mixer,
     nAttention,
