@@ -143,17 +143,18 @@ class PolarRnn(nn.Module):
         q = self.q_act(q)
         k = self.k_act(k)
 
+        # h is num_head, d is head dimension
+        q, k, v = map(
+            lambda x: rearrange(x, "... (h d) -> ... h d", d=self.head_dim),
+            [q, k, v],
+        )
+
         if self.norm_q:
             q = F.normalize(q, p=self.qkv_norm_type, dim=-1)
         k = F.normalize(k, p=self.qkv_norm_type, dim=-1)
         if self.norm_v:
             v = F.normalize(v, p=self.qkv_norm_type, dim=-1)
 
-        # h is num_head, d is head dimension
-        q, k, v = map(
-            lambda x: rearrange(x, "... (h d) -> ... h d", d=self.head_dim),
-            [q, k, v],
-        )
         if self.use_decay and not self.scaler_decay:
             f = rearrange(f, "... (h d) -> ... h d", d=self.head_dim)
 
