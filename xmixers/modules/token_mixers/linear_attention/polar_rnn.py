@@ -172,13 +172,15 @@ class PolarRnn(nn.Module):
             else:
                 fn = fused_recurrent_dplr_delta_rule
 
+            dtype = q.dtype
+
             output, unitary_state = fn(
                 q=q,
-                k=self.zero,
-                v=self.zero,
-                a=k * gamma.unsqueeze(-1),
-                b=k,
-                gk=self.zero,
+                k=self.zero.to(dtype),
+                v=self.zero.to(dtype),
+                a=(k * gamma.unsqueeze(-1)).to(dtype),
+                b=k.to(dtype),
+                gk=self.zero.to(dtype),
                 initial_state=unitary_state,
                 output_final_state=use_cache,
                 scale=1,
@@ -198,10 +200,10 @@ class PolarRnn(nn.Module):
                     fn = fused_recurrent_simple_gla
 
             output, spectral_state = fn(
-                q=output,
-                k=v,
-                v=v,
-                g=f,
+                q=output.to(dtype),
+                k=v.to(dtype),
+                v=v.to(dtype),
+                g=f.to(dtype),
                 initial_state=spectral_state,
                 output_final_state=use_cache,
                 scale=1,
