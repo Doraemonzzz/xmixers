@@ -42,6 +42,7 @@ class PolarRnn(nn.Module):
         num_layers: int = 12,
         init_std: float = 0.02,
         gain: float = 0.02,
+        debug: int = 0,
         **kwargs,
     ):
         super().__init__()
@@ -95,6 +96,7 @@ class PolarRnn(nn.Module):
         self.f = torch.empty(0)
         self.zero = torch.empty(0)
         self.gamma = torch.empty(0)
+        self.debug = debug  # rm later
 
     def _initialize_weights(self, module):
         return _initialize_weights(self, module)
@@ -167,49 +169,95 @@ class PolarRnn(nn.Module):
             spectral_state = past_key_values[self.layer_idx]["spectral_state"]
 
         if self.causal:
-            # Unitary update
-            if self.training or use_cache:
-                fn = chunk_dplr_delta_rule
-            else:
-                fn = fused_recurrent_dplr_delta_rule
+            if self.debug == 1:
+                dtype = q.dtype
 
-            dtype = q.dtype
-
-            output, unitary_state = fn(
-                q=q,
-                k=self.zero.to(dtype),
-                v=self.zero.to(dtype),
-                a=(k * gamma.unsqueeze(-1)).to(dtype),
-                b=k.to(dtype),
-                gk=self.zero.to(dtype),
-                initial_state=unitary_state,
-                output_final_state=use_cache,
-                scale=1,
-                head_first=False,
-            )
-
-            # Spectral update
-            if len(f.shape) == 4:
-                if self.training or use_cache:
-                    fn = chunk_gla
+                if len(f.shape) == 4:
+                    if self.training or use_cache:
+                        fn = chunk_gla
+                    else:
+                        fn = fused_recurrent_gla
                 else:
-                    fn = fused_recurrent_gla
-            else:
-                if self.training or use_cache:
-                    fn = chunk_simple_gla
-                else:
-                    fn = fused_recurrent_simple_gla
+                    if self.training or use_cache:
+                        fn = chunk_simple_gla
+                    else:
+                        fn = fused_recurrent_simple_gla
 
-            output, spectral_state = fn(
-                q=output.to(dtype),
-                k=v.to(dtype),
-                v=v.to(dtype),
-                g=f.to(dtype),
-                initial_state=spectral_state,
-                output_final_state=use_cache,
-                scale=1,
-                head_first=False,
-            )
+                output, spectral_state = fn(
+                    q=q.to(dtype),
+                    k=k.to(dtype),
+                    v=v.to(dtype),
+                    g=f.to(dtype),
+                    initial_state=spectral_state,
+                    output_final_state=use_cache,
+                    scale=1,
+                    head_first=False,
+                )
+            elif self.debug == 2:
+                # Unitary update
+                if self.training or use_cache:
+                    fn = chunk_dplr_delta_rule
+                else:
+                    fn = fused_recurrent_dplr_delta_rule
+
+                dtype = q.dtype
+
+                output, unitary_state = fn(
+                    q=q,
+                    k=k.to(dtype),
+                    v=v.to(dtype),
+                    a=(k * gamma.unsqueeze(-1)).to(dtype),
+                    b=k.to(dtype),
+                    gk=self.zero.to(dtype),
+                    initial_state=unitary_state,
+                    output_final_state=use_cache,
+                    scale=1,
+                    head_first=False,
+                )
+            else:
+                # Unitary update
+                if self.training or use_cache:
+                    fn = chunk_dplr_delta_rule
+                else:
+                    fn = fused_recurrent_dplr_delta_rule
+
+                dtype = q.dtype
+
+                output, unitary_state = fn(
+                    q=q,
+                    k=self.zero.to(dtype),
+                    v=self.zero.to(dtype),
+                    a=(k * gamma.unsqueeze(-1)).to(dtype),
+                    b=k.to(dtype),
+                    gk=self.zero.to(dtype),
+                    initial_state=unitary_state,
+                    output_final_state=use_cache,
+                    scale=1,
+                    head_first=False,
+                )
+
+                # Spectral update
+                if len(f.shape) == 4:
+                    if self.training or use_cache:
+                        fn = chunk_gla
+                    else:
+                        fn = fused_recurrent_gla
+                else:
+                    if self.training or use_cache:
+                        fn = chunk_simple_gla
+                    else:
+                        fn = fused_recurrent_simple_gla
+
+                output, spectral_state = fn(
+                    q=output.to(dtype),
+                    k=v.to(dtype),
+                    v=v.to(dtype),
+                    g=f.to(dtype),
+                    initial_state=spectral_state,
+                    output_final_state=use_cache,
+                    scale=1,
+                    head_first=False,
+                )
         else:
             assert False
 

@@ -253,4 +253,5 @@ def get_token_mixer(config, layer_idx):
             num_layers=config.num_layers,
             init_std=config.init_std,
             gain=config.gain,
+            debug=config.debug,
         )
