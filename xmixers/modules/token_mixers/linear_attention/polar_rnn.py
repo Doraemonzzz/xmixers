@@ -117,7 +117,7 @@ class PolarRnn(nn.Module):
         k = self.k_proj(x)
         v = self.v_proj(x)
 
-        if self.zero.shape[0] == 0:
+        if self.zero.shape[0] == 0 or self.zero.shape != torch.Size([b, n, h, d // h]):
             self.zero = torch.zeros(b, n, h, d // h).to(q)
         # b n h
         if self.use_decay:
@@ -128,7 +128,7 @@ class PolarRnn(nn.Module):
                 f = F.logsigmoid(-v)
                 v = F.sigmoid(v)
         else:
-            if self.f.shape[0] == 0:
+            if self.f.shape[0] == 0 or self.f.shape != torch.Size([b, n, h]):
                 self.f = torch.zeros(b, n, h).to(q)
             f = self.f
             v = self.v_act(v)
@@ -138,7 +138,7 @@ class PolarRnn(nn.Module):
             if self.gamma_activation == "neg":
                 gamma *= 2
         else:
-            if self.gamma.shape[0] == 0:
+            if self.gamma.shape[0] == 0 or self.gamma.shape != torch.Size([b, n, h]):
                 self.gamma = torch.ones(b, n, h).to(q) * 2
             gamma = self.gamma
         gamma = -gamma
