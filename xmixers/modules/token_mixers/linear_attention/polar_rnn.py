@@ -141,6 +141,7 @@ class PolarRnn(nn.Module):
             if self.gamma.shape[0] == 0:
                 self.gamma = torch.ones(b, n, h).to(q) * 2
             gamma = self.gamma
+        gamma = -gamma
         # act
         q = self.q_act(q)
         k = self.k_act(k)
