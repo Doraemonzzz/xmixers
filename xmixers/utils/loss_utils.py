@@ -77,3 +77,51 @@ def loss_fct(ce_type, labels, logits=None, hidden_state=None, weight=None, bias=
         return loss_fct(z=logits, y=labels)
     elif ce_type == "xopes_flce":
         return loss_fct(x=hidden_state, y=labels, W=weight, bias=bias)
+
+
+def compute_loss(
+    lm_head,
+    ce_type,
+    hidden_states,
+    labels,
+    num_logits_to_keep=0,
+    fuse_linear_and_cross_entropy=True,
+):
+    logits = (
+        None
+        if fuse_linear_and_cross_entropy
+        else lm_head(
+            hidden_states[:, -num_logits_to_keep:]
+        )  # when generation or prefilling, num_logits_to_keep is 1
+    )
+
+    loss = None
+    if labels is not None:
+        shift_labels = labels[..., 1:].contiguous()
+        shift_labels = shift_labels.view(-1)
+        shift_labels = shift_labels.to(hidden_states.device)
+
+        if fuse_linear_and_cross_entropy:
+            # Shift so that tokens < n predict n
+            shift_hidden_states = hidden_states[..., :-1, :].contiguous()
+            shift_hidden_states = shift_hidden_states.view(
+                -1, shift_hidden_states.shape[-1]
+            )
+            loss = loss_fct(
+                ce_type=ce_type,
+                labels=shift_labels,
+                hidden_state=shift_hidden_states,
+                weight=lm_head.weight,
+                bias=lm_head.bias,
+            )
+        else:
+            # Shift so that tokens < n predict n
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_logits = shift_logits.view(-1, shift_logits[-1])
+            loss = loss_fct(
+                ce_type=ce_type,
+                labels=shift_labels,
+                logits=shift_logits,
+            )
+
+    return logits, loss
