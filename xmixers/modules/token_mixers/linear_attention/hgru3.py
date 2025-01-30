@@ -59,7 +59,7 @@ class Hgru3(nn.Module):
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
         self.beta_act = get_activation_fn(beta_activation)
-        self.norm = get_norm_fn(norm_type)(embed_dim, bias=False)
+        self.norm = get_norm_fn(norm_type)(embed_dim, bias=bias)
 
         if self.use_dense_memory:
             # !!! dont use beta as name in hf: https://github.com/huggingface/transformers/issues/29554

@@ -5,6 +5,9 @@ from .hybrid.naive_hybrid import (
     NaiveHybridModel,
 )
 from .linear_transformer import (
+    DenseRnnConfig,
+    DenseRnnForCausalLM,
+    DenseRnnModel,
     Hgrn2Config,
     Hgrn2ForCausalLM,
     Hgrn2Model,

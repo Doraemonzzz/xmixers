@@ -49,7 +49,7 @@ class MetaLa(nn.Module):
         self.in_proj = nn.Linear(embed_dim, 3 * embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
-        self.norm = get_norm_fn(norm_type)(embed_dim, bias=False)
+        self.norm = get_norm_fn(norm_type)(embed_dim, bias=bias)
 
         if self.use_output_gate:
             self.output_gate = nn.Sequential(

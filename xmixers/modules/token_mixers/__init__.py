@@ -1,4 +1,5 @@
 from .linear_attention import (
+    DenseRnn,
     Hgru2,
     Hgru3,
     LinearAttention,
@@ -31,6 +32,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "tnl_attn": TnlAttention,
     "metala": MetaLa,
     "polar_rnn": PolarRnn,
+    "dense_rnn": DenseRnn,
     # long conv
     "gtu": Gtu,
 }
@@ -43,6 +45,7 @@ LINEAR_TOKEN_MIXER_LIST = [
     "tnl_attn",
     "metala",
     "polar_rnn",
+    "dense_rnn",
 ]
 
 
@@ -254,4 +257,28 @@ def get_token_mixer(config, layer_idx):
             init_std=config.init_std,
             gain=config.gain,
             debug=config.debug,
+        )
+    elif config.token_mixer_type in ["dense_rnn"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_output_gate=config.use_output_gate,
+            norm_type=config.norm_type,
+            q_activation=config.q_activation,
+            k_activation=config.k_activation,
+            v_activation=config.v_activation,
+            use_gamma=config.use_gamma,
+            gamma_activation=config.gamma_activation,
+            scaler_decay=config.scaler_decay,
+            qkv_norm_type=config.qkv_norm_type,
+            norm_q=config.norm_q,
+            norm_v=config.norm_v,
+            causal=config.causal,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            init_std=config.init_std,
+            gain=config.gain,
         )

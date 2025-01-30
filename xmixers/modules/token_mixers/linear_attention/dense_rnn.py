@@ -3,13 +3,11 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
+from einops import rearrange, repeat
 from fla.ops.generalized_delta_rule import (
     chunk_dplr_delta_rule,
     fused_recurrent_dplr_delta_rule,
 )
-from fla.ops.gla import chunk_gla, fused_recurrent_gla
-from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
 from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
@@ -17,7 +15,25 @@ from xmixers.modules.normalizations import get_norm_fn
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
 
-class PolarRnn(nn.Module):
+class DenseRnn(nn.Module):
+    """
+    S[t] = (I - k * k ^ T) * Diag(f) * (I - k * k ^ T) * S[t-1] + k * v ^ T
+    this is equivalent to the following:
+    S[t, 1] = (I - k * k ^ T) * S[t-1] + 0 * 0 ^ T
+    S[t, 2] = (Diag(f) - 0 * 0 ^ T) * S[t, 1] + 0 * 0 ^ T
+    S[t, 3] = (I - k * k ^ T) * S[t, 2] + k * v ^ T
+    Since dplr has the following form:
+        S[t] = (D + a b ^ T) * S[t-1] + k * v ^ T
+    We can use the following form to implement this:
+        D = concat([0, f, 0])
+        a = concat([k, 0, k])
+        b = a
+        k = concat([0, 0, k])
+        v = concat([0, 0, v])
+        q = concat([0, 0, q])
+    to implement this.
+    """
+
     def __init__(
         self,
         embed_dim: int,
@@ -31,18 +47,16 @@ class PolarRnn(nn.Module):
         v_activation: str = "silu",
         use_gamma: bool = True,
         gamma_activation: str = "pos",
-        use_decay: bool = True,
-        scaler_decay: bool = True,
+        scaler_decay: bool = False,
         qkv_norm_type: int = 2,
         norm_q: bool = False,
         norm_v: bool = False,
         causal: bool = True,
-        token_mixer_init_type: int = 0,
-        rescale_type: int = 0,
+        token_mixer_init_type: int = 4,
+        rescale_type: int = 2,
         num_layers: int = 12,
         init_std: float = 0.02,
-        gain: float = 0.02,
-        debug: int = 0,
+        gain: float = 0.01,
         **kwargs,
     ):
         super().__init__()
@@ -61,10 +75,15 @@ class PolarRnn(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.use_decay = use_decay
         self.scaler_decay = scaler_decay
+        self.head_dim = embed_dim // num_heads
         if self.scaler_decay:
             self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+        else:
+            self.f_proj = nn.Sequential(
+                nn.Linear(embed_dim, self.head_dim, bias=bias),
+                nn.Linear(self.head_dim, embed_dim, bias=bias),
+            )
         self.use_gamma = use_gamma
         if self.use_gamma:
             self.gamma_proj = nn.Linear(embed_dim, num_heads, bias=bias)
@@ -75,7 +94,6 @@ class PolarRnn(nn.Module):
         self.gamma_activation = gamma_activation
         self.norm = get_norm_fn(norm_type)(embed_dim, bias=bias)
 
-        self.head_dim = embed_dim // num_heads
         if self.use_output_gate:
             self.output_gate = nn.Sequential(
                 nn.Linear(embed_dim, self.head_dim, bias=bias),
@@ -95,8 +113,6 @@ class PolarRnn(nn.Module):
         self.apply(self._initialize_weights)
         self.f = torch.empty(0)
         self.zero = torch.empty(0)
-        self.gamma = torch.empty(0)
-        self.debug = debug  # rm later
 
     def _initialize_weights(self, module):
         return _initialize_weights(self, module)
@@ -107,6 +123,7 @@ class PolarRnn(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
+        lower_bound: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         b, n, d = x.shape
@@ -116,35 +133,28 @@ class PolarRnn(nn.Module):
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
+        f = self.f_proj(x)
 
         if self.zero.shape[0] == 0 or self.zero.shape != torch.Size([b, n, h, d // h]):
             self.zero = torch.zeros(b, n, h, d // h).to(q)
-        # b n h
-        if self.use_decay:
-            if self.scaler_decay:
-                f = F.logsigmoid(self.f_proj(x))
-                v = self.v_act(v)
-            else:
-                f = F.logsigmoid(-v)
-                v = F.sigmoid(v)
+        # l + (1 - l) * sigmoid(x)
+        if lower_bound is not None:
+            f = lower_bound + (1 - lower_bound) * F.sigmoid(f)
+            log_f = torch.log(f)
         else:
-            if self.f.shape[0] == 0 or self.f.shape != torch.Size([b, n, h]):
-                self.f = torch.zeros(b, n, h).to(q)
-            f = self.f
-            v = self.v_act(v)
-        # b n h
+            log_f = F.logsigmoid(f)
+        # b n h 1
         if self.use_gamma:
-            gamma = F.sigmoid(self.gamma_proj(x))
+            gamma = F.sigmoid(self.gamma_proj(x)).unsqueeze(-1)
             if self.gamma_activation == "neg":
                 gamma *= 2
         else:
-            if self.gamma.shape[0] == 0 or self.gamma.shape != torch.Size([b, n, h]):
-                self.gamma = torch.ones(b, n, h).to(q) * 2
-            gamma = self.gamma
+            gamma = 2
         gamma = -gamma
         # act
         q = self.q_act(q)
         k = self.k_act(k)
+        v = self.v_act(v)
 
         # h is num_head, d is head dimension
         q, k, v = map(
@@ -158,114 +168,64 @@ class PolarRnn(nn.Module):
         if self.norm_v:
             v = F.normalize(v, p=self.qkv_norm_type, dim=-1)
 
-        if self.use_decay and not self.scaler_decay:
-            f = rearrange(f, "... (h d) -> ... h d", d=self.head_dim)
+        if not self.scaler_decay:
+            log_f = rearrange(log_f, "... (h d) -> ... h d", d=self.head_dim)
+        else:
+            log_f = repeat(log_f, "... h -> ... h d", d=self.head_dim)
 
-        unitary_state = None
-        if past_key_values is not None and len(past_key_values) > self.layer_idx:
-            unitary_state = past_key_values[self.layer_idx]["unitary_state"]
+        # D = concat([0, f, 0])
+        # a = concat([k, 0, k])
+        # b = a
+        # k = concat([0, 0, k])
+        # v = concat([0, 0, v])
+        # q = concat([0, 0, q])
+        k_ = k * gamma
+        log_f = torch.cat([self.zero, log_f, self.zero], dim=1)
+        a = torch.cat([k_, self.zero, k_], dim=1)
+        b = torch.cat([k, self.zero, k], dim=1)
+        k = torch.cat([self.zero, self.zero, k], dim=1)
+        v = torch.cat([self.zero, self.zero, v], dim=1)
+        q = torch.cat([self.zero, self.zero, q], dim=1)
 
-        spectral_state = None
+        log_f, a, b, k, v, q = map(
+            lambda x: rearrange(x, "b (c n) ... -> b (n c) ... ", c=3),
+            [log_f, a, b, k, v, q],
+        )
+
+        # TODO: update this
+        recurrent_state = None
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
-            spectral_state = past_key_values[self.layer_idx]["spectral_state"]
+            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
 
         if self.causal:
-            if self.debug == 1:
-                dtype = q.dtype
-
-                if len(f.shape) == 4:
-                    if self.training or use_cache:
-                        fn = chunk_gla
-                    else:
-                        fn = fused_recurrent_gla
-                else:
-                    if self.training or use_cache:
-                        fn = chunk_simple_gla
-                    else:
-                        fn = fused_recurrent_simple_gla
-
-                output, spectral_state = fn(
-                    q=q.to(dtype),
-                    k=k.to(dtype),
-                    v=v.to(dtype),
-                    g=f.to(dtype),
-                    initial_state=spectral_state,
-                    output_final_state=use_cache,
-                    scale=1,
-                    head_first=False,
-                )
-            elif self.debug == 2:
-                # Unitary update
-                if self.training or use_cache:
-                    fn = chunk_dplr_delta_rule
-                else:
-                    fn = fused_recurrent_dplr_delta_rule
-
-                dtype = q.dtype
-
-                output, unitary_state = fn(
-                    q=q,
-                    k=k.to(dtype),
-                    v=v.to(dtype),
-                    a=(k * gamma.unsqueeze(-1)).to(dtype),
-                    b=k.to(dtype),
-                    gk=self.zero.to(dtype),
-                    initial_state=unitary_state,
-                    output_final_state=use_cache,
-                    scale=1,
-                    head_first=False,
-                )
+            # Unitary update
+            if self.training or use_cache:
+                fn = chunk_dplr_delta_rule
             else:
-                # Unitary update
-                if self.training or use_cache:
-                    fn = chunk_dplr_delta_rule
-                else:
-                    fn = fused_recurrent_dplr_delta_rule
+                fn = fused_recurrent_dplr_delta_rule
 
-                dtype = q.dtype
+            dtype = q.dtype
 
-                output, unitary_state = fn(
-                    q=q,
-                    k=self.zero.to(dtype),
-                    v=self.zero.to(dtype),
-                    a=(k * gamma.unsqueeze(-1)).to(dtype),
-                    b=k.to(dtype),
-                    gk=self.zero.to(dtype),
-                    initial_state=unitary_state,
-                    output_final_state=use_cache,
-                    scale=1,
-                    head_first=False,
-                )
-
-                # Spectral update
-                if len(f.shape) == 4:
-                    if self.training or use_cache:
-                        fn = chunk_gla
-                    else:
-                        fn = fused_recurrent_gla
-                else:
-                    if self.training or use_cache:
-                        fn = chunk_simple_gla
-                    else:
-                        fn = fused_recurrent_simple_gla
-
-                output, spectral_state = fn(
-                    q=output.to(dtype),
-                    k=v.to(dtype),
-                    v=v.to(dtype),
-                    g=f.to(dtype),
-                    initial_state=spectral_state,
-                    output_final_state=use_cache,
-                    scale=1,
-                    head_first=False,
-                )
+            output, recurrent_state = fn(
+                q=q,
+                k=k.to(dtype),
+                v=v.to(dtype),
+                a=a.to(dtype),
+                b=b.to(dtype),
+                gk=log_f.to(dtype),
+                initial_state=recurrent_state,
+                output_final_state=use_cache,
+                scale=1,
+                head_first=False,
+            )
         else:
             assert False
 
+        output = output[:, -n:]
+
         if past_key_values is not None:
             past_key_values.update(
-                unitary_state=unitary_state,
-                spectral_state=spectral_state,
+                recurrent_state=recurrent_state,
                 layer_idx=self.layer_idx,
                 offset=x.shape[-2],
             )

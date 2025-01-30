@@ -23,6 +23,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 -
 
 # ToDo
+- [ ] Update default init method
 - [ ] Rm bias for layernorm since it will raise nan error.
   - [ ] linear attention
     - [x] hgru2

@@ -1,5 +1,5 @@
 # coding=utf-8
-""" PyTorch PolarRnn model."""
+""" PyTorch DenseRnn model."""
 from typing import Optional, Tuple, Union
 
 import torch
@@ -14,17 +14,17 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
-
+import torch.nn.functional as F
 
 from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
-from xmixers.utils import XmixersCache, _init_weights
+from xmixers.utils import XmixersCache, _init_weights, print_module
 from xmixers.utils.loss_utils import compute_loss
 
-from .configuration_polar_rnn import PolarRnnConfig
+from .configuration_dense_rnn import DenseRnnConfig
 
 
-class PolarRnnLayer(nn.Module):
-    def __init__(self, config: PolarRnnConfig, layer_idx=0):
+class DenseRnnLayer(nn.Module):
+    def __init__(self, config: DenseRnnConfig, layer_idx=0):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
@@ -43,6 +43,7 @@ class PolarRnnLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
+        lower_bound: Optional[torch.Tensor] = None,
         residual: Optional[torch.Tensor] = None,
     ):
         if not self.fuse_norm_add:
@@ -53,6 +54,7 @@ class PolarRnnLayer(nn.Module):
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
+                lower_bound=lower_bound,
             )
             x = x + residual
 
@@ -71,6 +73,7 @@ class PolarRnnLayer(nn.Module):
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
+                lower_bound=lower_bound,
             )
 
             # channel mixer
@@ -84,21 +87,21 @@ class PolarRnnLayer(nn.Module):
         return outputs
 
 
-class PolarRnnPreTrainedModel(PreTrainedModel):
-    config_class = PolarRnnConfig
+class DenseRnnPreTrainedModel(PreTrainedModel):
+    config_class = DenseRnnConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PolarRnnLayer"]
+    _no_split_modules = ["DenseRnnLayer"]
 
     def _init_weights(self, module):
         return _init_weights(self, module)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, PolarRnnModel):
+        if isinstance(module, DenseRnnModel):
             module.gradient_checkpointing = value
 
 
-class PolarRnnModel(PolarRnnPreTrainedModel):
-    def __init__(self, config: PolarRnnConfig):
+class DenseRnnModel(DenseRnnPreTrainedModel):
+    def __init__(self, config: DenseRnnConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
@@ -111,12 +114,24 @@ class PolarRnnModel(PolarRnnPreTrainedModel):
             config.vocab_size, config.embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
-            [PolarRnnLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
+            [DenseRnnLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
+        # log lower bound
+        if config.scaler_decay:
+            d = config.embed_dim // self.num_heads
+        else:
+            d = config.embed_dim
+        self.log_lower_bounds = nn.Parameter(
+            torch.ones(config.num_layers, d), requires_grad=True
+        )
+
         # Initialize weights and apply final processing
         self.post_init()
+
+    def extra_repr(self):
+        return print_module(self)
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -179,7 +194,13 @@ class PolarRnnModel(PolarRnnPreTrainedModel):
         all_self_attns = () if output_attentions else None
         residual = None
 
+        # lower bound
+        lower_bounds = F.softmax(self.log_lower_bounds, dim=0)
+        lower_bounds = torch.cumsum(lower_bounds, dim=0)
+        lower_bounds -= lower_bounds[0, ...].clone()
+
         for idx, layer in enumerate(self.layers):
+            lower_bound = lower_bounds[idx]
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -195,6 +216,7 @@ class PolarRnnModel(PolarRnnPreTrainedModel):
                     past_key_values,
                     use_cache,
                     residual,
+                    lower_bound,
                 )
             else:
                 hidden_states, past_key_values, residual = layer(
@@ -203,6 +225,7 @@ class PolarRnnModel(PolarRnnPreTrainedModel):
                     past_key_values=past_key_values,
                     use_cache=use_cache,
                     residual=residual,
+                    lower_bound=lower_bound,
                 )
 
         if residual is not None:
@@ -234,12 +257,12 @@ class PolarRnnModel(PolarRnnPreTrainedModel):
         )
 
 
-class PolarRnnForCausalLM(PolarRnnPreTrainedModel):
+class DenseRnnForCausalLM(DenseRnnPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = PolarRnnModel(config)
+        self.model = DenseRnnModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
@@ -296,9 +319,9 @@ class PolarRnnForCausalLM(PolarRnnPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, PolarRnnForCausalLM
+        >>> from transformers import AutoTokenizer, DenseRnnForCausalLM
 
-        >>> model = PolarRnnForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = DenseRnnForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
