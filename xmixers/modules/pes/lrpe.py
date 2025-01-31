@@ -45,12 +45,21 @@ class Lrpe(nn.Module):
         else:
             raise ValueError(f"lrpe_type: {lrpe_type} has not been support!")
 
+        self.register_buffer("theta", torch.empty(0), persistent=False)
+        self.lrpe_type_ = lrpe_type
+        self.base = base
+        self.d = d
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        lrpe_type = self.lrpe_type_
+        base = self.base
+        d = self.d
         if lrpe_type == 1:
             logging_info("lrpe rotate, i.e, rope")
             theta = base ** (
                 -2 / d * torch.arange(d // 2, dtype=torch.int64)
             ).float().reshape(1, -1)
-            self.register_buffer("theta", theta, persistent=False)
         elif lrpe_type == 2:
             logging_info("lrpe mix rotate, rotate half head dim, use low freq")
             theta = (
@@ -60,7 +69,6 @@ class Lrpe(nn.Module):
                 .reshape(1, -1)[:, d // 4 :]
             )
             theta = torch.cat([torch.zeros_like(theta), theta], dim=-1)
-            self.register_buffer("theta", theta, persistent=False)
         elif lrpe_type == 3:
             logging_info("lrpe mix rotate, rotate half head dim, use high freq")
             theta = (
@@ -70,13 +78,11 @@ class Lrpe(nn.Module):
                 .reshape(1, -1)[:, : d // 4]
             )
             theta = torch.cat([theta, torch.zeros_like(theta)], dim=-1)
-            self.register_buffer("theta", theta, persistent=False)
         elif lrpe_type == 4:
             logging_info("lrpe cosine")
             theta = base ** (
                 -2 / d * torch.arange(d, dtype=torch.int64)
             ).float().reshape(1, -1)
-            self.register_buffer("theta", theta, persistent=False)
         elif lrpe_type == 5:
             logging_info("lrpe cosine, cosine half head dim, use low freq")
             theta = (
@@ -86,7 +92,6 @@ class Lrpe(nn.Module):
                 .reshape(1, -1)[:, d // 2 :]
             )
             theta = torch.cat([torch.zeros_like(theta), theta], dim=-1)
-            self.register_buffer("theta", theta, persistent=False)
         elif lrpe_type == 6:
             logging_info("lrpe cosine, cosine half head dim, use high freq")
             theta = (
@@ -102,7 +107,7 @@ class Lrpe(nn.Module):
                 ],
                 dim=-1,
             )
-            self.register_buffer("theta", theta, persistent=False)
+        self.theta = theta.to(self.theta.device)
 
     def forward(self, x, offset=0):
         return lrpe_fn(

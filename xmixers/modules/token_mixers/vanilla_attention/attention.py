@@ -72,6 +72,9 @@ class Attention(nn.Module):
         self.embed_dim = embed_dim
         self.init_std = init_std
         self.gain = gain
+        self.reset_parameters()
+
+    def reset_parameters(self):
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):

@@ -27,6 +27,11 @@ class RMSNorm(torch.nn.Module):
         self.dim = dim
         self.weight = nn.Parameter(torch.ones(dim))
 
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.ones_(self.weight)
+
     def extra_repr(self) -> str:
         return f"dim={self.dim}, eps={self.eps}"
 
@@ -62,7 +67,13 @@ class GatedRMSNorm(nn.Module):
         self.scale = nn.Parameter(torch.ones(d))
         self.register_parameter("scale", self.scale)
         self.gate = nn.Parameter(torch.ones(d))
-        self.register_parameter("scale", self.scale)
+        self.register_parameter("gate", self.scale)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.ones_(self.scale)
+        nn.init.ones_(self.gate)
 
     def extra_repr(self) -> str:
         return print_module(self)
