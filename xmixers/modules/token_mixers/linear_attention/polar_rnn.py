@@ -136,7 +136,7 @@ class PolarRnn(nn.Module):
         if self.use_gamma:
             gamma = F.sigmoid(self.gamma_proj(x))
             if self.gamma_activation == "neg":
-                gamma *= 2
+                gamma = gamma * 2
         else:
             if self.gamma.shape[0] == 0 or self.gamma.shape != torch.Size([b, n, h]):
                 self.gamma = torch.ones(b, n, h).to(q) * 2

@@ -147,7 +147,7 @@ class DenseRnn(nn.Module):
         if self.use_gamma:
             gamma = F.sigmoid(self.gamma_proj(x)).unsqueeze(-1)
             if self.gamma_activation == "neg":
-                gamma *= 2
+                gamma = gamma * 2
         else:
             gamma = 2
         gamma = -gamma
