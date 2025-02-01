@@ -12,7 +12,7 @@ logging.basicConfig(
     level=os.environ.get("LOGLEVEL", "INFO").upper(),
     stream=sys.stdout,
 )
-logger = logging.getLogger("print_config")
+logger = logging.getLogger("xmixers")
 
 
 def is_dist_avail_and_initialized() -> bool:

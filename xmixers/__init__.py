@@ -12,4 +12,3 @@ from .models import (
     TnlModel,
 )
 from .monkey_patch import LlamaMpaConfig, LlamaMpaForCausalLM
-from .ops import *
