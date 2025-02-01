@@ -60,28 +60,41 @@ class LLaMALayer(nn.Module):
 
             # channel mixer
             x = self.channel_mixer(self.channel_norm(x)) + x
-            residual_channel = None
         else:
-            # token mixer
-            # !!! for the first layer, the residual input is None, so we need to set return_residual=True
-            x_attn, residual_attn = self.token_norm(
-                x, residual=residual, return_residual=True
-            )
+            # # token mixer
+            # # !!! for the first layer, the residual input is None, so we need to set return_residual=True
+            # x_attn, residual_attn = self.token_norm(
+            #     x, residual=residual, return_residual=True
+            # )
 
+            # x_attn, past_key_values = self.token_mixer(
+            #     x=x_attn,
+            #     attention_mask=attention_mask,
+            #     past_key_values=past_key_values,
+            #     use_cache=use_cache,
+            # )
+
+            # # channel mixer
+            # x_channel, residual_channel = self.channel_norm(
+            #     x_attn, residual=residual_attn
+            # )
+            # x = self.channel_mixer(x_channel)
+
+            # token mixer
+            residual_token = x
             x_attn, past_key_values = self.token_mixer(
-                x=x_attn,
+                x=self.token_norm(x),
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
             )
 
             # channel mixer
             x_channel, residual_channel = self.channel_norm(
-                x_attn, residual=residual_attn
+                x_attn, residual=residual_token
             )
-            x = self.channel_mixer(x_channel)
+            x = self.channel_mixer(x_channel) + residual_channel
 
-        outputs = (x, past_key_values, residual_channel)
+        outputs = (x, past_key_values, None)
 
         return outputs
 
