@@ -45,13 +45,14 @@ class Lrpe(nn.Module):
         else:
             raise ValueError(f"lrpe_type: {lrpe_type} has not been support!")
 
+        # init parameters
         self.register_buffer("theta", torch.empty(0), persistent=False)
         self.lrpe_type_ = lrpe_type
         self.base = base
         self.d = d
-        self.reset_parameters()
+        self._init_weights()
 
-    def reset_parameters(self):
+    def _init_weights(self):
         lrpe_type = self.lrpe_type_
         base = self.base
         d = self.d
@@ -108,8 +109,13 @@ class Lrpe(nn.Module):
                 dim=-1,
             )
         self.theta = theta.to(self.theta.device)
+        self._is_hf_initialized = True
 
     def forward(self, x, offset=0):
+        d = x.shape[-1]
+        theta = self.base ** (
+            -2 / d * torch.arange(d // 2, dtype=torch.int64)
+        ).float().reshape(1, -1)
         return lrpe_fn(
             x=x,
             theta=self.theta,

@@ -17,7 +17,7 @@ logger = logging.get_logger(__name__)
 
 
 from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
-from xmixers.utils import XmixersCache, _init_weights
+from xmixers.utils import XmixersCache, _init_weights, _post_init_weights
 from xmixers.utils.loss_utils import compute_loss
 
 from .configuration_llama import LLaMAConfig
@@ -300,6 +300,11 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def post_init_weights(
+        self,
+    ):
+        _post_init_weights(self)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens

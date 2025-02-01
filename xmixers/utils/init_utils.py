@@ -134,3 +134,33 @@ def _init_weights(self, module):
             if self.config.rescale_type == 2:
                 with torch.no_grad():
                     p *= 0
+
+    module._is_hf_initialized = True
+
+
+def _post_init_weights(
+    self,
+):
+    # reset the _is_hf_initialized to False
+    self.apply(lambda m: setattr(m, "_is_hf_initialized", False))
+    # Create an unbound function that takes module as argument
+    init_fn = lambda module: _init_weights(self, module)
+    self.model.embed_tokens.apply(init_fn)
+    self.model.final_norm._init_weights()
+    for layer in self.model.layers:
+        # for token mixer, use custom init first
+        layer.token_mixer._init_weights()
+        if hasattr(layer.token_mixer, "lrpe"):
+            layer.token_mixer.lrpe._init_weights()
+        # if not using custom init, use default init
+        layer.token_mixer.apply(init_fn)
+        layer.channel_mixer.apply(init_fn)
+        layer.token_norm._init_weights()
+        layer.channel_norm._init_weights()
+
+    if self.config.tie_word_embeddings:
+        output_embeddings = self.get_output_embeddings()
+        if output_embeddings is not None:
+            self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+    else:
+        self.lm_head.apply(init_fn)
