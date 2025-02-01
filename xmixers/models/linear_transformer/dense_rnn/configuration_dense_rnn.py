@@ -39,7 +39,6 @@ class DenseRnnConfig(PretrainedConfig):
         v_activation="silu",
         use_gamma=True,
         gamma_activation="pos",
-        scaler_decay=False,
         qkv_norm_type=2,
         norm_q=False,
         norm_v=False,
@@ -86,7 +85,6 @@ class DenseRnnConfig(PretrainedConfig):
         self.v_activation = v_activation
         self.use_gamma = use_gamma
         self.gamma_activation = gamma_activation
-        self.scaler_decay = scaler_decay
         self.qkv_norm_type = qkv_norm_type
         self.norm_q = norm_q
         self.norm_v = norm_v

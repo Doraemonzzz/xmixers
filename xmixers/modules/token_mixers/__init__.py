@@ -271,7 +271,6 @@ def get_token_mixer(config, layer_idx):
             v_activation=config.v_activation,
             use_gamma=config.use_gamma,
             gamma_activation=config.gamma_activation,
-            scaler_decay=config.scaler_decay,
             qkv_norm_type=config.qkv_norm_type,
             norm_q=config.norm_q,
             norm_v=config.norm_v,

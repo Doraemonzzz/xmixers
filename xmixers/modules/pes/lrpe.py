@@ -112,10 +112,6 @@ class Lrpe(nn.Module):
         self._is_hf_initialized = True
 
     def forward(self, x, offset=0):
-        d = x.shape[-1]
-        theta = self.base ** (
-            -2 / d * torch.arange(d // 2, dtype=torch.int64)
-        ).float().reshape(1, -1)
         return lrpe_fn(
             x=x,
             theta=self.theta,

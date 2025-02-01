@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, repeat
+from einops import rearrange
 from fla.ops.generalized_delta_rule import (
     chunk_dplr_delta_rule,
     fused_recurrent_dplr_delta_rule,
@@ -18,6 +18,21 @@ from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 class DenseRnn(nn.Module):
     """
     S[t] = (I - k * k ^ T) * Diag(f) * (I - k * k ^ T) * S[t-1] + k * v ^ T
+    this is equivalent to the following:
+    S[t, 1] = (Diag(f) - Diag(f) * k * k ^ T) * S[t-1] + 0 * 0 ^ T
+    S[t, 2] = (I - k * k ^ T) * S[t, 1] + k * v ^ T
+    Since dplr has the following form:
+        S[t] = (D + a b ^ T) * S[t-1] + k * v ^ T
+    We can use the following form to implement this:
+        D = concat([f, 0])
+        a = concat([f * k, k])
+        b = concat([k, k])
+        k = concat([0, k])
+        v = concat([0, v])
+        q = concat([0, q])
+    to implement this.
+
+    Old versioin:
     this is equivalent to the following:
     S[t, 1] = (I - k * k ^ T) * S[t-1] + 0 * 0 ^ T
     S[t, 2] = (Diag(f) - 0 * 0 ^ T) * S[t, 1] + 0 * 0 ^ T
@@ -47,7 +62,6 @@ class DenseRnn(nn.Module):
         v_activation: str = "silu",
         use_gamma: bool = True,
         gamma_activation: str = "pos",
-        scaler_decay: bool = False,
         qkv_norm_type: int = 2,
         norm_q: bool = False,
         norm_v: bool = False,
@@ -75,15 +89,11 @@ class DenseRnn(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.scaler_decay = scaler_decay
         self.head_dim = embed_dim // num_heads
-        if self.scaler_decay:
-            self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
-        else:
-            self.f_proj = nn.Sequential(
-                nn.Linear(embed_dim, self.head_dim, bias=bias),
-                nn.Linear(self.head_dim, embed_dim, bias=bias),
-            )
+        self.f_proj = nn.Sequential(
+            nn.Linear(embed_dim, self.head_dim, bias=bias),
+            nn.Linear(self.head_dim, embed_dim, bias=bias),
+        )
         self.use_gamma = use_gamma
         if self.use_gamma:
             self.gamma_proj = nn.Linear(embed_dim, num_heads, bias=bias)
@@ -157,9 +167,9 @@ class DenseRnn(nn.Module):
         v = self.v_act(v)
 
         # h is num_head, d is head dimension
-        q, k, v = map(
+        q, k, v, log_f = map(
             lambda x: rearrange(x, "... (h d) -> ... h d", d=self.head_dim),
-            [q, k, v],
+            [q, k, v, log_f],
         )
 
         if self.norm_q:
@@ -168,27 +178,41 @@ class DenseRnn(nn.Module):
         if self.norm_v:
             v = F.normalize(v, p=self.qkv_norm_type, dim=-1)
 
-        if not self.scaler_decay:
-            log_f = rearrange(log_f, "... (h d) -> ... h d", d=self.head_dim)
-        else:
-            log_f = repeat(log_f, "... h -> ... h d", d=self.head_dim)
-
+        # old version
         # D = concat([0, f, 0])
         # a = concat([k, 0, k])
         # b = a
         # k = concat([0, 0, k])
         # v = concat([0, 0, v])
         # q = concat([0, 0, q])
-        k_ = k * gamma
-        log_f = torch.cat([self.zero, log_f, self.zero], dim=1)
-        a = torch.cat([k_, self.zero, k_], dim=1)
-        b = torch.cat([k, self.zero, k], dim=1)
-        k = torch.cat([self.zero, self.zero, k], dim=1)
-        v = torch.cat([self.zero, self.zero, v], dim=1)
-        q = torch.cat([self.zero, self.zero, q], dim=1)
+        # k_ = k * gamma
+        # log_f = torch.cat([self.zero, log_f, self.zero], dim=1)
+        # a = torch.cat([k_, self.zero, k_], dim=1)
+        # b = torch.cat([k, self.zero, k], dim=1)
+        # k = torch.cat([self.zero, self.zero, k], dim=1)
+        # v = torch.cat([self.zero, self.zero, v], dim=1)
+        # q = torch.cat([self.zero, self.zero, q], dim=1)
 
+        # D = concat([f, 0])
+        # a = concat([f * k, k])
+        # b = concat([k, k])
+        # k = concat([0, k])
+        # v = concat([0, v])
+        # q = concat([0, q])
+        # log_f, a, b, k, v, q = map(
+        #     lambda x: rearrange(x, "b (c n) ... -> b (n c) ... ", c=3),
+        #     [log_f, a, b, k, v, q],
+        # )
+
+        k_ = k * gamma
+        a = torch.cat([k_ * torch.exp(log_f), k_], dim=1)
+        b = torch.cat([k, k], dim=1)
+        k = torch.cat([self.zero, k], dim=1)
+        v = torch.cat([self.zero, v], dim=1)
+        q = torch.cat([self.zero, q], dim=1)
+        log_f = torch.cat([log_f, self.zero], dim=1)
         log_f, a, b, k, v, q = map(
-            lambda x: rearrange(x, "b (c n) ... -> b (n c) ... ", c=3),
+            lambda x: rearrange(x, "b (c n) ... -> b (n c) ... ", c=2),
             [log_f, a, b, k, v, q],
         )
 
