@@ -21,7 +21,7 @@ class LLaMAConfig(PretrainedConfig):
         init_std=0.02,
         tie_word_embeddings=False,
         ##### model config
-        # attention config
+        # token mixer config
         token_mixer_type="attn",
         embed_dim=1024,
         num_heads=8,
@@ -45,6 +45,7 @@ class LLaMAConfig(PretrainedConfig):
         channel_mixer_type="glu",
         mid_dim=1024,
         channel_mixer_activation="silu",
+        use_gate_linear=False,
         # for alu and lalu
         qk_dim=1024,
         v_dim=1024,
@@ -112,6 +113,7 @@ class LLaMAConfig(PretrainedConfig):
         self.output_gate_activation = output_gate_activation
         self.use_low_rank_output_gate = use_low_rank_output_gate
         self.channel_mixer_init_type = channel_mixer_init_type
+        self.use_gate_linear = use_gate_linear
         # others
         self.max_position_embeddings = max_position_embeddings
         self.num_layers = num_layers

@@ -19,6 +19,7 @@ def get_channel_mixer(config):
             mid_dim=config.mid_dim,
             activation=config.channel_mixer_activation,
             bias=config.bias,
+            use_gate_linear=config.use_gate_linear,
         )
     elif config.channel_mixer_type in ["alu"]:
         return cls(
