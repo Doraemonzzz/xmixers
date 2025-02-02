@@ -30,6 +30,7 @@ class DenseRnnConfig(PretrainedConfig):
         channel_mixer_type="glu",
         mid_dim=1024,
         channel_mixer_activation="silu",
+        use_gate_linear=False,
         # others
         max_position_embeddings=1024,
         use_output_gate=True,
@@ -76,6 +77,7 @@ class DenseRnnConfig(PretrainedConfig):
         self.channel_mixer_type = channel_mixer_type
         self.mid_dim = mid_dim
         self.channel_mixer_activation = channel_mixer_activation
+        self.use_gate_linear = use_gate_linear
         # others
         self.max_position_embeddings = max_position_embeddings
         self.use_output_gate = use_output_gate
