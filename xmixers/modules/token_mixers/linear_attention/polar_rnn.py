@@ -32,7 +32,7 @@ class PolarRnn(nn.Module):
         use_gamma: bool = True,
         gamma_activation: str = "pos",
         use_decay: bool = True,
-        scaler_decay: bool = True,
+        scalar_decay: bool = True,
         qkv_norm_type: int = 2,
         norm_q: bool = False,
         norm_v: bool = False,
@@ -63,8 +63,8 @@ class PolarRnn(nn.Module):
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.use_decay = use_decay
-        self.scaler_decay = scaler_decay
-        if self.scaler_decay:
+        self.scalar_decay = scalar_decay
+        if self.scalar_decay:
             self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
         self.use_gamma = use_gamma
         if self.use_gamma:
@@ -124,7 +124,7 @@ class PolarRnn(nn.Module):
             self.zero = torch.zeros(b, n, h, d // h).to(q)
         # b n h
         if self.use_decay:
-            if self.scaler_decay:
+            if self.scalar_decay:
                 f = F.logsigmoid(self.f_proj(x))
                 v = self.v_act(v)
             else:
@@ -166,14 +166,14 @@ class PolarRnn(nn.Module):
         if self.norm_v:
             v = l2_norm(v)
 
-        if self.use_decay and not self.scaler_decay:
+        if self.use_decay and not self.scalar_decay:
             f = rearrange(f, "... (h d) -> ... h d", d=self.head_dim)
 
         if self.init_state.shape[0] == 0:
             init_state = torch.eye(d).to(q)
             self.init_state = init_state
 
-        if self.debug in [3, 4]:
+        if self.debug in [3, 4, 5]:
             unitary_state = repeat(self.init_state, "d e -> b h d e", b=b, h=h)
         else:
             unitary_state = None
@@ -277,7 +277,7 @@ class PolarRnn(nn.Module):
                     scale=1,
                     head_first=False,
                 )
-            else:
+            elif self.debug == 4:  # k, v not share version
                 # Unitary update
                 if self.training or use_cache:
                     fn = chunk_dplr_delta_rule
@@ -320,6 +320,30 @@ class PolarRnn(nn.Module):
                     v=v.to(dtype),
                     g=f.to(dtype),
                     initial_state=spectral_state,
+                    output_final_state=use_cache,
+                    scale=1,
+                    head_first=False,
+                )
+            elif self.debug == 5:
+                # Unitary update
+                if self.training or use_cache:
+                    fn = chunk_dplr_delta_rule
+                else:
+                    fn = fused_recurrent_dplr_delta_rule
+
+                dtype = q.dtype
+
+                if len(f.shape) == 3:
+                    f = repeat(f, "b n h -> b n h d", d=d)
+
+                output, unitary_state = fn(
+                    q=q,
+                    k=self.zero.to(dtype),
+                    v=self.zero.to(dtype),
+                    a=(k * gamma.unsqueeze(-1)).to(dtype),
+                    b=v.to(dtype),
+                    gk=f.to(dtype),
+                    initial_state=unitary_state,
                     output_final_state=use_cache,
                     scale=1,
                     head_first=False,

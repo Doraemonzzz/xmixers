@@ -52,8 +52,8 @@ class Hgru3(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.scaler_decay = scaler_decay
-        if self.scaler_decay:
+        self.scalar_decay = scalar_decay
+        if self.scalar_decay:
             self.f_proj = nn.Linear(embed_dim, embed_dim // expand_ratio, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)

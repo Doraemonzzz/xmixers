@@ -41,7 +41,7 @@ class PolarRnnConfig(PretrainedConfig):
         use_gamma=True,
         gamma_activation="pos",
         use_decay=True,
-        scaler_decay=True,
+        scalar_decay=True,
         qkv_norm_type=2,
         norm_q=False,
         norm_v=False,
@@ -92,7 +92,7 @@ class PolarRnnConfig(PretrainedConfig):
         self.use_gamma = use_gamma
         self.gamma_activation = gamma_activation
         self.use_decay = use_decay
-        self.scaler_decay = scaler_decay
+        self.scalar_decay = scalar_decay
         self.qkv_norm_type = qkv_norm_type
         self.norm_q = norm_q
         self.norm_v = norm_v

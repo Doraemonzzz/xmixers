@@ -119,7 +119,7 @@ class DenseRnnModel(DenseRnnPreTrainedModel):
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
         # log lower bound
-        if config.scaler_decay:
+        if config.scalar_decay:
             d = config.embed_dim // self.num_heads
         else:
             d = config.embed_dim
