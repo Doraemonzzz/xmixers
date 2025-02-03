@@ -57,6 +57,7 @@ class PolarRnnConfig(PretrainedConfig):
         fuse_norm_add=True,
         ce_type="xopes_flce",
         debug=0,
+        use_l2_norm=False,
         **kwargs,
     ):
         super().__init__(
@@ -107,3 +108,4 @@ class PolarRnnConfig(PretrainedConfig):
         self.fuse_norm_add = fuse_norm_add
         self.ce_type = ce_type
         self.debug = debug
+        self.use_l2_norm = use_l2_norm

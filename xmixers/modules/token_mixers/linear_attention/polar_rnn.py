@@ -43,6 +43,7 @@ class PolarRnn(nn.Module):
         init_std: float = 0.02,
         gain: float = 0.02,
         debug: int = 0,
+        use_l2_norm: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -97,6 +98,7 @@ class PolarRnn(nn.Module):
         self.zero = torch.empty(0)
         self.gamma = torch.empty(0)
         self.debug = debug  # rm later
+        self.use_l2_norm = use_l2_norm
 
     def _initialize_weights(self, module):
         return _initialize_weights(self, module)
@@ -237,7 +239,8 @@ class PolarRnn(nn.Module):
                     head_first=False,
                 )
 
-                output = l2_norm(output)
+                if self.use_l2_norm:
+                    output = l2_norm(output)
 
                 # Spectral update
                 if len(f.shape) == 4:

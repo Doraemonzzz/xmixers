@@ -257,6 +257,7 @@ def get_token_mixer(config, layer_idx):
             init_std=config.init_std,
             gain=config.gain,
             debug=config.debug,
+            use_l2_norm=config.use_l2_norm,
         )
     elif config.token_mixer_type in ["dense_rnn"]:
         return cls(
