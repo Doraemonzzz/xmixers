@@ -217,7 +217,7 @@ class PolarRnn(nn.Module):
                     scale=1,
                     head_first=False,
                 )
-            else:
+            elif self.debug == 3:
                 # Unitary update
                 if self.training or use_cache:
                     fn = chunk_dplr_delta_rule
@@ -257,6 +257,53 @@ class PolarRnn(nn.Module):
                 output, spectral_state = fn(
                     q=output.to(dtype),
                     k=v.to(dtype),
+                    v=v.to(dtype),
+                    g=f.to(dtype),
+                    initial_state=spectral_state,
+                    output_final_state=use_cache,
+                    scale=1,
+                    head_first=False,
+                )
+            else:
+                # Unitary update
+                if self.training or use_cache:
+                    fn = chunk_dplr_delta_rule
+                else:
+                    fn = fused_recurrent_dplr_delta_rule
+
+                dtype = q.dtype
+
+                output, unitary_state = fn(
+                    q=q,
+                    k=self.zero.to(dtype),
+                    v=self.zero.to(dtype),
+                    a=(k * gamma.unsqueeze(-1)).to(dtype),
+                    b=k.to(dtype),
+                    gk=self.zero.to(dtype),
+                    initial_state=unitary_state,
+                    output_final_state=use_cache,
+                    scale=1,
+                    head_first=False,
+                )
+
+                if self.use_l2_norm:
+                    output = l2_norm(output)
+
+                # Spectral update
+                if len(f.shape) == 4:
+                    if self.training or use_cache:
+                        fn = chunk_gla
+                    else:
+                        fn = fused_recurrent_gla
+                else:
+                    if self.training or use_cache:
+                        fn = chunk_simple_gla
+                    else:
+                        fn = fused_recurrent_simple_gla
+
+                output, spectral_state = fn(
+                    q=output.to(dtype),
+                    k=k.to(dtype),
                     v=v.to(dtype),
                     g=f.to(dtype),
                     initial_state=spectral_state,
