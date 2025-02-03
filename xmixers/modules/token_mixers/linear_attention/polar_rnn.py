@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
+from einops import rearrange, repeat
 from fla.ops.generalized_delta_rule import (
     chunk_dplr_delta_rule,
     fused_recurrent_dplr_delta_rule,
@@ -97,6 +97,7 @@ class PolarRnn(nn.Module):
         self.f = torch.empty(0)
         self.zero = torch.empty(0)
         self.gamma = torch.empty(0)
+        self.init_state = torch.empty(0)
         self.debug = debug  # rm later
         self.use_l2_norm = use_l2_norm
 
@@ -154,16 +155,28 @@ class PolarRnn(nn.Module):
             [q, k, v],
         )
 
+        # if self.norm_q:
+        #     q = F.normalize(q, p=self.qkv_norm_type, dim=-1)
+        # k = F.normalize(k, p=self.qkv_norm_type, dim=-1)
+        # if self.norm_v:
+        #     v = F.normalize(v, p=self.qkv_norm_type, dim=-1)
         if self.norm_q:
-            q = F.normalize(q, p=self.qkv_norm_type, dim=-1)
-        k = F.normalize(k, p=self.qkv_norm_type, dim=-1)
+            q = l2_norm(q)
+        k = l2_norm(k)
         if self.norm_v:
-            v = F.normalize(v, p=self.qkv_norm_type, dim=-1)
+            v = l2_norm(v)
 
         if self.use_decay and not self.scaler_decay:
             f = rearrange(f, "... (h d) -> ... h d", d=self.head_dim)
 
-        unitary_state = None
+        if self.init_state.shape[0] == 0:
+            init_state = torch.eye(d).to(q)
+            self.init_state = init_state
+
+        if self.debug in [3, 4]:
+            unitary_state = repeat(self.init_state, "d e -> b h d e", b=b, h=h)
+        else:
+            unitary_state = None
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
             unitary_state = past_key_values[self.layer_idx]["unitary_state"]
 
