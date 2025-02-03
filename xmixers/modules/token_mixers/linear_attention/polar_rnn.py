@@ -13,7 +13,7 @@ from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
 from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
-from xmixers.modules.normalizations import get_norm_fn
+from xmixers.modules.normalizations import get_norm_fn, l2_norm
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
 
@@ -236,6 +236,8 @@ class PolarRnn(nn.Module):
                     scale=1,
                     head_first=False,
                 )
+
+                output = l2_norm(output)
 
                 # Spectral update
                 if len(f.shape) == 4:
