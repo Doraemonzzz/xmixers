@@ -263,18 +263,18 @@ class PolarRnn(nn.Module):
                 )
             elif self.debug == 4:
                 dtype = q.dtype
+                if not self.use_decay:
+                    log_f = self.zero
 
                 # (I - kk^T) (I - kk^T)
-                k_ = k * gamma.unsqueeze(-1)
+                k_ = k * gamma.unsqueeze(-1) * torch.exp(log_f)
                 a = torch.cat([k_, k_], dim=1)
                 b = torch.cat([k, k], dim=1)
                 k = torch.cat([self.zero, k], dim=1)
                 v = torch.cat([self.zero, v], dim=1)
                 q = torch.cat([self.zero, q], dim=1)
-                if self.use_decay:
-                    log_f = torch.cat([log_f, log_f], dim=1)
-                else:
-                    log_f = torch.cat([self.zero, self.zero], dim=1)
+                log_f = torch.cat([log_f, log_f], dim=1)
+
                 log_f, a, b, k, v, q = map(
                     lambda x: rearrange(x, "b (c n) ... -> b (n c) ... ", c=2),
                     [log_f, a, b, k, v, q],
@@ -300,6 +300,7 @@ class PolarRnn(nn.Module):
                     head_first=False,
                 )
 
+                output = rearrange(output, "b (n c) ... -> b (c n) ...", c=2)
                 output = output[:, -n:]
             elif self.debug in [5, 6]:
                 dtype = q.dtype

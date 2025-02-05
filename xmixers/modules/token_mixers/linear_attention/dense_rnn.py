@@ -11,7 +11,7 @@ from fla.ops.generalized_delta_rule import (
 from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
-from xmixers.modules.normalizations import get_norm_fn
+from xmixers.modules.normalizations import get_norm_fn, l2_norm
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
 
@@ -172,11 +172,16 @@ class DenseRnn(nn.Module):
             [q, k, v, log_f],
         )
 
+        # if self.norm_q:
+        #     q = F.normalize(q, p=self.qkv_norm_type, dim=-1)
+        # k = F.normalize(k, p=self.qkv_norm_type, dim=-1)
+        # if self.norm_v:
+        #     v = F.normalize(v, p=self.qkv_norm_type, dim=-1)
         if self.norm_q:
-            q = F.normalize(q, p=self.qkv_norm_type, dim=-1)
-        k = F.normalize(k, p=self.qkv_norm_type, dim=-1)
+            q = l2_norm(q)
+        k = l2_norm(k)
         if self.norm_v:
-            v = F.normalize(v, p=self.qkv_norm_type, dim=-1)
+            v = l2_norm(v)
 
         # old version
         # D = concat([0, f, 0])
@@ -245,6 +250,7 @@ class DenseRnn(nn.Module):
         else:
             assert False
 
+        output = rearrange(output, "b (n c) ... -> b (c n) ...", c=2)
         output = output[:, -n:]
 
         if past_key_values is not None:

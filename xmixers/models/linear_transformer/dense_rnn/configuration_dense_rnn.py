@@ -26,6 +26,7 @@ class DenseRnnConfig(PretrainedConfig):
         embed_dim=1024,
         num_heads=8,
         bias=False,
+        scalar_decay=False,
         # channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
@@ -73,6 +74,7 @@ class DenseRnnConfig(PretrainedConfig):
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.bias = bias
+        self.scalar_decay = scalar_decay
         # channel mixer config
         self.channel_mixer_type = channel_mixer_type
         self.mid_dim = mid_dim
