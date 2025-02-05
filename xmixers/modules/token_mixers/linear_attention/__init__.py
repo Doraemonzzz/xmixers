@@ -1,3 +1,4 @@
+from .delta_unit import DeltaUnit
 from .dense_rnn import DenseRnn
 from .hgru2 import Hgru2
 from .hgru3 import Hgru3
