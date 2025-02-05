@@ -29,6 +29,7 @@ class Hgrn2Config(PretrainedConfig):
         # glu config
         mid_dim=1024,
         channel_mixer_activation="silu",
+        use_gate_linear=True,
         # others
         max_position_embeddings=1024,
         num_layers=24,
@@ -68,6 +69,7 @@ class Hgrn2Config(PretrainedConfig):
         # glu config
         self.mid_dim = mid_dim
         self.channel_mixer_activation = channel_mixer_activation
+        self.use_gate_linear = use_gate_linear
         # others
         self.max_position_embeddings = max_position_embeddings
         self.num_layers = num_layers

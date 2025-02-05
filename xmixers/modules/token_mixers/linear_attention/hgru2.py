@@ -112,6 +112,8 @@ class Hgru2(nn.Module):
         if lower_bound is not None:
             f = lower_bound + (1 - lower_bound) * f
             log_f = torch.log(f)
+        else:
+            log_f = F.logsigmoid(f)
 
         k = 1 - f
 

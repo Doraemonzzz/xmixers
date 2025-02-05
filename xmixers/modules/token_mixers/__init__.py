@@ -146,7 +146,9 @@ def get_token_mixer(config, layer_idx):
             gain=config.gain,
             beta_activation=config.beta_activation,
             use_dense_memory=config.use_dense_memory,
-            token_mixer_norm_type=config.token_mixer_norm_type,
+            token_mixer_norm_type=config.token_mixer_norm_type
+            if hasattr(config, "token_mixer_norm_type")
+            else config.norm_type,
             norm_pos=config.norm_pos,
         )
     elif config.token_mixer_type in ["hgru3"]:

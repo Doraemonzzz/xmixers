@@ -1,30 +1,33 @@
 # coding=utf-8
-""" PyTorch LLaMA model."""
+""" PyTorch LmHeadHybrid model."""
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
-from transformers.modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-)
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
+
+from xmixers.utils.loss_utils import compute_loss
+
+from .modeling_outputs import (
+    CausalLmHeadHybridOutputWithPast,
+    LmHeadHybridOutputWithPast,
+)
 
 logger = logging.get_logger(__name__)
 
 
 from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
-from xmixers.utils import XmixersCache, _init_weights, _post_init_weights
-from xmixers.utils.loss_utils import compute_loss
+from xmixers.utils import XmixersCache, _init_weights, _post_init_weights, print_module
 
-from .configuration_llama import LLaMAConfig
+from .configuration_lm_head_hybrid import LmHeadHybridConfig
 
 
-class LLaMALayer(nn.Module):
-    def __init__(self, config: LLaMAConfig, layer_idx=0):
+class LmHeadHybridLayer(nn.Module):
+    def __init__(self, config: LmHeadHybridConfig, layer_idx=0):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
@@ -35,9 +38,6 @@ class LLaMALayer(nn.Module):
 
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
-        self.use_postnorm = config.use_postnorm
-        if self.use_postnorm:
-            self.forward = self.forward_postnorm
         self.fuse_norm_add = config.fuse_norm_add
 
     def forward(
@@ -47,6 +47,7 @@ class LLaMALayer(nn.Module):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         residual: Optional[torch.Tensor] = None,
+        lower_bound: Optional[torch.Tensor] = None,
     ):
         if not self.fuse_norm_add:
             # token mixer
@@ -55,6 +56,7 @@ class LLaMALayer(nn.Module):
                 x=self.token_norm(x),
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                lower_bound=lower_bound,
             )
             x = x + residual
 
@@ -79,75 +81,22 @@ class LLaMALayer(nn.Module):
 
         return outputs
 
-    # def forward_postnorm(
-    #     self,
-    #     x,
-    #     attention_mask: Optional[torch.Tensor] = None,  # (b, m)
-    #     past_key_values: Optional[Cache] = None,
-    #     use_cache: Optional[bool] = False,
-    #     residual: Optional[torch.Tensor] = None,
-    # ):
-    #     # token mixer
-    #     residual = x
-    #     x, past_key_values = self.token_mixer(
-    #         x=x,
-    #         attention_mask=attention_mask,
-    #         past_key_values=past_key_values,
-    #         use_cache=use_cache,
-    #     )
-    #     x, _ = self.token_norm(
-    #         x,
-    #         residual=residual,
-    #     )
 
-    #     # channel mixer
-    #     x, _ = self.channel_norm(self.channel_mixer(x), residual=x)
-
-    #     outputs = (x, past_key_values, None)
-
-    #     return outputs
-
-    def forward_postnorm(
-        self,
-        x,
-        attention_mask: Optional[torch.Tensor] = None,  # (b, m)
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        residual: Optional[torch.Tensor] = None,
-    ):
-        # token mixer
-        residual = x
-        x, past_key_values = self.token_mixer(
-            x=x,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-        )
-        x = self.token_norm(x + residual)
-
-        # channel mixer
-        x = self.channel_norm(self.channel_mixer(x) + x)
-
-        outputs = (x, past_key_values, None)
-
-        return outputs
-
-
-class LLaMAPreTrainedModel(PreTrainedModel):
-    config_class = LLaMAConfig
+class LmHeadHybridPreTrainedModel(PreTrainedModel):
+    config_class = LmHeadHybridConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LLaMALayer"]
+    _no_split_modules = ["LmHeadHybridLayer"]
 
     def _init_weights(self, module):
         return _init_weights(self, module)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LLaMAModel):
+        if isinstance(module, LmHeadHybridModel):
             module.gradient_checkpointing = value
 
 
-class LLaMAModel(LLaMAPreTrainedModel):
-    def __init__(self, config: LLaMAConfig):
+class LmHeadHybridModel(LmHeadHybridPreTrainedModel):
+    def __init__(self, config: LmHeadHybridConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
@@ -159,13 +108,42 @@ class LLaMAModel(LLaMAPreTrainedModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
-        self.layers = nn.ModuleList(
-            [LLaMALayer(config, layer_idx) for layer_idx in range(config.num_layers)]
-        )
-
+        layers = []
+        config.use_lrpe = config.linear_use_lrpe
+        config.lrpe_type = config.linear_lrpe_type
+        config.base = config.linear_base
+        for layer_idx in range(config.num_layers):
+            layers.append(LmHeadHybridLayer(config, layer_idx))
+        self.layers = nn.ModuleList(layers)
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+
+        # config.token_mixer_type = "attn"
+        # config.use_lrpe = config.softmax_use_lrpe
+        # config.lrpe_type = config.softmax_lrpe_type
+        # config.base = config.softmax_base
+        # self.extra_layer = LmHeadHybridLayer(config, config.num_layers)
+        # self.extra_final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+
+        self.use_lower_bound = config.use_lower_bound
+        if self.use_lower_bound:
+            # log lower bound
+            self.log_lower_bounds = nn.Parameter(
+                torch.ones(config.num_layers, config.embed_dim), requires_grad=True
+            )
+
         # Initialize weights and apply final processing
         self.post_init()
+
+    def extra_repr(self):
+        return print_module(self)
+
+    def post_init_weights(
+        self,
+    ):
+        _post_init_weights(self)
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -184,7 +162,7 @@ class LLaMAModel(LLaMAPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[Tuple, LmHeadHybridOutputWithPast]:
         use_cache = (
             use_cache
             if use_cache is not None
@@ -228,7 +206,17 @@ class LLaMAModel(LLaMAPreTrainedModel):
         all_self_attns = () if output_attentions else None
         residual = None
 
+        if self.use_lower_bound:
+            # lower bound
+            lower_bounds = F.softmax(self.log_lower_bounds, dim=0)
+            lower_bounds = torch.cumsum(lower_bounds, dim=0)
+            lower_bounds -= lower_bounds[0, ...].clone()
+
         for idx, layer in enumerate(self.layers):
+            if self.use_lower_bound:
+                lower_bound = lower_bounds[idx]
+            else:
+                lower_bound = None
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -244,6 +232,7 @@ class LLaMAModel(LLaMAPreTrainedModel):
                     past_key_values,
                     use_cache,
                     residual,
+                    lower_bound,
                 )
             else:
                 hidden_states, past_key_values, residual = layer(
@@ -252,16 +241,33 @@ class LLaMAModel(LLaMAPreTrainedModel):
                     past_key_values=past_key_values,
                     use_cache=use_cache,
                     residual=residual,
+                    lower_bound=lower_bound,
                 )
 
         if residual is not None:
-            hidden_states = self.final_norm(hidden_states, residual=residual)[0]
+            linear_attn_hidden_states = self.final_norm(
+                hidden_states, residual=residual
+            )[0]
         else:
-            hidden_states = self.final_norm(hidden_states)
+            linear_attn_hidden_states = self.final_norm(hidden_states)
+
+        # hidden_states, past_key_values, residual = self.extra_layer(
+        #     hidden_states,
+        #     attention_mask=attention_mask,
+        #     past_key_values=past_key_values,
+        #     use_cache=use_cache,
+        #     residual=residual,
+        # )
+        # if residual is not None:
+        #     softmax_attn_hidden_states = self.extra_final_norm(hidden_states, residual=residual)[0]
+        # else:
+        #     softmax_attn_hidden_states = self.extra_final_norm(hidden_states)
+
+        softmax_attn_hidden_states = torch.zeros((1)).to(linear_attn_hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
-            all_hidden_states += (hidden_states,)
+            all_hidden_states += (linear_attn_hidden_states, softmax_attn_hidden_states)
 
         if not return_dict:
             return tuple(
@@ -274,31 +280,28 @@ class LLaMAModel(LLaMAPreTrainedModel):
                 ]
                 if v is not None
             )
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
+        return LmHeadHybridOutputWithPast(
+            last_linear_attn_hidden_state=linear_attn_hidden_states,
+            last_softmax_attn_hidden_state=softmax_attn_hidden_states,
             past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
 
 
-class LLaMAForCausalLM(LLaMAPreTrainedModel):
+class LmHeadHybridForCausalLM(LmHeadHybridPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
+    supports_report_metrics: bool = True
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = LLaMAModel(config)
+        self.model = LmHeadHybridModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def post_init_weights(
-        self,
-    ):
-        _post_init_weights(self)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -331,7 +334,7 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, CausalLmHeadHybridOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -349,9 +352,9 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LLaMAForCausalLM
+        >>> from transformers import AutoTokenizer, LmHeadHybridForCausalLM
 
-        >>> model = LLaMAForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = LmHeadHybridForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
@@ -388,26 +391,68 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
             return_dict=return_dict,
         )
 
-        hidden_states = outputs[0]
+        linear_attn_hidden_states = outputs[0]
+        softmax_attn_hidden_states = outputs[1]
 
-        fuse_linear_and_cross_entropy = (
-            self.config.ce_type not in ["fla_fce", "naive", "xopes_ce"]
-            and self.training
-        )
-        logits, loss = compute_loss(
-            lm_head=self.lm_head,
-            ce_type=self.config.ce_type,
-            hidden_states=hidden_states,
-            labels=labels,
-            num_logits_to_keep=num_logits_to_keep,
-            fuse_linear_and_cross_entropy=fuse_linear_and_cross_entropy,
-        )
+        if labels is not None:
+            fuse_linear_and_cross_entropy = (
+                self.config.ce_type not in ["fla_fce", "naive", "xopes_ce"]
+                and self.training
+            )
+
+            linear_attn_logits, linear_attn_loss = compute_loss(
+                lm_head=self.lm_head,
+                ce_type=self.config.ce_type,
+                hidden_states=linear_attn_hidden_states,
+                labels=labels,
+                num_logits_to_keep=num_logits_to_keep,
+                fuse_linear_and_cross_entropy=fuse_linear_and_cross_entropy,
+            )
+
+            # softmax_attn_logits, softmax_attn_loss = compute_loss(
+            #     lm_head=self.lm_head,
+            #     ce_type=self.config.ce_type,
+            #     hidden_states=softmax_attn_hidden_states,
+            #     labels=labels,
+            #     num_logits_to_keep=num_logits_to_keep,
+            #     fuse_linear_and_cross_entropy=fuse_linear_and_cross_entropy,
+            # )
+            softmax_attn_logits = None
+            softmax_attn_loss = torch.zeros_like(linear_attn_loss).to(linear_attn_loss)
+
+            self.config.alpha
+            # loss = linear_attn_loss * alpha + softmax_attn_loss * (1 - alpha)
+            loss = linear_attn_loss
+            self.report_metrics(
+                linear_attn_loss=linear_attn_loss, softmax_attn_loss=softmax_attn_loss
+            )
+        else:
+            if self.config.use_linear_head:
+                linear_attn_logits = self.lm_head(
+                    linear_attn_hidden_states[:, -num_logits_to_keep:]
+                )
+                softmax_attn_logits = None
+            else:
+                linear_attn_logits = None
+                softmax_attn_logits = self.lm_head(
+                    softmax_attn_hidden_states[:, -num_logits_to_keep:]
+                )
+            loss = None
+            linear_attn_loss = None
+            softmax_attn_loss = None
+
+        if self.config.use_linear_head:
+            logits = linear_attn_logits
+        else:
+            logits = softmax_attn_logits
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return CausalLmHeadHybridOutputWithPast(
+            linear_attn_loss=linear_attn_loss,
+            softmax_attn_loss=softmax_attn_loss,
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,

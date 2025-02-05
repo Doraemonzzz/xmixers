@@ -1,5 +1,5 @@
 # coding=utf-8
-""" LLaMA configuration"""
+""" Lm Head Hybrid configuration"""
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
@@ -7,8 +7,8 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-class LLaMAConfig(PretrainedConfig):
-    model_type = "llama_"
+class LmHeadHybridConfig(PretrainedConfig):
+    model_type = "lm_head_hybrid"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -21,19 +21,19 @@ class LLaMAConfig(PretrainedConfig):
         init_std=0.02,
         tie_word_embeddings=False,
         ##### model config
-        # token mixer config
+        token_mixer_type_list=[],
+        causal=True,
+        # attention config
         token_mixer_type="attn",
         embed_dim=1024,
         num_heads=8,
         kv_heads=-1,
         bias=False,
-        use_lrpe=True,
-        lrpe_type=1,
-        base=10000,
+        softmax_use_lrpe=True,
+        softmax_lrpe_type=1,
+        softmax_base=10000,
         mpa_type=0,
         mpa_activation="none",
-        use_l2_norm=False,
-        gate_type=0,
         head_dim=-1,
         kv_rank=2,
         cp_activation="none",
@@ -41,6 +41,19 @@ class LLaMAConfig(PretrainedConfig):
         kv_lora_rank=512,
         qk_rope_head_dim=64,
         window_size=-1,
+        # linear attention config
+        use_output_gate=True,
+        q_activation="silu",
+        k_activation="silu",
+        beta_activation="silu",
+        use_dense_memory=False,
+        n_min=2,
+        n_max=256,
+        linear_use_lrpe=False,
+        linear_lrpe_type=1,
+        linear_base=10000,
+        token_mixer_norm_type="layernorm",
+        norm_pos="ogate",
         # channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
@@ -51,11 +64,11 @@ class LLaMAConfig(PretrainedConfig):
         v_dim=1024,
         mem_dim=1024,
         use_scale=0,
-        use_output_gate=False,
         output_gate_activation="silu",
         use_low_rank_output_gate=False,
         channel_mixer_init_type=0,
         # others
+        use_lower_bound=True,
         max_position_embeddings=1024,
         num_layers=24,
         norm_type="layernorm",
@@ -67,6 +80,8 @@ class LLaMAConfig(PretrainedConfig):
         ce_type="naive",
         fuse_norm_add=False,
         gain=0.02,
+        alpha=0.5,
+        use_linear_head=True,
         **kwargs,
     ):
         super().__init__(
@@ -81,19 +96,19 @@ class LLaMAConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.init_std = init_std
         ##### add
+        self.token_mixer_type_list = token_mixer_type_list
+        self.causal = causal
         # token mixer config
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.kv_heads = kv_heads
         self.bias = bias
-        self.use_lrpe = use_lrpe
-        self.lrpe_type = lrpe_type
-        self.base = base
+        self.softmax_use_lrpe = softmax_use_lrpe
+        self.softmax_lrpe_type = softmax_lrpe_type
+        self.softmax_base = softmax_base
         self.token_mixer_type = token_mixer_type
         self.mpa_type = mpa_type
         self.mpa_activation = mpa_activation
-        self.use_l2_norm = use_l2_norm
-        self.gate_type = gate_type
         self.kv_rank = kv_rank
         self.cp_activation = cp_activation
         self.q_lora_rank = q_lora_rank
@@ -101,6 +116,19 @@ class LLaMAConfig(PretrainedConfig):
         self.qk_rope_head_dim = qk_rope_head_dim
         self.head_dim = head_dim
         self.window_size = window_size
+        # linear attention config
+        self.use_output_gate = use_output_gate
+        self.q_activation = q_activation
+        self.k_activation = k_activation
+        self.beta_activation = beta_activation
+        self.use_dense_memory = use_dense_memory
+        self.n_min = n_min
+        self.n_max = n_max
+        self.linear_use_lrpe = linear_use_lrpe
+        self.linear_lrpe_type = linear_lrpe_type
+        self.linear_base = linear_base
+        self.token_mixer_norm_type = token_mixer_norm_type
+        self.norm_pos = norm_pos
         # channel mixer config
         self.channel_mixer_type = channel_mixer_type
         self.mid_dim = mid_dim
@@ -109,12 +137,12 @@ class LLaMAConfig(PretrainedConfig):
         self.v_dim = v_dim
         self.mem_dim = mem_dim
         self.use_scale = use_scale
-        self.use_output_gate = use_output_gate
         self.output_gate_activation = output_gate_activation
         self.use_low_rank_output_gate = use_low_rank_output_gate
         self.channel_mixer_init_type = channel_mixer_init_type
         self.use_gate_linear = use_gate_linear
         # others
+        self.use_lower_bound = use_lower_bound
         self.max_position_embeddings = max_position_embeddings
         self.num_layers = num_layers
         self.norm_type = norm_type
@@ -126,3 +154,5 @@ class LLaMAConfig(PretrainedConfig):
         self.ce_type = ce_type
         self.fuse_norm_add = fuse_norm_add
         self.gain = gain
+        self.alpha = alpha
+        self.use_linear_head = use_linear_head

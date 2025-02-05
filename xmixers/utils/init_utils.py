@@ -90,6 +90,7 @@ def _init_weights(self, module):
             nn.init.trunc_normal_(
                 module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
             )
+
             if module.padding_idx is not None:
                 # torchtitan has bug here
                 try:

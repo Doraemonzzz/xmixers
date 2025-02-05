@@ -117,7 +117,7 @@ def compute_loss(
         else:
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
-            shift_logits = shift_logits.view(-1, shift_logits[-1])
+            shift_logits = shift_logits.view(-1, shift_logits.shape[-1])
             loss = loss_fct(
                 ce_type=ce_type,
                 labels=shift_labels,

@@ -1,4 +1,8 @@
-from .hybrid.naive_hybrid import (
+from .hybrid import (
+    LmHeadHybridConfig,
+    LmHeadHybridForCausalLM,
+    LmHeadHybridLayer,
+    LmHeadHybridModel,
     NaiveHybridConfig,
     NaiveHybridForCausalLM,
     NaiveHybridLayer,
