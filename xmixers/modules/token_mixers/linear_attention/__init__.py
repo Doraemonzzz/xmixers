@@ -1,3 +1,4 @@
+from .chunk_rnn import ChunkRnn
 from .delta_unit import DeltaUnit
 from .dense_rnn import DenseRnn
 from .hgru2 import Hgru2

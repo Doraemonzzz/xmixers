@@ -1,4 +1,5 @@
 from .linear_attention import (
+    ChunkRnn,
     DeltaUnit,
     DenseRnn,
     Hgru2,
@@ -34,6 +35,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "metala": MetaLa,
     "polar_rnn": PolarRnn,
     "dense_rnn": DenseRnn,
+    "chunk_rnn": ChunkRnn,
     "delta_unit": DeltaUnit,
     # long conv
     "gtu": Gtu,
@@ -311,4 +313,28 @@ def get_token_mixer(config, layer_idx):
             num_layers=config.num_layers,
             init_std=config.init_std,
             gain=config.gain,
+        )
+    elif config.token_mixer_type in ["chunk_rnn"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            expand_ratio=config.expand_ratio,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_output_gate=config.use_output_gate,
+            norm_type=config.norm_type,
+            q_activation=config.q_activation,
+            causal=config.causal,
+            rescale_type=config.rescale_type,
+            token_mixer_init_type=config.token_mixer_init_type,
+            num_layers=config.num_layers,
+            init_std=config.init_std,
+            gain=config.gain,
+            token_mixer_norm_type=config.token_mixer_norm_type
+            if hasattr(config, "token_mixer_norm_type")
+            else config.norm_type,
+            chunk_type=config.chunk_type,
+            gradient_type=config.gradient_type,
+            use_init_weights=config.use_init_weights,
+            use_scale=config.use_scale,
+            chunk_size=config.chunk_size,
         )

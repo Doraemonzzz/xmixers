@@ -1,3 +1,4 @@
+from .chunk_rnn import ChunkRnnConfig, ChunkRnnForCausalLM, ChunkRnnLayer, ChunkRnnModel
 from .deltanet import DeltaNetConfig, DeltaNetForCausalLM, DeltaNetLayer, DeltaNetModel
 from .dense_rnn import DenseRnnConfig, DenseRnnForCausalLM, DenseRnnLayer, DenseRnnModel
 from .hgrn2 import Hgrn2Config, Hgrn2ForCausalLM, Hgrn2Layer, Hgrn2Model

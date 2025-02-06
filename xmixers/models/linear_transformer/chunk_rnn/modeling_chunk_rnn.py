@@ -1,8 +1,9 @@
 # coding=utf-8
-""" PyTorch LLaMA model."""
+""" PyTorch ChunkRnn model."""
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
@@ -17,14 +18,14 @@ logger = logging.get_logger(__name__)
 
 
 from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
-from xmixers.utils import XmixersCache, _init_weights, _post_init_weights
+from xmixers.utils import XmixersCache, _init_weights, print_module
 from xmixers.utils.loss_utils import compute_loss
 
-from .configuration_llama import LLaMAConfig
+from .configuration_chunk_rnn import ChunkRnnConfig
 
 
-class LLaMALayer(nn.Module):
-    def __init__(self, config: LLaMAConfig, layer_idx=0):
+class ChunkRnnLayer(nn.Module):
+    def __init__(self, config: ChunkRnnConfig, layer_idx=0):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
@@ -35,119 +36,48 @@ class LLaMALayer(nn.Module):
 
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
-        self.use_postnorm = config.use_postnorm
-        if self.use_postnorm:
-            self.forward = self.forward_postnorm
-        self.fuse_norm_add = config.fuse_norm_add
-
     def forward(
         self,
         x,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        residual: Optional[torch.Tensor] = None,
-    ):
-        if not self.fuse_norm_add:
-            # token mixer
-            residual = x
-            x, past_key_values = self.token_mixer(
-                x=self.token_norm(x),
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-            )
-            x = x + residual
-
-            # channel mixer
-            x = self.channel_mixer(self.channel_norm(x)) + x
-        else:
-            # token mixer
-            residual_token = x
-            x_attn, past_key_values = self.token_mixer(
-                x=self.token_norm(x),
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-            )
-
-            # channel mixer
-            x_channel, residual_channel = self.channel_norm(
-                x_attn, residual=residual_token
-            )
-            x = self.channel_mixer(x_channel) + residual_channel
-
-        outputs = (x, past_key_values, None)
-
-        return outputs
-
-    # def forward_postnorm(
-    #     self,
-    #     x,
-    #     attention_mask: Optional[torch.Tensor] = None,  # (b, m)
-    #     past_key_values: Optional[Cache] = None,
-    #     use_cache: Optional[bool] = False,
-    #     residual: Optional[torch.Tensor] = None,
-    # ):
-    #     # token mixer
-    #     residual = x
-    #     x, past_key_values = self.token_mixer(
-    #         x=x,
-    #         attention_mask=attention_mask,
-    #         past_key_values=past_key_values,
-    #         use_cache=use_cache,
-    #     )
-    #     x, _ = self.token_norm(
-    #         x,
-    #         residual=residual,
-    #     )
-
-    #     # channel mixer
-    #     x, _ = self.channel_norm(self.channel_mixer(x), residual=x)
-
-    #     outputs = (x, past_key_values, None)
-
-    #     return outputs
-
-    def forward_postnorm(
-        self,
-        x,
-        attention_mask: Optional[torch.Tensor] = None,  # (b, m)
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        residual: Optional[torch.Tensor] = None,
+        lower_bound: Optional[torch.Tensor] = None,
     ):
         # token mixer
         residual = x
         x, past_key_values = self.token_mixer(
-            x=x,
+            x=self.token_norm(x),
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            lower_bound=lower_bound,
         )
-        x = self.token_norm(x + residual)
+        x = x + residual
 
         # channel mixer
-        x = self.channel_norm(self.channel_mixer(x) + x)
+        x = self.channel_mixer(self.channel_norm(x)) + x
 
-        outputs = (x, past_key_values, None)
+        outputs = (x, past_key_values)
 
         return outputs
 
 
-class LLaMAPreTrainedModel(PreTrainedModel):
-    config_class = LLaMAConfig
+class ChunkRnnPreTrainedModel(PreTrainedModel):
+    config_class = ChunkRnnConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LLaMALayer"]
+    _no_split_modules = ["ChunkRnnLayer"]
 
     def _init_weights(self, module):
         return _init_weights(self, module)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LLaMAModel):
+        if isinstance(module, ChunkRnnModel):
             module.gradient_checkpointing = value
 
 
-class LLaMAModel(LLaMAPreTrainedModel):
-    def __init__(self, config: LLaMAConfig):
+class ChunkRnnModel(ChunkRnnPreTrainedModel):
+    def __init__(self, config: ChunkRnnConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
@@ -160,12 +90,20 @@ class LLaMAModel(LLaMAPreTrainedModel):
             config.vocab_size, config.embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
-            [LLaMALayer(config, layer_idx) for layer_idx in range(config.num_layers)]
+            [ChunkRnnLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
+        )
+        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+
+        # log lower bound
+        self.log_lower_bounds = nn.Parameter(
+            torch.ones(config.num_layers, config.embed_dim), requires_grad=True
         )
 
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
         # Initialize weights and apply final processing
         self.post_init()
+
+    def extra_repr(self):
+        return print_module(self)
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -226,38 +164,36 @@ class LLaMAModel(LLaMAPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        residual = None
+
+        # lower bound
+        lower_bounds = F.softmax(self.log_lower_bounds, dim=0)
+        lower_bounds = torch.cumsum(lower_bounds, dim=0)
+        lower_bounds -= lower_bounds[0, ...].clone()
 
         for idx, layer in enumerate(self.layers):
+            lower_bound = lower_bounds[idx]
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                (
-                    hidden_states,
-                    past_key_values,
-                    residual,
-                ) = self._gradient_checkpointing_func(
+                hidden_states, past_key_values = self._gradient_checkpointing_func(
                     layer.__call__,
                     hidden_states,
                     attention_mask,
                     past_key_values,
                     use_cache,
-                    residual,
+                    lower_bound,
                 )
             else:
-                hidden_states, past_key_values, residual = layer(
+                hidden_states, past_key_values = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
-                    residual=residual,
+                    lower_bound=lower_bound,
                 )
 
-        if residual is not None:
-            hidden_states = self.final_norm(hidden_states, residual=residual)[0]
-        else:
-            hidden_states = self.final_norm(hidden_states)
+        hidden_states = self.final_norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -274,6 +210,7 @@ class LLaMAModel(LLaMAPreTrainedModel):
                 ]
                 if v is not None
             )
+
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
@@ -282,23 +219,18 @@ class LLaMAModel(LLaMAPreTrainedModel):
         )
 
 
-class LLaMAForCausalLM(LLaMAPreTrainedModel):
+class ChunkRnnForCausalLM(ChunkRnnPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = LLaMAModel(config)
+        self.model = ChunkRnnModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def post_init_weights(
-        self,
-    ):
-        _post_init_weights(self)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -330,7 +262,6 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
-        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -339,19 +270,14 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-
         Returns:
 
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LLaMAForCausalLM
+        >>> from transformers import AutoTokenizer, ChunkRnnForCausalLM
 
-        >>> model = LLaMAForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = ChunkRnnForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"

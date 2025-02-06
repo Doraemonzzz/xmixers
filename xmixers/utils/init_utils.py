@@ -27,10 +27,18 @@ def _initialize_weights(self, module):
             nn.init.xavier_uniform_(module.weight, gain=gain)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
+
         if hasattr(module, "k_head"):
             nn.init.xavier_uniform_(module.k_head, gain=gain)
+
         if hasattr(module, "v_head"):
             nn.init.xavier_uniform_(module.v_head, gain=gain)
+
+        if hasattr(module, "state") and module.state is not None:
+            nn.init.zeros_(module.state)
+
+        if hasattr(module, "scale") and module.scale is not None:
+            nn.init.ones_(module.scale)
 
     if self.rescale_type == 1:
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:

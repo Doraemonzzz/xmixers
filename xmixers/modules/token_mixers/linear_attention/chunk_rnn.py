@@ -1,40 +1,39 @@
-import math
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from fla.ops.gla import chunk_gla, fused_recurrent_gla
-from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
 from transformers.cache_utils import Cache
-from xopes.ops import cumsum_fn
+from xopes.ops import chunk_rnn_parallel_fn, chunk_rnn_sequential_fn
 
 from xmixers.modules.activations import get_activation_fn
-from xmixers.modules.normalizations import get_norm_fn
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
+from xmixers.modules.normalizations import get_norm_fn, l2_norm
+from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
 
-class Hgru3(nn.Module):
+class ChunkRnn(nn.Module):
     def __init__(
         self,
         embed_dim: int,
         expand_ratio: int,
         bias: bool = False,
         layer_idx: int = 0,
-        use_output_gate: bool = True,
-        norm_type: str = "layernorm",
+        use_output_gate: bool = False,
+        token_mixer_norm_type: str = "layernorm",
         q_activation: str = "silu",
-        k_activation: str = "silu",
-        beta_activation: str = "silu",
         causal: bool = True,
-        use_dense_memory: bool = False,
-        scalar_decay: bool = False,
         token_mixer_init_type: int = 0,
         rescale_type: int = 0,
         num_layers: int = 12,
         init_std: float = 0.02,
         gain: float = 0.02,
+        # chunk params
+        chunk_type: int = 0,
+        gradient_type: int = 0,
+        use_init_weights: bool = False,
+        use_scale: bool = False,
+        chunk_size: int = 128,
         **kwargs,
     ):
         super().__init__()
@@ -49,25 +48,48 @@ class Hgru3(nn.Module):
         self.layer_idx = layer_idx
         self.expand_ratio = expand_ratio
         self.causal = causal
-        self.use_dense_memory = use_dense_memory
+        self.num_heads = embed_dim // expand_ratio
         self.use_output_gate = use_output_gate
+        self.use_init_weights = use_init_weights
+        self.use_scale = use_scale
+        self.chunk_size = chunk_size
+        self.chunk_type = chunk_type
+        self.gradient_type = gradient_type
 
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.scalar_decay = scalar_decay
-        if self.scalar_decay:
-            self.f_proj = nn.Linear(embed_dim, embed_dim // expand_ratio, bias=bias)
+        self.in_proj = nn.Linear(embed_dim, 3 * embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
-        self.k_act = get_activation_fn(k_activation)
-        self.norm = get_norm_fn(norm_type)(embed_dim, bias=bias)
+        num_groups = embed_dim // expand_ratio
+        self.norm = get_norm_fn(token_mixer_norm_type)(
+            embed_dim, bias=False, num_groups=num_groups
+        )
 
         if self.use_output_gate:
             self.output_gate = nn.Sequential(
                 nn.Linear(embed_dim, expand_ratio, bias=bias),
                 nn.Linear(expand_ratio, embed_dim, bias=bias),
             )
+
+        if self.use_init_weights:
+            self.state = nn.Parameter(
+                torch.zeros(self.num_heads, expand_ratio, expand_ratio),
+                requires_grad=True,
+            )
+        else:
+            self.state = None
+
+        if self.use_scale:
+            self.scale = nn.Parameter(
+                torch.ones(self.num_heads, expand_ratio), requires_grad=True
+            )
+        else:
+            self.scale = None
+
+        self.gradient_type = gradient_type
+        if self.gradient_type == 0:
+            self.gradient_fn = chunk_rnn_parallel_fn
+        else:
+            self.gradient_fn = chunk_rnn_sequential_fn
 
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
@@ -76,6 +98,9 @@ class Hgru3(nn.Module):
         self.init_std = init_std
         self.gain = gain
         self.apply(self._initialize_weights)
+
+    def extra_repr(self):
+        return print_module(self)
 
     def _initialize_weights(self, module):
         return _initialize_weights(self, module)
@@ -86,75 +111,58 @@ class Hgru3(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        log_lower_bound: Optional[torch.Tensor] = None,
+        lower_bound: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         # x: b n d
         # linear map
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
-        if self.scalar_decay:
-            f = F.sigmoid(self.f_proj(x))
-            k = self.k_act(k)
-        else:
-            k = F.sigmoid(k)
-            f = 1 - k
+        # !!! not q, log_f, v, this is for align with internel version
+        q, log_f, v = self.in_proj(x).chunk(3, dim=-1)
 
         # act
         q = self.q_act(q)
+        f = F.sigmoid(log_f)
 
         # todo: make a fusion here
         # l + (1 - l) * sigmoid(x)
-        if log_lower_bound is not None:
-            lower_bound = torch.exp(log_lower_bound)
+        if lower_bound is not None:
             f = lower_bound + (1 - lower_bound) * f
-        log_f = torch.log(f)
+            log_f = torch.log(f)
+        else:
+            log_f = F.logsigmoid(f)
 
-        # h is num_head, d is head dimension
-        q, k, v = map(
-            lambda x: rearrange(x, "... (h d) -> ... h d", d=self.expand_ratio),
-            [q, k, v],
+        k = 1 - f
+        if self.gradient_type == 1:
+            k = l2_norm(k)
+
+        q, k, v, log_f = map(
+            lambda x: rearrange(
+                x, "b n (h d) -> b n h d", d=self.expand_ratio
+            ).contiguous(),
+            [q, k, v, log_f],
         )
-        if not self.scalar_decay:
-            f = rearrange(f, "... (h d) -> ... h d", d=self.expand_ratio)
 
-        sign_f = torch.sign(f - 0.5)
-        if self.scalar_decay:
-            sign_f = sign_f.unsqueeze(-1)
-        theta = cumsum_fn(sign_f, dim=1) * math.pi
-        sin = torch.sin(theta)
-        cos = torch.cos(theta)
-        q = torch.cat([q * cos, q * sin], dim=-1)
-        k = torch.cat([k * cos, k * sin], dim=-1)
+        if self.state is not None:
+            recurrent_state = repeat(self.state, "h d e -> b h d e", b=x.shape[0])
+        else:
+            recurrent_state = None
 
-        recurrent_state = None
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
 
+        dtype = q.dtype
+        q, k, v, log_f = map(lambda x: x.to(dtype), [q, k, v, log_f])
         if self.causal:
-            dtype = q.dtype
-            if self.scalar_decay:
-                if self.training or use_cache:
-                    fn = chunk_simple_gla
-                else:
-                    fn = fused_recurrent_simple_gla
-            else:
-                if self.training or use_cache:
-                    fn = chunk_gla
-                else:
-                    fn = fused_recurrent_gla
-
-            output, recurrent_state = fn(
+            output, recurrent_state = self.gradient_fn(
                 q=q,
-                k=k.to(dtype),
-                v=v.to(dtype),
-                g=log_f.to(dtype),
+                k=k,
+                v=v,
+                log_f=log_f,
                 initial_state=recurrent_state,
-                output_final_state=use_cache,
-                head_first=False,
+                scale=self.scale,
+                gradient_type=self.gradient_type,
+                chunk_size=self.chunk_size,
             )
-            output = output.to(x.dtype)
         else:
             assert False
 
@@ -165,13 +173,13 @@ class Hgru3(nn.Module):
                 offset=x.shape[-2],
             )
 
-        output = rearrange(output, "... h d -> ... (h d)")
+        # reshape
+        output = rearrange(output, "b n h d -> b n (h d)")
 
         if self.use_output_gate:
             output_gate = F.sigmoid(self.output_gate(x))
             output = output * output_gate
 
-        # use post norm here for better parallel when using tp
         output = self.norm(output)
 
         # out proj

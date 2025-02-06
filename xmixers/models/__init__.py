@@ -9,6 +9,10 @@ from .hybrid import (
     NaiveHybridModel,
 )
 from .linear_transformer import (
+    ChunkRnnConfig,
+    ChunkRnnForCausalLM,
+    ChunkRnnLayer,
+    ChunkRnnModel,
     DeltaNetConfig,
     DeltaNetForCausalLM,
     DeltaNetLayer,
