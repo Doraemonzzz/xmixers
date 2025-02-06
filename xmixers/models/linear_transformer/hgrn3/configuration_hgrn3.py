@@ -25,9 +25,13 @@ class Hgrn3Config(PretrainedConfig):
         embed_dim=1024,
         expand_ratio=8,
         bias=False,
+        scalar_decay=False,
+        token_mixer_type="hgru3",
         # glu config
         mid_dim=1024,
-        glu_activation="silu",
+        channel_mixer_type="glu",
+        channel_mixer_activation="silu",
+        use_gate_linear=True,
         # others
         max_position_embeddings=1024,
         num_layers=24,
@@ -41,7 +45,7 @@ class Hgrn3Config(PretrainedConfig):
         n_min=2,
         n_max=256,
         use_embed_scale=False,
-        lower_bound_type=0,
+        lower_bound_type=1,
         # init
         init_type=0,
         token_mixer_init_type=0,
@@ -66,9 +70,13 @@ class Hgrn3Config(PretrainedConfig):
         self.embed_dim = embed_dim
         self.expand_ratio = expand_ratio
         self.bias = bias
+        self.scalar_decay = scalar_decay
+        self.token_mixer_type = token_mixer_type
         # glu config
         self.mid_dim = mid_dim
-        self.glu_activation = glu_activation
+        self.channel_mixer_type = channel_mixer_type
+        self.channel_mixer_activation = channel_mixer_activation
+        self.use_gate_linear = use_gate_linear
         # others
         self.max_position_embeddings = max_position_embeddings
         self.num_layers = num_layers

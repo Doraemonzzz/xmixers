@@ -166,6 +166,7 @@ def get_token_mixer(config, layer_idx):
             beta_activation=config.beta_activation,
             causal=config.causal,
             use_dense_memory=config.use_dense_memory,
+            scalar_decay=config.scalar_decay,
             rescale_type=config.rescale_type,
             token_mixer_init_type=config.token_mixer_init_type,
             num_layers=config.num_layers,

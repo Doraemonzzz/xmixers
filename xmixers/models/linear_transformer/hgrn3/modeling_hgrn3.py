@@ -18,7 +18,12 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import GLU, Hgru3, get_log_slopes_general, get_norm_fn
+from xmixers.modules import (
+    get_channel_mixer,
+    get_log_slopes_general,
+    get_norm_fn,
+    get_token_mixer,
+)
 from xmixers.utils import XmixersCache, _init_weights, print_module
 
 from .configuration_hgrn3 import Hgrn3Config
@@ -28,33 +33,11 @@ class Hgrn3Layer(nn.Module):
     def __init__(self, config: Hgrn3Config, layer_idx=0):
         super().__init__()
 
-        self.token_mixer = Hgru3(
-            embed_dim=config.embed_dim,
-            expand_ratio=config.expand_ratio,
-            bias=config.bias,
-            layer_idx=layer_idx,
-            use_output_gate=config.use_output_gate,
-            norm_type=config.norm_type,
-            q_activation=config.q_activation,
-            k_activation=config.k_activation,
-            beta_activation=config.beta_activation,
-            causal=config.causal,
-            use_dense_memory=config.use_dense_memory,
-            rescale_type=config.rescale_type,
-            token_mixer_init_type=config.token_mixer_init_type,
-            num_layers=config.num_layers,
-            init_std=config.init_std,
-            gain=config.gain,
-        )
+        self.token_mixer = get_token_mixer(config, layer_idx)
 
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
-        self.channel_mixer = GLU(
-            embed_dim=config.embed_dim,
-            mid_dim=config.mid_dim,
-            activation=config.glu_activation,
-            bias=config.bias,
-        )
+        self.channel_mixer = get_channel_mixer(config)
 
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
@@ -117,17 +100,20 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
 
         # log lower bound
         self.lower_bound_type = config.lower_bound_type
+        if self.config.scalar_decay:
+            d = config.embed_dim // config.expand_ratio
+        else:
+            d = config.embed_dim
+
         if self.lower_bound_type == 1:
             self.log_lower_bounds = nn.Parameter(
-                torch.ones(config.num_layers, config.embed_dim // config.expand_ratio),
+                torch.ones(config.num_layers, d),
                 requires_grad=True,
             )
         else:
             # a bit different from tnl
             log_lower_bound = torch.log(
-                -get_log_slopes_general(
-                    config.embed_dim // config.expand_ratio, config.n_min, config.n_max
-                )
+                -get_log_slopes_general(d, config.n_min, config.n_max)
             )
             index = torch.arange(config.num_layers).reshape(-1, 1)
             log_lower_bounds = log_lower_bound / (index + 1)

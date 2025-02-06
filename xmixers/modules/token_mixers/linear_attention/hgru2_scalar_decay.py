@@ -1,14 +1,12 @@
-import math
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from fla.ops.gla import chunk_gla, fused_recurrent_gla
 from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
 from transformers.cache_utils import Cache
-from xopes.ops import cumsum_fn
+from xopes.ops import householder_fn
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
@@ -28,8 +26,7 @@ class Hgru3(nn.Module):
         k_activation: str = "silu",
         beta_activation: str = "silu",
         causal: bool = True,
-        use_dense_memory: bool = False,
-        scalar_decay: bool = False,
+        use_dense_memory: bool = True,
         token_mixer_init_type: int = 0,
         rescale_type: int = 0,
         num_layers: int = 12,
@@ -61,7 +58,16 @@ class Hgru3(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
+        self.beta_act = get_activation_fn(beta_activation)
         self.norm = get_norm_fn(norm_type)(embed_dim, bias=bias)
+
+        if self.use_dense_memory:
+            # !!! dont use beta as name in hf: https://github.com/huggingface/transformers/issues/29554
+            # I - 2 * beta beta ^ T
+            self.bet_proj = nn.Sequential(
+                nn.Linear(embed_dim, expand_ratio, bias=bias),
+                nn.Linear(expand_ratio, embed_dim, bias=bias),
+            )
 
         if self.use_output_gate:
             self.output_gate = nn.Sequential(
@@ -94,62 +100,55 @@ class Hgru3(nn.Module):
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
-        if self.scalar_decay:
-            f = F.sigmoid(self.f_proj(x))
-            k = self.k_act(k)
-        else:
-            k = F.sigmoid(k)
-            f = 1 - k
+        f = self.f_proj(x)
 
         # act
         q = self.q_act(q)
+        k = self.k_act(k)
 
-        # todo: make a fusion here
-        # l + (1 - l) * sigmoid(x)
-        if log_lower_bound is not None:
-            lower_bound = torch.exp(log_lower_bound)
-            f = lower_bound + (1 - lower_bound) * f
-        log_f = torch.log(f)
+        if self.use_dense_memory:
+            # I - 2 beta beta ^ T
+            beta = self.beta_act(self.bet_proj(x))
+            q = householder_fn(q, beta)
 
         # h is num_head, d is head dimension
         q, k, v = map(
             lambda x: rearrange(x, "... (h d) -> ... h d", d=self.expand_ratio),
             [q, k, v],
         )
-        if not self.scalar_decay:
-            f = rearrange(f, "... (h d) -> ... h d", d=self.expand_ratio)
 
-        sign_f = torch.sign(f - 0.5)
-        if self.scalar_decay:
-            sign_f = sign_f.unsqueeze(-1)
-        theta = cumsum_fn(sign_f, dim=1) * math.pi
-        sin = torch.sin(theta)
-        cos = torch.cos(theta)
-        q = torch.cat([q * cos, q * sin], dim=-1)
-        k = torch.cat([k * cos, k * sin], dim=-1)
+        # todo: make a fusion here
+        # l + (1 - l) * sigmoid(x)
+        lower_bound = torch.exp(log_lower_bound.float())
+        f = lower_bound + (1 - lower_bound) * F.sigmoid(f.float())
+        log_f = torch.log(f)
+
+        q, k, v, log_f = map(
+            lambda x: rearrange(x, "b n h ... -> b h n ...").contiguous(),
+            [q, k, v, log_f],
+        )
 
         recurrent_state = None
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
 
         if self.causal:
-            dtype = q.dtype
-            if self.scalar_decay:
-                if self.training or use_cache:
-                    fn = chunk_simple_gla
-                else:
-                    fn = fused_recurrent_simple_gla
+            if self.training or use_cache:
+                q = q.to(k.dtype)
+                fn = chunk_simple_gla
             else:
-                if self.training or use_cache:
-                    fn = chunk_gla
-                else:
-                    fn = fused_recurrent_gla
+                # q = q.to(k.dtype)
+                # q = q.float()
+                # k = k.float()
+                # v = v.float()
+                # log_f = log_f.float()
+                fn = fused_recurrent_simple_gla
 
             output, recurrent_state = fn(
                 q=q,
-                k=k.to(dtype),
-                v=v.to(dtype),
-                g=log_f.to(dtype),
+                k=k,
+                v=v,
+                g=log_f,
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
             )
@@ -164,7 +163,7 @@ class Hgru3(nn.Module):
                 offset=x.shape[-2],
             )
 
-        output = rearrange(output, "... h d -> ... (h d)")
+        output = rearrange(output, "b h n d -> b n (h d)")
 
         if self.use_output_gate:
             output_gate = F.sigmoid(self.output_gate(x))
