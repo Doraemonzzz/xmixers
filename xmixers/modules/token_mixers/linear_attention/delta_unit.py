@@ -162,7 +162,7 @@ class DeltaUnit(nn.Module):
 
         if self.causal:
             dtype = q.dtype
-            if not self.use_gamma:
+            if not self.use_decay:
                 if self.training or use_cache:
                     fn = chunk_delta_rule
                 else:
