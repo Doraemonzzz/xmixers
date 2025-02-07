@@ -51,7 +51,7 @@ class GroupRMSNorm(torch.nn.Module):
                 init.zeros_(self.bias)
 
     def forward(self, x, residual=None, return_residual=False):
-        o, updated_residual = group_rms_norm_fn(
+        return group_rms_norm_fn(
             x=x,
             weight=self.weight,
             bias=self.bias,
@@ -61,10 +61,6 @@ class GroupRMSNorm(torch.nn.Module):
             return_residual=return_residual,
             num_groups=self.num_groups,
         )
-
-        if updated_residual is not None:
-            return o, updated_residual
-        return o
 
     def extra_repr(self) -> str:
         return "num_groups={num_groups}, num_channels={num_channels}, eps={eps}, affine={affine}".format(

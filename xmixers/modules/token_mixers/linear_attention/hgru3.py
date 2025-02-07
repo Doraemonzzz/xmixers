@@ -127,6 +127,8 @@ class Hgru3(nn.Module):
         cos = torch.cos(theta)
         q = torch.cat([q * cos, q * sin], dim=-1)
         k = torch.cat([k * cos, k * sin], dim=-1)
+        if not self.scalar_decay:
+            log_f = torch.cat([log_f, log_f], dim=-1)
 
         recurrent_state = None
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
@@ -154,6 +156,7 @@ class Hgru3(nn.Module):
                 output_final_state=use_cache,
                 head_first=False,
             )
+
             output = output.to(x.dtype)
         else:
             assert False

@@ -11,4 +11,4 @@ def l2_norm(x, eps=1e-5):
         eps=eps,
         use_mean=False,
         num_groups=1,
-    )[0]
+    )

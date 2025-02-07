@@ -9,6 +9,7 @@ https://github.com/bzhangGo/zero/blob/master/modules/rela.py
 """
 import torch
 import torch.nn as nn
+from fla.modules import RMSNorm
 from xopes.ops.normalize import rms_norm_fn
 
 from xmixers.utils import XMIXERS_DEBUG, print_module, print_params
@@ -36,7 +37,7 @@ class RMSNorm(torch.nn.Module):
         return f"dim={self.dim}, eps={self.eps}"
 
     def forward(self, x, residual=None, return_residual=False):
-        o, updated_residual = rms_norm_fn(
+        return rms_norm_fn(
             x=x,
             weight=self.weight,
             dim=self.dim,
@@ -44,10 +45,6 @@ class RMSNorm(torch.nn.Module):
             residual=residual,
             return_residual=return_residual,
         )
-
-        if updated_residual is not None:
-            return o, updated_residual
-        return o
 
 
 class GatedRMSNorm(nn.Module):
