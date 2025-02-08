@@ -11,6 +11,8 @@ from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn, l2_norm
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
+from ...pes import Lrpe
+
 
 class ChunkRnn(nn.Module):
     def __init__(
@@ -34,6 +36,10 @@ class ChunkRnn(nn.Module):
         use_init_weights: bool = False,
         use_scale: bool = False,
         chunk_size: int = 128,
+        # lrpe
+        use_lrpe: bool = True,
+        lrpe_type: int = 1,
+        base: int = 10000,
         **kwargs,
     ):
         super().__init__()
@@ -91,6 +97,15 @@ class ChunkRnn(nn.Module):
         else:
             self.gradient_fn = chunk_rnn_sequential_fn
 
+        self.use_lrpe = use_lrpe
+        if self.use_lrpe:
+            self.lrpe = Lrpe(
+                head_dim=self.expand_ratio,
+                num_heads=self.num_heads,
+                lrpe_type=lrpe_type,
+                base=base,
+            )
+
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.num_layers = num_layers
@@ -141,6 +156,14 @@ class ChunkRnn(nn.Module):
             ).contiguous(),
             [q, k, v, log_f],
         )
+
+        # lrpe
+        if past_key_values is not None:
+            past_key_values.get_seq_length(self.layer_idx)
+
+        if self.use_lrpe:
+            q = self.lrpe(q)
+            k = self.lrpe(k)
 
         if self.state is not None:
             recurrent_state = repeat(self.state, "h d e -> b h d e", b=x.shape[0])

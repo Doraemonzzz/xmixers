@@ -33,6 +33,10 @@ class ChunkRnnConfig(PretrainedConfig):
         use_init_weights: bool = False,
         use_scale: bool = False,
         chunk_size: int = 128,
+        # lrpe
+        use_lrpe: bool = True,
+        lrpe_type: int = 1,
+        base: int = 10000,
         # glu config
         mid_dim=1024,
         channel_mixer_type="glu",
@@ -73,6 +77,10 @@ class ChunkRnnConfig(PretrainedConfig):
         self.bias = bias
         self.token_mixer_norm_type = token_mixer_norm_type
         self.token_mixer_type = token_mixer_type
+        # lrpe
+        self.use_lrpe = use_lrpe
+        self.lrpe_type = lrpe_type
+        self.base = base
         # glu config
         self.mid_dim = mid_dim
         self.channel_mixer_type = channel_mixer_type

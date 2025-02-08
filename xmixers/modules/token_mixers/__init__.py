@@ -337,4 +337,7 @@ def get_token_mixer(config, layer_idx):
             use_init_weights=config.use_init_weights,
             use_scale=config.use_scale,
             chunk_size=config.chunk_size,
+            use_lrpe=config.use_lrpe,
+            lrpe_type=config.lrpe_type,
+            base=config.base,
         )
