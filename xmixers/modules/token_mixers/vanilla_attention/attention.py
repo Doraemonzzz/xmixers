@@ -55,7 +55,7 @@ class Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.use_lrpe = use_lrpe
         if self.use_lrpe:
@@ -140,6 +140,6 @@ class Attention(nn.Module):
         # reshape
         output = rearrange(output, "... n h d -> ... n (h d)")
         # outproj
-        output = self.out_proj(output)
+        output = self.o_proj(output)
 
         return output, past_key_values
