@@ -20,8 +20,8 @@ class LLaMAConfig(PretrainedConfig):
         use_cache=True,
         init_std=0.02,
         tie_word_embeddings=False,
-        ##### model config
-        # token mixer config
+        ########## model config
+        ##### token mixer config
         token_mixer_type="attn",
         embed_dim=1024,
         num_heads=8,
@@ -41,7 +41,7 @@ class LLaMAConfig(PretrainedConfig):
         kv_lora_rank=512,
         qk_rope_head_dim=64,
         window_size=-1,
-        # channel mixer config
+        ###### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
         channel_mixer_activation="silu",
@@ -55,18 +55,18 @@ class LLaMAConfig(PretrainedConfig):
         output_gate_activation="silu",
         use_low_rank_output_gate=False,
         channel_mixer_init_type=0,
-        # others
+        ##### others
         max_position_embeddings=1024,
         num_layers=24,
-        norm_type="layernorm",
-        token_mixer_init_type=0,
-        init_type=0,
-        rescale_type=0,
+        norm_type="rmsnorm",
+        token_mixer_init_type=4,
+        init_type=1,
+        rescale_type=2,
         use_postnorm=False,
         use_embed_scale=False,
         ce_type="naive",
         fuse_norm_add=False,
-        gain=0.02,
+        gain=0.01,
         **kwargs,
     ):
         super().__init__(

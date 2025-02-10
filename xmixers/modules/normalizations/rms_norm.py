@@ -9,6 +9,7 @@ https://github.com/bzhangGo/zero/blob/master/modules/rela.py
 """
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from fla.modules import RMSNorm
 from xopes.ops.normalize import rms_norm_fn
 
@@ -37,14 +38,22 @@ class RMSNorm(torch.nn.Module):
         return f"dim={self.dim}, eps={self.eps}"
 
     def forward(self, x, residual=None, return_residual=False):
-        return rms_norm_fn(
-            x=x,
-            weight=self.weight,
-            dim=self.dim,
-            eps=self.eps,
-            residual=residual,
-            return_residual=return_residual,
-        )
+        # for DTensor, we don't use residual
+        if isinstance(x, torch.distributed.tensor.DTensor):
+            return F.rms_norm(
+                input=x, normalized_shape=(self.dim,), weight=self.weight, eps=self.eps
+            )
+        else:
+            return rms_norm_fn(
+                x=x,
+                weight=self.weight,
+                dim=self.dim,
+                eps=self.eps,
+                residual=residual,
+                return_residual=return_residual,
+            )
+
+        return o
 
 
 class GatedRMSNorm(nn.Module):

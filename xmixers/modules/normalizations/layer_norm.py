@@ -3,6 +3,7 @@ from typing import List, Union
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.init as init
 from torch import Size
 
@@ -53,15 +54,24 @@ class LayerNorm(torch.nn.Module):
                 init.zeros_(self.bias)
 
     def forward(self, x, residual=None, return_residual=False):
-        return layer_norm_fn(
-            x=x,
-            weight=self.weight,
-            bias=self.bias,
-            dim=x.shape[-1],
-            eps=self.eps,
-            residual=residual,
-            return_residual=return_residual,
-        )
+        if isinstance(x, torch.distributed.tensor.DTensor):
+            return F.layer_norm(
+                input=x,
+                normalized_shape=self.normalized_shape,
+                weight=self.weight,
+                bias=self.bias,
+                eps=self.eps,
+            )
+        else:
+            return layer_norm_fn(
+                x=x,
+                weight=self.weight,
+                bias=self.bias,
+                dim=x.shape[-1],
+                eps=self.eps,
+                residual=residual,
+                return_residual=return_residual,
+            )
 
     def extra_repr(self) -> str:
         return (

@@ -119,9 +119,7 @@ class Attention(nn.Module):
             attention_mask is None or attention_mask.all()
         ):  # if attention mask is None or all elements are True, use sdpa
             # use causal when training or evaluation(not for generation) or prefill
-            # is_causal = True if self.training or q.shape[-2] == k.shape[-2] else False
-            # output = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
-            causal = True if self.training or q.shape[-2] == k.shape[-2] else False
+            causal = True if self.training or q.shape[-3] == k.shape[-3] else False
             window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)
             if k.shape[-1] == v.shape[-1]:
                 output = flash_attn_func(

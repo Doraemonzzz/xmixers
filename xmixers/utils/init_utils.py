@@ -48,7 +48,7 @@ def _initialize_weights(self, module):
         #
         # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
         for name, p in module.named_parameters():
-            if name in ["out_proj.weight"]:
+            if name in ["o_proj.weight", "out_proj.weight"]:
                 num_residuals_per_layer = 2
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                 # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
@@ -58,7 +58,7 @@ def _initialize_weights(self, module):
                     p /= math.sqrt(num_residuals_per_layer * self.num_layers)
     elif self.rescale_type == 2:
         for name, p in module.named_parameters():
-            if name in ["out_proj.weight"]:
+            if name in ["o_proj.weight", "out_proj.weight"]:
                 with torch.no_grad():
                     p *= 0
 

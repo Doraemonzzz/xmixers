@@ -6,6 +6,7 @@ from .utils import (
     logger,
     logging_info,
     next_power_of_2,
+    pad_embed_dim,
     print_config,
     print_module,
     print_params,

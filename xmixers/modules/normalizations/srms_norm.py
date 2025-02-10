@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from xopes.ops.normalize import srms_norm_fn
 
 
@@ -12,10 +13,14 @@ class SRMSNorm(torch.nn.Module):
         return f"dim={self.dim}, eps={self.eps}"
 
     def forward(self, x, residual=None, return_residual=False):
-        return srms_norm_fn(
-            x=x,
-            dim=self.dim,
-            eps=self.eps,
-            residual=residual,
-            return_residual=return_residual,
-        )
+        # for DTensor, we don't use residual
+        if isinstance(x, torch.distributed.tensor.DTensor):
+            return F.rms_norm(input=x, normalized_shape=(self.dim,), eps=self.eps)
+        else:
+            return srms_norm_fn(
+                x=x,
+                dim=self.dim,
+                eps=self.eps,
+                residual=residual,
+                return_residual=return_residual,
+            )

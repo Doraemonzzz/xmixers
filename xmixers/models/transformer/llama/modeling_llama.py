@@ -17,8 +17,8 @@ logger = logging.get_logger(__name__)
 
 
 from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
-from xmixers.utils import XmixersCache, _init_weights, _post_init_weights
-from xmixers.utils.loss_utils import compute_loss
+from xmixers.utils import XmixersCache, _init_weights, _post_init_weights, pad_embed_dim
+from xmixers.utils.loss_utils import Loss
 
 from .configuration_llama import LLaMAConfig
 
@@ -28,11 +28,8 @@ class LLaMALayer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
-
         self.channel_mixer = get_channel_mixer(config)
-
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
         self.use_postnorm = config.use_postnorm
@@ -153,6 +150,7 @@ class LLaMAModel(LLaMAPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.gradient_checkpointing = False
+        config.vocab_size = pad_embed_dim(config.vocab_size)
 
         # params
         self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
@@ -291,7 +289,7 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
-
+        self.loss = Loss()
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -395,13 +393,15 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
             and self.training
         )
 
-        logits, loss = compute_loss(
-            lm_head=self.lm_head,
+        # since we may use forward_pre_hook, we can't use key word arguments
+        logits, loss = self.loss(
+            self.lm_head.weight,
+            hidden_states,
+            labels,
+            self.lm_head.bias,
+            num_logits_to_keep,
+            fuse_linear_and_cross_entropy,
             ce_type=self.config.ce_type,
-            hidden_states=hidden_states,
-            labels=labels,
-            num_logits_to_keep=num_logits_to_keep,
-            fuse_linear_and_cross_entropy=fuse_linear_and_cross_entropy,
         )
 
         if not return_dict:

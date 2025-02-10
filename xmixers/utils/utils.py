@@ -6,6 +6,8 @@ import sys
 import torch.distributed as dist
 from torch import nn
 
+from .constants import EMBED_DIM_BASE
+
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -98,3 +100,7 @@ def endswith(name, keyword_list):
         if name.endswith(keyword):
             return True
     return False
+
+
+def pad_embed_dim(embed_dim: int) -> int:
+    return (embed_dim + EMBED_DIM_BASE - 1) // EMBED_DIM_BASE * EMBED_DIM_BASE
