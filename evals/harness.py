@@ -2,6 +2,8 @@ from lm_eval.__main__ import cli_evaluate
 from lm_eval.api.registry import register_model
 from lm_eval.models.huggingface import HFLM
 
+import xmixers  # noqa
+
 
 @register_model("xmixers")
 class XmixersLMWrapper(HFLM):

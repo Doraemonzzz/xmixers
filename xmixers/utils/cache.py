@@ -115,16 +115,16 @@ class XmixersCache(transformers.cache_utils.Cache):
                 if window_size is not None and k_state.shape[-2] == window_size:
                     # DO NOT allocate new memory if the cache is full
                     # roll the key/value states to the left by `input_size`
-                    k_state = k_state.roll(-input_size, -2)
-                    v_state = v_state.roll(-input_size, -2)
+                    k_state = k_state.roll(-input_size, -3)
+                    v_state = v_state.roll(-input_size, -3)
                     # replace the last `input_size` tokens with the new key/value states
                     k_state[..., -input_size:, :] = attn_state[0]
                     v_state[..., -input_size:, :] = attn_state[1]
                     attn_state = (k_state, v_state)
                 else:
                     attn_state = (
-                        torch.cat([k_state, attn_state[0]], -2),
-                        torch.cat([v_state, attn_state[1]], -2),
+                        torch.cat([k_state, attn_state[0]], -3),
+                        torch.cat([v_state, attn_state[1]], -3),
                     )
                 state["attn_state"] = attn_state
             if conv_state is not None:
