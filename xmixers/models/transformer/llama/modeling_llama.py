@@ -44,6 +44,7 @@ class LLaMALayer(nn.Module):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         residual: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         if not self.fuse_norm_add:
             # token mixer
@@ -52,6 +53,7 @@ class LLaMALayer(nn.Module):
                 x=self.token_norm(x),
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                **kwargs,
             )
             x = x + residual
 
@@ -64,6 +66,7 @@ class LLaMALayer(nn.Module):
                 x=self.token_norm(x),
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                **kwargs,
             )
 
             # channel mixer
@@ -111,6 +114,7 @@ class LLaMALayer(nn.Module):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         residual: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         # token mixer
         residual = x
@@ -119,6 +123,7 @@ class LLaMALayer(nn.Module):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            **kwargs,
         )
         x = self.token_norm(x + residual)
 
@@ -242,6 +247,7 @@ class LLaMAModel(LLaMAPreTrainedModel):
                     past_key_values,
                     use_cache,
                     residual,
+                    **kwargs,
                 )
             else:
                 hidden_states, past_key_values, residual = layer(
@@ -250,6 +256,7 @@ class LLaMAModel(LLaMAPreTrainedModel):
                     past_key_values=past_key_values,
                     use_cache=use_cache,
                     residual=residual,
+                    **kwargs,
                 )
 
         if residual is not None:
@@ -384,6 +391,7 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]

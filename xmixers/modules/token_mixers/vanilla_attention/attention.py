@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
+from xopes.ops import cumsum_fn
 
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
@@ -117,32 +118,30 @@ class Attention(nn.Module):
             k, v = past_key_values.update(
                 attn_state=(k, v),
                 layer_idx=self.layer_idx,
-                offset=x.shape[-2],
+                offset=n,
             )["attn_state"]
 
         causal = True if self.training or q.shape[-3] == k.shape[-3] else False
         window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)
-        if (
-            attention_mask is None or attention_mask.all()
-        ):  # if attention mask is None or all elements are True, use sdpa
-            # use causal when training or evaluation(not for generation) or prefill
-            if k.shape[-1] == v.shape[-1]:
-                output = flash_attn_func(
-                    q, k, v, causal=causal, window_size=window_size
-                )
+
+        # training
+        cu_seqlens = kwargs.get("cu_seqlens", None)
+        if (cu_seqlens is not None) or (
+            attention_mask is not None and not attention_mask.all()
+        ):
+            if cu_seqlens is not None:  # flame training state
+                cu_seqlens_q = cu_seqlens_k = cu_seqlens
+                max_seqlen_q = max_seqlen_k = n
+                q = q.squeeze(0)
+                k = k.squeeze(0)
+                v = v.squeeze(0)
             else:
-                q, k, v = map(
-                    lambda x: rearrange(x, "... n h d -> ... h n d"),
-                    [q, k, v],
+                q, k, v, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                    q=q, k=k, v=v, attention_mask=attention_mask, q_len=n
                 )
-                output = F.scaled_dot_product_attention(q, k, v, is_causal=causal)
-                output = rearrange(output, "... h n d -> ... n h d")
-        else:
-            q, k, v, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                q=q, k=k, v=v, attention_mask=attention_mask, q_len=n
-            )
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_q, max_seqlen_k = max_seq_lens
+                cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+                max_seqlen_q, max_seqlen_k = max_seq_lens
+
             output = flash_attn_varlen_func(
                 q=q,
                 k=k,
@@ -154,7 +153,13 @@ class Attention(nn.Module):
                 causal=causal,
                 window_size=window_size,
             )
-            output = pad_input(output, indices_q, b, n)
+
+            if cu_seqlens is None:
+                output = pad_input(output, indices_q, b, n)
+            else:
+                output = output.unsqueeze(0)
+        else:
+            output = flash_attn_func(q, k, v, causal=causal, window_size=window_size)
 
         # reshape
         output = rearrange(output, "... n h d -> ... n (h d)")
@@ -168,7 +173,9 @@ class Attention(nn.Module):
         seqlens = attention_mask.sum(-1, dtype=torch.int32)
         indices_k = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
         max_seqlen_k = seqlens.max().item()
-        cu_seqlens_k = F.pad(torch.cumsum(seqlens, dim=0, dtype=torch.int32), (1, 0))
+        # cu_seqlens_k = F.pad(torch.cumsum(seqlens, dim=0, dtype=torch.int32), (1, 0))
+        cu_seqlens_k = F.pad(cumsum_fn(seqlens, dim=0), (1, 0))
+        print(cu_seqlens_k.dtype)
         batch_size, seq_len, num_key_value_heads, head_dim = k.shape
 
         k = index_first_axis(
