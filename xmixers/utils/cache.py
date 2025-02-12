@@ -65,7 +65,7 @@ class XmixersCache(transformers.cache_utils.Cache):
             self._seen_tokens += offset
 
         if attn_state is not None:
-            input_size = attn_state[0].shape[-2]
+            input_size = attn_state[0].shape[-3]
             window_size = (
                 cache_kwargs.get("window_size", None)
                 if cache_kwargs is not None
@@ -76,7 +76,7 @@ class XmixersCache(transformers.cache_utils.Cache):
                     "`attn_state` must be a tuple of two tensors for key/value states"
                 )
         if mpa_state is not None:
-            input_size = mpa_state[0].shape[-2]
+            input_size = mpa_state[0].shape[-3]
             window_size = (
                 cache_kwargs.get("window_size", None)
                 if cache_kwargs is not None
@@ -112,7 +112,7 @@ class XmixersCache(transformers.cache_utils.Cache):
                 state["recurrent_state"] = recurrent_state
             if attn_state is not None:
                 k_state, v_state = state["attn_state"]
-                if window_size is not None and k_state.shape[-2] == window_size:
+                if window_size is not None and k_state.shape[-3] == window_size:
                     # DO NOT allocate new memory if the cache is full
                     # roll the key/value states to the left by `input_size`
                     k_state = k_state.roll(-input_size, -3)
@@ -132,12 +132,12 @@ class XmixersCache(transformers.cache_utils.Cache):
             if ffn_state is not None:
                 state["ffn_state"] = ffn_state
             if mpa_state is not None:
-                if window_size is not None and k_state.shape[-2] == window_size:
+                if window_size is not None and k_state.shape[-3] == window_size:
                     new_mpa_state = []
                     for i, x in enumerate(state["mpa_state"]):
                         # DO NOT allocate new memory if the cache is full
                         # roll the key/value states to the left by `input_size`
-                        x_new = x.roll(-input_size, -2)
+                        x_new = x.roll(-input_size, -3)
                         # replace the last `input_size` tokens with the new key/value states
                         x_new[..., -input_size:, :] = mpa_state[i]
                         new_mpa_state.append(x_new)
@@ -146,17 +146,17 @@ class XmixersCache(transformers.cache_utils.Cache):
                     k_state, v_state, k_head_state, v_head_state = state["mpa_state"]
                     if len(k_head_state.shape) == 1:
                         mpa_state = (
-                            torch.cat([k_state, mpa_state[0]], -2),
-                            torch.cat([v_state, mpa_state[1]], -2),
+                            torch.cat([k_state, mpa_state[0]], -3),
+                            torch.cat([v_state, mpa_state[1]], -3),
                             k_head_state,
                             v_head_state,
                         )
                     else:
                         mpa_state = (
-                            torch.cat([k_state, mpa_state[0]], -2),
-                            torch.cat([v_state, mpa_state[1]], -2),
-                            torch.cat([k_head_state, mpa_state[2]], -2),
-                            torch.cat([v_head_state, mpa_state[3]], -2),
+                            torch.cat([k_state, mpa_state[0]], -3),
+                            torch.cat([v_state, mpa_state[1]], -3),
+                            torch.cat([k_head_state, mpa_state[2]], -3),
+                            torch.cat([v_head_state, mpa_state[3]], -3),
                         )
                 state["mpa_state"] = mpa_state
 

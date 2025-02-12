@@ -7,9 +7,8 @@ from einops import rearrange
 from transformers.cache_utils import Cache
 from xopes.ops import cumsum_fn
 
+from xmixers.modules.pes import Lrpe
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
-
-from ...pes import Lrpe
 
 try:
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -33,12 +32,12 @@ class Attention(nn.Module):
         lrpe_type: int = 1,
         base: int = 10000,
         max_position_embeddings: int = 1024,
-        token_mixer_init_type: int = 0,
-        rescale_type: int = 0,
+        token_mixer_init_type: int = 4,
+        rescale_type: int = 2,
         num_layers: int = 12,
         window_size: int = -1,
         init_std: float = 0.02,
-        gain: float = 0.02,
+        gain: float = 0.01,
         **kwargs,
     ):
         super().__init__()
@@ -92,7 +91,6 @@ class Attention(nn.Module):
         past_key_values: Optional[Cache] = None,
         **kwargs,
     ):
-        # x: b n d
         b, n, d = x.shape
         # linear map
         q = self.q_proj(x)
@@ -124,7 +122,7 @@ class Attention(nn.Module):
         causal = True if self.training or q.shape[-3] == k.shape[-3] else False
         window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)
 
-        # training
+        # only use cu_seqlens in training
         cu_seqlens = kwargs.get("cu_seqlens", None)
         if (cu_seqlens is not None) or (
             attention_mask is not None and not attention_mask.all()

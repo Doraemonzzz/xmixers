@@ -12,6 +12,9 @@ AUTO_DTYPE_MAP = {"bf16": torch.bfloat16, "fp32": torch.float32}
 def get_config(model_type):
     if model_type == "llama":
         config = LLaMAConfig()
+    elif model_type == "mpa":
+        config = LLaMAConfig()
+        config.token_mixer_type = "mpa"
 
     return config
 

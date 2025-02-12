@@ -7,18 +7,19 @@ from einops import rearrange
 from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
+from xmixers.modules.pes import Lrpe
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
-from ...pes import Lrpe
-
 try:
-    from flash_attn import flash_attn_func
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 except:
     flash_attn_func = None
+    index_first_axis = None
+    pad_input = None
+    unpad_input = None
 
-from xopes.ops.out_product_linear_recurrence import oplr_fn
-
-from xmixers.modules.normalizations import l2_norm
+from .utils import _upad_input
 
 
 class MultiProductAttention(nn.Module):
@@ -32,16 +33,15 @@ class MultiProductAttention(nn.Module):
         lrpe_type: int = 1,
         base: int = 10000,
         max_position_embeddings: int = 1024,
-        token_mixer_init_type: int = 0,
-        rescale_type: int = 0,
+        token_mixer_init_type: int = 4,
+        rescale_type: int = 2,
         num_layers: int = 12,
+        window_size: int = -1,
         mpa_type: int = 0,
-        mpa_activation: str = "none",
+        mpa_activation: str = "sigmoid",
         head_dim: int = -1,
-        gate_type: int = 0,
         init_std: float = 0.02,
-        gain: float = 0.02,
-        use_l2_norm: bool = False,
+        gain: float = 0.01,
         **kwargs,
     ):
         super().__init__()
@@ -54,6 +54,7 @@ class MultiProductAttention(nn.Module):
         self.layer_idx = layer_idx
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads if head_dim == -1 else head_dim
+        self.window_size = window_size
         mid_dim = self.head_dim * self.num_heads
         self.mpa_type = mpa_type
         self.q_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
@@ -64,11 +65,8 @@ class MultiProductAttention(nn.Module):
             self.kv_head = nn.Parameter(
                 torch.randn(2 * num_heads) * 0.1, requires_grad=True
             )
-        self.gate_type = gate_type
-
         self.act = get_activation_fn(mpa_activation)
-
-        self.out_proj = nn.Linear(mid_dim, embed_dim, bias=bias)
+        self.o_proj = nn.Linear(mid_dim, embed_dim, bias=bias)
 
         self.use_lrpe = use_lrpe
         if self.use_lrpe:
@@ -77,7 +75,6 @@ class MultiProductAttention(nn.Module):
                 num_heads=self.num_heads,
                 lrpe_type=lrpe_type,
                 base=base,
-                max_position_embeddings=max_position_embeddings,
             )
 
         self.token_mixer_init_type = token_mixer_init_type
@@ -86,7 +83,6 @@ class MultiProductAttention(nn.Module):
         self.embed_dim = embed_dim
         self.init_std = init_std
         self.gain = gain
-        self.use_l2_norm = use_l2_norm
         self.apply(self._initialize_weights)
 
     def extra_repr(self):
@@ -116,88 +112,73 @@ class MultiProductAttention(nn.Module):
         k, v = kv.chunk(2, dim=-1)
         k_head, v_head = kv_head.chunk(2, dim=-1)
 
-        # TODO: add a kernel here
-        if self.gate_type == 0:
-            k, v = map(
-                lambda arr: torch.einsum("... d, ... h -> ... h d", arr[0], arr[1]),
-                [(k, k_head), (v, v_head)],
-            )
-        elif self.gate_type == 1:
-            index = 1 + torch.arange(
-                0, n, dtype=torch.float32, device=k.device
-            ).unsqueeze(-1).unsqueeze(-1)
-            # cumsum
-            k = (oplr_fn(k_head, k, log_decay=None, decay_type="nd")).to(q.dtype)
-            v = (oplr_fn(v_head, v, log_decay=None, decay_type="nd")).to(q.dtype)
-            if self.use_l2_norm:
-                k = l2_norm(k)
-        elif self.gate_type == 2:
-            k = oplr_fn(k_head, k, log_decay=None, decay_type="ddd")
-            v = oplr_fn(v_head, v, log_decay=None, decay_type="ddd")
-            if self.use_l2_norm:
-                k = l2_norm(k)
-        elif self.gate_type == 3:
-            k = oplr_fn(k_head, k, log_decay=None, decay_type="ddd")
-            v = torch.einsum("... d, ... h -> ... h d", v, v_head)
-        elif self.gate_type == 4:
-            k = torch.einsum("... d, ... h -> ... h d", k, k_head)
-            v = oplr_fn(v_head, v, log_decay=None, decay_type="ddd")
-        elif self.gate_type == 5:
-            index = 1 + torch.arange(
-                0, n, dtype=torch.float32, device=k.device
-            ).unsqueeze(-1).unsqueeze(-1)
-            k = (oplr_fn(k_head, k, log_decay=None, decay_type="ddd") / index).to(
-                q.dtype
-            )
-            v = oplr_fn(v_head, v, log_decay=None, decay_type="ddd")
+        q = rearrange(q, "... (h d) -> ... h d", h=self.num_heads)
 
         # for lrpe
         q_offset = 0
         if past_key_values is not None:
             q_offset = past_key_values.get_seq_length(self.layer_idx)
 
-        # TODO: upate cache update
+        if self.use_lrpe:
+            q = self.lrpe(q, offset=q_offset)
+            k = self.lrpe(k, offset=q_offset)
+
+        k, v = map(
+            lambda arr: torch.einsum("... h, ... d -> ... h d", arr[0], arr[1]),
+            [(k_head, k), (v_head, v)],
+        )
+
+        # cache update
         if past_key_values is not None:
             k, v, k_head, v_head = past_key_values.update(
                 mpa_state=(k, v, k_head, v_head),
                 layer_idx=self.layer_idx,
-                offset=x.shape[-2],
+                offset=n,
             )["mpa_state"]
 
-        # construct k, v cache
-        # todo: add a fusion here
-        q = rearrange(q, "... (h d) -> ... h d", h=self.num_heads)
+        causal = True if self.training or q.shape[-3] == k.shape[-3] else False
+        window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)
 
-        q, k, v = map(
-            lambda x: rearrange(x, "... n h d -> ... h n d"),
-            [q, k, v],
-        )
+        # only use cu_seqlens in training
+        cu_seqlens = kwargs.get("cu_seqlens", None)
+        if (cu_seqlens is not None) or (
+            attention_mask is not None and not attention_mask.all()
+        ):
+            if cu_seqlens is not None:  # flame training state
+                cu_seqlens_q = cu_seqlens_k = cu_seqlens
+                max_seqlen_q = max_seqlen_k = n
+                q = q.squeeze(0)
+                k = k.squeeze(0)
+                v = v.squeeze(0)
+            else:
+                q, k, v, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
+                    q=q, k=k, v=v, attention_mask=attention_mask, q_len=n
+                )
+                cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+                max_seqlen_q, max_seqlen_k = max_seq_lens
 
-        if self.use_lrpe:
-            q = self.lrpe(q, offset=q_offset)
-            k = self.lrpe(k)
+            output = flash_attn_varlen_func(
+                q=q,
+                k=k,
+                v=v,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_q,
+                max_seqlen_k=max_seqlen_k,
+                causal=causal,
+                window_size=window_size,
+            )
 
-        # if (
-        #     attention_mask is None or attention_mask.all()
-        # ):  # if attention mask is None or all elements are True, use sdpa
-        if True:
-            # use causal when training or evaluation(not for generation) or prefill
-            is_causal = True if self.training or q.shape[-2] == k.shape[-2] else False
-            # output = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
-            q, k, v = map(lambda x: rearrange(x, "... h n d -> ... n h d"), [q, k, v])
-            dtype = q.dtype
-            if dtype == torch.float32:
-                q = q.to(torch.bfloat16)
-                k = k.to(torch.bfloat16)
-                v = v.to(torch.bfloat16)
-            output = flash_attn_func(q, k, v, causal=is_causal).to(dtype)
-            output = rearrange(output, "... n h d -> ... h n d")
+            if cu_seqlens is None:
+                output = pad_input(output, indices_q, b, n)
+            else:
+                output = output.unsqueeze(0)
         else:
-            assert False, "flash_attn_varlen_qkvpacked_func current not support"
+            output = flash_attn_func(q, k, v, causal=causal, window_size=window_size)
 
         # reshape
-        output = rearrange(output, "... h n d -> ... n (h d)")
+        output = rearrange(output, "... n h d -> ... n (h d)")
         # outproj
-        output = self.out_proj(output)
+        output = self.o_proj(output)
 
         return output, past_key_values
