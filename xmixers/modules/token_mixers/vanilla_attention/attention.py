@@ -173,9 +173,8 @@ class Attention(nn.Module):
         seqlens = attention_mask.sum(-1, dtype=torch.int32)
         indices_k = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
         max_seqlen_k = seqlens.max().item()
-        # cu_seqlens_k = F.pad(torch.cumsum(seqlens, dim=0, dtype=torch.int32), (1, 0))
         cu_seqlens_k = F.pad(cumsum_fn(seqlens, dim=0), (1, 0))
-        print(cu_seqlens_k.dtype)
+
         batch_size, seq_len, num_key_value_heads, head_dim = k.shape
 
         k = index_first_axis(

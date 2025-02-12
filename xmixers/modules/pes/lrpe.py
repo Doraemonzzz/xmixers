@@ -61,7 +61,7 @@ class Lrpe(nn.Module):
             theta = base ** (
                 -2 / d * torch.arange(d // 2, dtype=torch.int64)
             ).float().reshape(1, -1)
-        elif lrpe_type == 2:
+        elif lrpe_type == 2:  # result much worse than 3
             logging_info("lrpe mix rotate, rotate half head dim, use low freq")
             theta = (
                 base
