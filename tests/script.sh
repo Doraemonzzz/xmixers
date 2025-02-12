@@ -4,7 +4,7 @@ folder=models
 file=test
 
 model_type=llama
-# model_type=mpa
+model_type=mpa
 
 mkdir -p $folder/log
 

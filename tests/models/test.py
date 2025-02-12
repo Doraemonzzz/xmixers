@@ -15,6 +15,7 @@ def get_config(model_type):
     elif model_type == "mpa":
         config = LLaMAConfig()
         config.token_mixer_type = "mpa"
+        config.lrpe_type = 3
 
     return config
 

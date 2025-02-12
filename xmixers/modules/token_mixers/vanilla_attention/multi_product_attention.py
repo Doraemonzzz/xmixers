@@ -88,6 +88,9 @@ class MultiProductAttention(nn.Module):
     def extra_repr(self):
         return print_module(self)
 
+    def _init_weights(self):
+        self.apply(self._initialize_weights)
+
     def _initialize_weights(self, module):
         return _initialize_weights(self, module)
 
