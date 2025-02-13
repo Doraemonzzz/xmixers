@@ -126,11 +126,6 @@ class MultiProductAttention(nn.Module):
             q = self.lrpe(q, offset=q_offset)
             k = self.lrpe(k, offset=q_offset)
 
-        k, v = map(
-            lambda arr: torch.einsum("... h, ... d -> ... h d", arr[0], arr[1]),
-            [(k_head, k), (v_head, v)],
-        )
-
         # cache update
         if past_key_values is not None:
             k, v, k_head, v_head = past_key_values.update(
@@ -138,6 +133,11 @@ class MultiProductAttention(nn.Module):
                 layer_idx=self.layer_idx,
                 offset=n,
             )["mpa_state"]
+
+        k, v = map(
+            lambda arr: torch.einsum("... h, ... d -> ... h d", arr[0], arr[1]),
+            [(k_head, k), (v_head, v)],
+        )
 
         causal = True if self.training or q.shape[-3] == k.shape[-3] else False
         window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)

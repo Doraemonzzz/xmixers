@@ -146,17 +146,17 @@ class XmixersCache(transformers.cache_utils.Cache):
                     k_state, v_state, k_head_state, v_head_state = state["mpa_state"]
                     if len(k_head_state.shape) == 1:
                         mpa_state = (
-                            torch.cat([k_state, mpa_state[0]], -3),
-                            torch.cat([v_state, mpa_state[1]], -3),
+                            torch.cat([k_state, mpa_state[0]], -2),
+                            torch.cat([v_state, mpa_state[1]], -2),
                             k_head_state,
                             v_head_state,
                         )
                     else:
                         mpa_state = (
-                            torch.cat([k_state, mpa_state[0]], -3),
-                            torch.cat([v_state, mpa_state[1]], -3),
-                            torch.cat([k_head_state, mpa_state[2]], -3),
-                            torch.cat([v_head_state, mpa_state[3]], -3),
+                            torch.cat([k_state, mpa_state[0]], -2),
+                            torch.cat([v_state, mpa_state[1]], -2),
+                            torch.cat([k_head_state, mpa_state[2]], -2),
+                            torch.cat([v_head_state, mpa_state[3]], -2),
                         )
                 state["mpa_state"] = mpa_state
 
