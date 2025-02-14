@@ -35,6 +35,7 @@ class LLaMAConfig(PretrainedConfig):
         use_l2_norm=False,
         gate_type=0,
         head_dim=-1,
+        q_rank=8,
         kv_rank=2,
         cp_activation="none",
         q_lora_rank=512,
@@ -94,6 +95,7 @@ class LLaMAConfig(PretrainedConfig):
         self.mpa_activation = mpa_activation
         self.use_l2_norm = use_l2_norm
         self.gate_type = gate_type
+        self.q_rank = q_rank
         self.kv_rank = kv_rank
         self.cp_activation = cp_activation
         self.q_lora_rank = q_lora_rank

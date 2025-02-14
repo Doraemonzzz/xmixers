@@ -22,7 +22,7 @@ except:
 from .utils import _upad_input
 
 
-class MultiProductAttention(nn.Module):
+class TensorProductAttention(nn.Module):
     def __init__(
         self,
         embed_dim: int,
@@ -33,12 +33,13 @@ class MultiProductAttention(nn.Module):
         lrpe_type: int = 1,
         base: int = 10000,
         max_position_embeddings: int = 1024,
+        q_rank: int = 8,
+        kv_rank: int = 2,
+        cp_activation: str = "none",
         token_mixer_init_type: int = 4,
-        rescale_type: int = 2,
+        rescale_type: int = 0,
         num_layers: int = 12,
         window_size: int = -1,
-        mpa_type: int = 0,
-        mpa_activation: str = "sigmoid",
         head_dim: int = -1,
         init_std: float = 0.02,
         gain: float = 0.01,
@@ -56,16 +57,15 @@ class MultiProductAttention(nn.Module):
         self.head_dim = embed_dim // num_heads if head_dim == -1 else head_dim
         self.window_size = window_size
         mid_dim = self.head_dim * self.num_heads
-        self.mpa_type = mpa_type
-        self.q_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
-        self.kv_proj = nn.Linear(embed_dim, 2 * self.head_dim, bias=bias)
-        if self.mpa_type == 0:
-            self.kv_head_proj = nn.Linear(embed_dim, 2 * num_heads, bias=bias)
-        else:
-            self.kv_head = nn.Parameter(
-                torch.randn(2 * num_heads) * 0.1, requires_grad=True
-            )
-        self.act = get_activation_fn(mpa_activation)
+        self.q_proj = nn.Linear(embed_dim, self.head_dim * q_rank, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, self.head_dim * kv_rank, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, self.head_dim * kv_rank, bias=bias)
+        self.q_head_proj = nn.Linear(embed_dim, num_heads * q_rank, bias=bias)
+        self.k_head_proj = nn.Linear(embed_dim, num_heads * kv_rank, bias=bias)
+        self.v_head_proj = nn.Linear(embed_dim, num_heads * kv_rank, bias=bias)
+
+        self.act = get_activation_fn(cp_activation)
+
         self.o_proj = nn.Linear(mid_dim, embed_dim, bias=bias)
 
         self.use_lrpe = use_lrpe
@@ -81,6 +81,8 @@ class MultiProductAttention(nn.Module):
         self.rescale_type = rescale_type
         self.num_layers = num_layers
         self.embed_dim = embed_dim
+        self.q_rank = q_rank
+        self.kv_rank = kv_rank
         self.init_std = init_std
         self.gain = gain
         self.apply(self._initialize_weights)
@@ -105,21 +107,28 @@ class MultiProductAttention(nn.Module):
         b, n, d = x.shape
         # linear map
         q = self.q_proj(x)
-        kv = self.kv_proj(x)
-        if self.mpa_type == 0:
-            kv_head = self.act(self.kv_head_proj(x))
-        else:
-            kv_head = self.act(self.kv_head)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+        q_head = self.q_head_proj(x)
+        k_head = self.k_head_proj(x)
+        v_head = self.v_head_proj(x)
 
-        k, v = kv.chunk(2, dim=-1)
-        k_head, v_head = kv_head.chunk(2, dim=-1)
-
-        q = rearrange(q, "... (h d) -> ... h d", h=self.num_heads)
+        k_head = self.act(k_head)
+        v_head = self.act(v_head)
 
         # for lrpe
         q_offset = 0
         if past_key_values is not None:
             q_offset = past_key_values.get_seq_length(self.layer_idx)
+
+        q, q_head = map(
+            lambda x: rearrange(x, "... (r d) -> ... r d", r=self.q_rank),
+            [q, q_head],
+        )
+        k, v, k_head, v_head = map(
+            lambda x: rearrange(x, "... (r d) -> ... r d", r=self.kv_rank),
+            [k, v, k_head, v_head],
+        )
 
         if self.use_lrpe:
             q = self.lrpe(q, offset=q_offset)
@@ -133,9 +142,15 @@ class MultiProductAttention(nn.Module):
                 offset=n,
             )["mpa_state"]
 
-        k, v = map(
-            lambda arr: torch.einsum("... h, ... d -> ... h d", arr[0], arr[1]),
-            [(k_head, k), (v_head, v)],
+        q, k, v = map(
+            lambda arr: torch.einsum(
+                "... r h, ... r d -> ... h d", arr[0], arr[1] / arr[2]
+            ),
+            [
+                (q_head, q, self.q_rank),
+                (k_head, k, self.kv_rank),
+                (v_head, v, self.kv_rank),
+            ],
         )
 
         causal = True if self.training or q.shape[-3] == k.shape[-3] else False

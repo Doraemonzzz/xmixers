@@ -5,6 +5,7 @@ file=test
 
 model_type=llama
 model_type=mpa
+# model_type=tpa
 
 mkdir -p $folder/log
 

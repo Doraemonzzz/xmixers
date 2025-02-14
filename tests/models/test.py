@@ -16,6 +16,12 @@ def get_config(model_type):
         config = LLaMAConfig()
         config.token_mixer_type = "mpa"
         config.lrpe_type = 3
+    elif model_type == "tpa":
+        config = LLaMAConfig()
+        config.token_mixer_type = "tpa"
+        config.lrpe_type = 3
+        config.q_rank = 8
+        config.kv_rank = 2
 
     return config
 
@@ -114,7 +120,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--dtype", type=str, default="bf16")
     parser.add_argument(
-        "--model_type", type=str, default="llama", choices=["llama", "mpa"]
+        "--model_type", type=str, default="llama", choices=["llama", "mpa", "tpa"]
     )
     args = parser.parse_args()
     main(args)
