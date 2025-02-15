@@ -1,10 +1,11 @@
 # GLU: https://arxiv.org/pdf/2002.05202.pdf
 
 import torch.nn as nn
-from xopes.ops import gate_linear_fn
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.utils import XMIXERS_DEBUG, print_params
+
+from .utils import GateLinearOp
 
 
 class GLU(nn.Module):
@@ -30,16 +31,18 @@ class GLU(nn.Module):
         self.act = get_activation_fn(activation)
         self.activation = activation
         self.use_gate_linear = use_gate_linear
+        self.gate_linear_op = GateLinearOp()
 
     def forward(self, x, residual=None):
         if self.use_gate_linear:
-            output = gate_linear_fn(
-                x1=self.w1(x),
-                x2=self.w2(x),
-                W=self.w3.weight,
-                bias=self.w3.bias,
-                act=self.activation,
-                residual=residual,
+            # since we may use forward_pre_hook, we can't use key word arguments
+            output = self.gate_linear_op(
+                self.w1(x),
+                self.w2(x),
+                self.w3.weight,
+                self.w3.bias,
+                self.activation,
+                residual,
             )
         else:
             output = self.w3(self.act(self.w1(x)) * self.w2(x))
