@@ -4,7 +4,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import xmixers  # noqa
-from xmixers import LLaMAConfig
+from xmixers.models import Hgrn2Config, LLaMAConfig
 
 AUTO_DTYPE_MAP = {"bf16": torch.bfloat16, "fp32": torch.float32}
 
@@ -22,6 +22,8 @@ def get_config(model_type):
         config.lrpe_type = 3
         config.q_rank = 8
         config.kv_rank = 2
+    elif model_type == "hgrn2":
+        config = Hgrn2Config()
 
     return config
 
@@ -120,7 +122,10 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--dtype", type=str, default="bf16")
     parser.add_argument(
-        "--model_type", type=str, default="llama", choices=["llama", "mpa", "tpa"]
+        "--model_type",
+        type=str,
+        default="llama",
+        choices=["llama", "mpa", "tpa", "hgrn2"],
     )
     args = parser.parse_args()
     main(args)

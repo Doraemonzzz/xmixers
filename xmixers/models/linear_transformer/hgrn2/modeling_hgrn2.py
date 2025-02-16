@@ -6,7 +6,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 from transformers.cache_utils import Cache
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
@@ -19,7 +18,14 @@ logger = logging.get_logger(__name__)
 
 
 from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
-from xmixers.utils import XmixersCache, _init_weights, print_module
+from xmixers.utils import (
+    XmixersCache,
+    _init_weights,
+    _post_init_weights,
+    pad_embed_dim,
+    print_module,
+)
+from xmixers.utils.loss_utils import Loss
 
 from .configuration_hgrn2 import Hgrn2Config
 
@@ -29,11 +35,8 @@ class Hgrn2Layer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
-
         self.channel_mixer = get_channel_mixer(config)
-
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
     def forward(
@@ -43,6 +46,7 @@ class Hgrn2Layer(nn.Module):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         lower_bound: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         # token mixer
         residual = x
@@ -51,7 +55,7 @@ class Hgrn2Layer(nn.Module):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            lower_bound=lower_bound,
+            **kwargs,
         )
         x = x + residual
 
@@ -83,14 +87,13 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.gradient_checkpointing = False
+        config.vocab_size = pad_embed_dim(config.vocab_size)
 
         # params
         self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
-        config.token_mixer_type = "hgru2"
-        config.channel_mixer_type = "glu"
         self.layers = nn.ModuleList(
             [Hgrn2Layer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
@@ -230,9 +233,14 @@ class Hgrn2ForCausalLM(Hgrn2PreTrainedModel):
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
-
+        self.loss = Loss()
         # Initialize weights and apply final processing
         self.post_init()
+
+    def post_init_weights(
+        self,
+    ):
+        _post_init_weights(self)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -263,6 +271,8 @@ class Hgrn2ForCausalLM(Hgrn2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        num_logits_to_keep: int = 0,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -317,20 +327,21 @@ class Hgrn2ForCausalLM(Hgrn2PreTrainedModel):
 
         hidden_states = outputs[0]
 
-        logits = self.lm_head(hidden_states)
+        fuse_linear_and_cross_entropy = (
+            self.config.ce_type not in ["fla_fce", "naive", "xopes_ce"]
+            and self.training
+        )
 
-        loss = None
-        if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+        # since we may use forward_pre_hook, we can't use key word arguments
+        logits, loss = self.loss(
+            self.lm_head.weight,
+            hidden_states,
+            labels,
+            self.lm_head.bias,
+            num_logits_to_keep,
+            fuse_linear_and_cross_entropy,
+            ce_type=self.config.ce_type,
+        )
 
         if not return_dict:
             output = (logits,) + outputs[1:]

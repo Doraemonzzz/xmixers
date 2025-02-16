@@ -20,13 +20,15 @@ class Hgrn2Config(PretrainedConfig):
         use_cache=True,
         init_std=0.02,
         tie_word_embeddings=False,
-        ##### model config
-        # attention config
+        ########## model config
+        ##### token mixer config
+        token_mixer_type="hgru2",
         embed_dim=1024,
-        expand_ratio=8,
+        expand_ratio=128,
         bias=False,
-        token_mixer_norm_type="layernorm",
-        # glu config
+        token_mixer_norm_type="rmsnorm",
+        ###### channel mixer config
+        channel_mixer_type="glu",
         mid_dim=1024,
         channel_mixer_activation="silu",
         use_gate_linear=True,
@@ -34,13 +36,14 @@ class Hgrn2Config(PretrainedConfig):
         max_position_embeddings=1024,
         num_layers=24,
         use_output_gate=False,
-        norm_type="layernorm",
+        norm_type="rmsnorm",
         q_activation="silu",
         causal=True,
         use_embed_scale=False,
         use_dense_memory=False,
         beta_activation="silu",
         norm_pos="ogate",
+        ce_type="xopes_flce",
         # init
         init_type=0,
         token_mixer_init_type=0,
@@ -61,12 +64,14 @@ class Hgrn2Config(PretrainedConfig):
         self.use_cache = use_cache
         self.init_std = init_std
         ##### add
-        # attention config
+        # token mixer config
         self.embed_dim = embed_dim
         self.expand_ratio = expand_ratio
         self.bias = bias
         self.token_mixer_norm_type = token_mixer_norm_type
-        # glu config
+        self.token_mixer_type = token_mixer_type
+        # channel mixer config
+        self.channel_mixer_type = channel_mixer_type
         self.mid_dim = mid_dim
         self.channel_mixer_activation = channel_mixer_activation
         self.use_gate_linear = use_gate_linear
@@ -81,9 +86,9 @@ class Hgrn2Config(PretrainedConfig):
         self.use_dense_memory = use_dense_memory
         self.beta_activation = beta_activation
         self.norm_pos = norm_pos
-        # init
         self.init_type = init_type
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.channel_mixer_init_type = channel_mixer_init_type
         self.gain = gain
+        self.ce_type = ce_type

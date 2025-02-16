@@ -21,14 +21,14 @@ class Hgru2(nn.Module):
         bias: bool = False,
         layer_idx: int = 0,
         use_output_gate: bool = False,
-        token_mixer_norm_type: str = "layernorm",
+        token_mixer_norm_type: str = "rmsnorm",
         q_activation: str = "silu",
         causal: bool = True,
-        token_mixer_init_type: int = 0,
-        rescale_type: int = 0,
+        token_mixer_init_type: int = 4,
+        rescale_type: int = 2,
         num_layers: int = 12,
         init_std: float = 0.02,
-        gain: float = 0.02,
+        gain: float = 0.01,
         beta_activation: str = "silu",
         use_dense_memory: bool = False,
         norm_pos: str = "ogate",  # choose from ["attn", "ogate"]
@@ -49,8 +49,10 @@ class Hgru2(nn.Module):
         self.use_output_gate = use_output_gate
         self.use_dense_memory = use_dense_memory
 
-        self.in_proj = nn.Linear(embed_dim, 3 * embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
         num_groups = embed_dim // expand_ratio
         self.norm = get_norm_fn(token_mixer_norm_type)(
@@ -79,6 +81,9 @@ class Hgru2(nn.Module):
         self.embed_dim = embed_dim
         self.init_std = init_std
         self.gain = gain
+        self._init_weights()
+
+    def _init_weights(self):
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -93,10 +98,11 @@ class Hgru2(nn.Module):
         lower_bound: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        # x: b n d
+        b, n, d = x.shape
         # linear map
-        # !!! not q, log_f, v, this is for align with internel version
-        v, q, log_f = self.in_proj(x).chunk(3, dim=-1)
+        q = self.q_proj(x)
+        log_f = self.k_proj(x)
+        v = self.v_proj(x)
 
         # act
         q = self.q_act(q)
@@ -107,7 +113,6 @@ class Hgru2(nn.Module):
             beta = self.beta_act(self.bet_proj(x))
             q = householder_fn(q, beta)
 
-        # todo: make a fusion here
         # l + (1 - l) * sigmoid(x)
         if lower_bound is not None:
             f = lower_bound + (1 - lower_bound) * f
@@ -119,7 +124,7 @@ class Hgru2(nn.Module):
 
         q, k, v, log_f = map(
             lambda x: rearrange(
-                x, "b n (h d) -> b h n d", d=self.expand_ratio
+                x, "b n (h d) -> b n h d", d=self.expand_ratio
             ).contiguous(),
             [q, k, v, log_f],
         )
@@ -130,21 +135,36 @@ class Hgru2(nn.Module):
 
         dtype = q.dtype
         q, k, v, log_f = map(lambda x: x.to(dtype), [q, k, v, log_f])
+        # left padding
+        if attention_mask is not None and not attention_mask.all():
+            attention_mask = attention_mask.unsqueeze(-1).unsqueeze(-1)
+            k = k.masked_fill(attention_mask == 0, 0)
+            log_f = log_f.masked_fill(attention_mask == 0, 0)
+
+        scale = 1
         if self.causal:
             if self.training or recurrent_state is None:  # training or prefilling
-                fn = chunk_gla
+                output, recurrent_state = chunk_gla(
+                    q=q,
+                    k=k,
+                    v=v,
+                    g=log_f,
+                    scale=scale,
+                    initial_state=recurrent_state,
+                    output_final_state=use_cache,
+                    head_first=False,
+                )
             else:
-                fn = fused_recurrent_gla
-
-            output, recurrent_state = fn(
-                q=q,
-                k=k,
-                v=v,
-                g=log_f,
-                scale=1,
-                initial_state=recurrent_state,
-                output_final_state=use_cache,
-            )
+                output, recurrent_state = fused_recurrent_gla(
+                    q=q,
+                    k=k,
+                    v=v,
+                    gk=log_f,
+                    scale=scale,
+                    initial_state=recurrent_state,
+                    output_final_state=use_cache,
+                    head_first=False,
+                )
         else:
             assert False
 
@@ -152,11 +172,11 @@ class Hgru2(nn.Module):
             past_key_values.update(
                 recurrent_state=recurrent_state,
                 layer_idx=self.layer_idx,
-                offset=x.shape[-2],
+                offset=n,
             )
 
         # reshape
-        output = rearrange(output, "b h n d -> b n (h d)")
+        output = rearrange(output, "b n h d -> b n (h d)")
 
         if self.norm_pos == "attn":
             output = self.norm(output)
@@ -169,6 +189,6 @@ class Hgru2(nn.Module):
             output = self.norm(output)
 
         # out proj
-        output = self.out_proj(output)
+        output = self.o_proj(output)
 
         return output, past_key_values

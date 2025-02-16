@@ -53,6 +53,7 @@ class LLaMALayer(nn.Module):
                 x=self.token_norm(x),
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 **kwargs,
             )
             x = x + residual
@@ -66,6 +67,7 @@ class LLaMALayer(nn.Module):
                 x=self.token_norm(x),
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 **kwargs,
             )
 
@@ -165,8 +167,8 @@ class LLaMAModel(LLaMAPreTrainedModel):
         self.layers = nn.ModuleList(
             [LLaMALayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+
         # Initialize weights and apply final processing
         self.post_init()
 
