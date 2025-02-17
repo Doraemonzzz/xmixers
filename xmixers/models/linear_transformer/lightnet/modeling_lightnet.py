@@ -1,9 +1,8 @@
 # coding=utf-8
-""" PyTorch Hgrn2 model."""
+""" PyTorch LightNet model."""
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
@@ -27,11 +26,11 @@ from xmixers.utils import (
 )
 from xmixers.utils.loss_utils import Loss
 
-from .configuration_hgrn2 import Hgrn2Config
+from .configuration_lightnet import LightNetConfig
 
 
-class Hgrn2Layer(nn.Module):
-    def __init__(self, config: Hgrn2Config, layer_idx=0):
+class LightNetLayer(nn.Module):
+    def __init__(self, config: LightNetConfig, layer_idx=0):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
@@ -45,7 +44,6 @@ class Hgrn2Layer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        lower_bound: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         # token mixer
@@ -55,7 +53,6 @@ class Hgrn2Layer(nn.Module):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            lower_bound=lower_bound,
             **kwargs,
         )
         x = x + residual
@@ -68,21 +65,21 @@ class Hgrn2Layer(nn.Module):
         return outputs
 
 
-class Hgrn2PreTrainedModel(PreTrainedModel):
-    config_class = Hgrn2Config
+class LightNetPreTrainedModel(PreTrainedModel):
+    config_class = LightNetConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Hgrn2Layer"]
+    _no_split_modules = ["LightNetLayer"]
 
     def _init_weights(self, module):
         return _init_weights(self, module)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Hgrn2Model):
+        if isinstance(module, LightNetModel):
             module.gradient_checkpointing = value
 
 
-class Hgrn2Model(Hgrn2PreTrainedModel):
-    def __init__(self, config: Hgrn2Config):
+class LightNetModel(LightNetPreTrainedModel):
+    def __init__(self, config: LightNetConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
@@ -95,16 +92,10 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
-        config.expand_ratio = config.embed_dim // config.num_heads
         self.layers = nn.ModuleList(
-            [Hgrn2Layer(config, layer_idx) for layer_idx in range(config.num_layers)]
+            [LightNetLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
-
-        # log lower bound
-        self.log_lower_bounds = nn.Parameter(
-            torch.ones(config.num_layers, config.embed_dim), requires_grad=True
-        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -172,13 +163,7 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        # lower bound
-        lower_bounds = F.softmax(self.log_lower_bounds, dim=0)
-        lower_bounds = torch.cumsum(lower_bounds, dim=0)
-        lower_bounds -= lower_bounds[0, ...].clone()
-
         for idx, layer in enumerate(self.layers):
-            lower_bound = lower_bounds[idx]
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -189,7 +174,6 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
                     attention_mask,
                     past_key_values,
                     use_cache,
-                    lower_bound,
                 )
             else:
                 hidden_states, past_key_values = layer(
@@ -197,7 +181,6 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
-                    lower_bound=lower_bound,
                 )
 
         hidden_states = self.final_norm(hidden_states)
@@ -226,12 +209,12 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
         )
 
 
-class Hgrn2ForCausalLM(Hgrn2PreTrainedModel):
+class LightNetForCausalLM(LightNetPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Hgrn2Model(config)
+        self.model = LightNetModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
@@ -288,9 +271,9 @@ class Hgrn2ForCausalLM(Hgrn2PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, Hgrn2ForCausalLM
+        >>> from transformers import AutoTokenizer, LightNetForCausalLM
 
-        >>> model = Hgrn2ForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = LightNetForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"

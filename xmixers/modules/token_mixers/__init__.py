@@ -4,6 +4,7 @@ from .linear_attention import (
     DenseRnn,
     Hgru2,
     Hgru3,
+    LightNetAttention,
     LinearAttention,
     MetaLa,
     PolarRnn,
@@ -37,12 +38,14 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "dense_rnn": DenseRnn,
     "chunk_rnn": ChunkRnn,
     "delta_unit": DeltaUnit,
+    "lightnet": LightNetAttention,
     # long conv
     "gtu": Gtu,
 }
 
 SOFTMAX_TOKEN_MIXER_LIST = ["attn", "flex_attn", "n_attn", "mpa", "cpa", "mla"]
 LINEAR_TOKEN_MIXER_LIST = [
+    "lightnet",
     "hgru2",
     "hgru3",
     "linear_attn",
@@ -342,4 +345,24 @@ def get_token_mixer(config, layer_idx):
             use_lrpe=config.use_lrpe,
             lrpe_type=config.lrpe_type,
             base=config.base,
+        )
+    elif config.token_mixer_type in ["lightnet"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_lrpe=config.use_lrpe,
+            base=config.base,
+            use_output_gate=config.use_output_gate,
+            norm_type=config.norm_type,
+            q_activation=config.q_activation,
+            k_activation=config.k_activation,
+            scalar_decay=config.scalar_decay,
+            causal=config.causal,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            init_std=config.init_std,
+            gain=config.gain,
         )

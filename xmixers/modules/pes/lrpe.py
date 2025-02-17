@@ -84,7 +84,7 @@ class Lrpe(nn.Module):
             theta = base ** (
                 -2 / d * torch.arange(d, dtype=torch.int64)
             ).float().reshape(1, -1)
-        elif lrpe_type == 5:
+        elif lrpe_type == 5:  # result much worse than 6
             logging_info("lrpe cosine, cosine half head dim, use low freq")
             theta = (
                 base
