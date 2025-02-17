@@ -42,9 +42,9 @@ class GroupRMSNorm(torch.nn.Module):
             self.register_parameter("weight", None)
             self.register_parameter("bias", None)
 
-        self.reset_parameters()
+        self._init_weights()
 
-    def reset_parameters(self) -> None:
+    def _init_weights(self) -> None:
         if self.affine:
             init.ones_(self.weight)
             if self.bias is not None:

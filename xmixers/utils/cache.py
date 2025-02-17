@@ -8,10 +8,8 @@ import transformers
 
 class XmixersCache(transformers.cache_utils.Cache):
     def __init__(self, seen_tokens: int = 0):
-
         self.states: List[Dict[str, Any]] = []
-
-        self._seen_tokens = seen_tokens  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self._seen_tokens = []
 
     def __getitem__(self, layer_idx: int) -> Dict[str, Any]:
         if layer_idx < len(self):
@@ -60,10 +58,6 @@ class XmixersCache(transformers.cache_utils.Cache):
             Dictionary of the updated state.
         """
 
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += offset
-
         if attn_state is not None:
             input_size = attn_state[0].shape[-3]
             window_size = (
@@ -106,8 +100,10 @@ class XmixersCache(transformers.cache_utils.Cache):
                 mpa_state=mpa_state,
             )
             self.states.append(state)
+            self._seen_tokens.append(offset)
         else:
             state = self.states[layer_idx]
+            self._seen_tokens[layer_idx] += offset
             if recurrent_state is not None:
                 state["recurrent_state"] = recurrent_state
             if attn_state is not None:
@@ -166,7 +162,8 @@ class XmixersCache(transformers.cache_utils.Cache):
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         if len(self.states) <= layer_idx:
             return 0
-        return self._seen_tokens
+        else:
+            return self._seen_tokens[layer_idx]
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. Cache does not have a maximum length."""

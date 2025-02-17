@@ -130,16 +130,19 @@ class Hgru2(nn.Module):
         )
 
         recurrent_state = None
+        q_offset = 0
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
+            q_offset = past_key_values.get_seq_length(self.layer_idx)
 
         dtype = q.dtype
         q, k, v, log_f = map(lambda x: x.to(dtype), [q, k, v, log_f])
         # left padding
         if attention_mask is not None and not attention_mask.all():
-            attention_mask = attention_mask.unsqueeze(-1).unsqueeze(-1)
-            k = k.masked_fill(attention_mask == 0, 0)
-            log_f = log_f.masked_fill(attention_mask == 0, 0)
+            start = q_offset
+            attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
+            k = k.masked_fill(attention_mask_ == 0, 0)
+            log_f = log_f.masked_fill(attention_mask_ == 0, 0)
 
         scale = 1
         if self.causal:

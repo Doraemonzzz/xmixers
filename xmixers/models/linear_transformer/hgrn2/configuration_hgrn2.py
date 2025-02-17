@@ -24,7 +24,7 @@ class Hgrn2Config(PretrainedConfig):
         ##### token mixer config
         token_mixer_type="hgru2",
         embed_dim=1024,
-        expand_ratio=128,
+        num_heads=8,
         bias=False,
         token_mixer_norm_type="rmsnorm",
         ###### channel mixer config
@@ -66,7 +66,7 @@ class Hgrn2Config(PretrainedConfig):
         ##### add
         # token mixer config
         self.embed_dim = embed_dim
-        self.expand_ratio = expand_ratio
+        self.num_heads = num_heads
         self.bias = bias
         self.token_mixer_norm_type = token_mixer_norm_type
         self.token_mixer_type = token_mixer_type

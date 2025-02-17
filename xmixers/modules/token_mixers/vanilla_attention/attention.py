@@ -127,7 +127,7 @@ class Attention(nn.Module):
         if (cu_seqlens is not None) or (
             attention_mask is not None and not attention_mask.all()
         ):
-            if cu_seqlens is not None:  # flame training state
+            if cu_seqlens is not None:  # flame training stage
                 cu_seqlens_q = cu_seqlens_k = cu_seqlens
                 max_seqlen_q = max_seqlen_k = n
                 q = q.squeeze(0)

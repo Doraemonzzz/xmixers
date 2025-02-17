@@ -55,6 +55,7 @@ class Hgrn2Layer(nn.Module):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            # lower_bound=lower_bound,
             **kwargs,
         )
         x = x + residual
@@ -94,6 +95,7 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
+        config.expand_ratio = config.embed_dim // config.num_heads
         self.layers = nn.ModuleList(
             [Hgrn2Layer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
