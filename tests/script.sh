@@ -7,6 +7,7 @@ model_type=llama
 # model_type=mpa
 # model_type=tpa
 # model_type=hgrn2
+model_type=lightnet
 
 dtype=bf16
 # dtype=fp32

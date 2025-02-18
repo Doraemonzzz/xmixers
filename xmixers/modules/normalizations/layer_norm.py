@@ -3,13 +3,12 @@ from typing import List, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.nn.init as init
 from torch import Size
 
 _shape_t = Union[int, List[int], Size]
 
-from xopes.ops.normalize import layer_norm_fn
+from .utils import NormOp
 
 
 class LayerNorm(torch.nn.Module):
@@ -44,6 +43,7 @@ class LayerNorm(torch.nn.Module):
         else:
             self.register_parameter("weight", None)
             self.register_parameter("bias", None)
+        self.op = NormOp(norm_type="layernorm")
 
         self._init_weights()
 
@@ -54,24 +54,17 @@ class LayerNorm(torch.nn.Module):
                 init.zeros_(self.bias)
 
     def forward(self, x, residual=None, return_residual=False):
-        if isinstance(x, torch.distributed.tensor.DTensor):
-            return F.layer_norm(
-                input=x,
-                normalized_shape=self.normalized_shape,
-                weight=self.weight,
-                bias=self.bias,
-                eps=self.eps,
-            )
-        else:
-            return layer_norm_fn(
-                x=x,
-                weight=self.weight,
-                bias=self.bias,
-                dim=x.shape[-1],
-                eps=self.eps,
-                residual=residual,
-                return_residual=return_residual,
-            )
+        return self.op(
+            x,
+            self.weight,
+            self.bias,
+            residual,
+            x.shape[-1],
+            self.eps,
+            True,
+            1,
+            return_residual,
+        )
 
     def extra_repr(self) -> str:
         return (
