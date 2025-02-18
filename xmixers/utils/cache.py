@@ -28,7 +28,7 @@ class XmixersCache(transformers.cache_utils.Cache):
 
     def update(
         self,
-        recurrent_state: torch.Tensor = None,
+        recurrent_state: List[torch.Tensor] = None,
         attn_state: Tuple[torch.Tensor, torch.Tensor] = None,
         conv_state: Tuple[torch.Tensor] = None,
         ffn_state: torch.Tensor = None,

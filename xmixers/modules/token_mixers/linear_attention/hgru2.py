@@ -132,7 +132,7 @@ class Hgru2(nn.Module):
         recurrent_state = None
         q_offset = 0
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
-            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
+            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
             q_offset = past_key_values.get_seq_length(self.layer_idx)
 
         dtype = q.dtype
@@ -173,7 +173,7 @@ class Hgru2(nn.Module):
 
         if past_key_values is not None:
             past_key_values.update(
-                recurrent_state=recurrent_state,
+                recurrent_state=[recurrent_state],
                 layer_idx=self.layer_idx,
                 offset=n,
             )

@@ -84,6 +84,7 @@ class LightNetAttention(nn.Module):
         self.embed_dim = embed_dim
         self.init_std = init_std
         self.gain = gain
+        self.lse_state = torch.empty(0)
         self._init_weights()
 
     def _init_weights(self):
@@ -116,21 +117,41 @@ class LightNetAttention(nn.Module):
             [q, k, v],
         )
 
-        if self.scalar_decay:
-            k = self.k_act(k)
-            self.f_proj(x)
-            z = k.float().logcumsumexp(1)
-            log_f = (torch.cat((z[:, :1], z[:, :-1]), 1) - z).to(k.dtype)
-        else:
-            z = k.float().logcumsumexp(1)
-            k = torch.exp(k - z)
-            log_f = (torch.cat((z[:, :1], z[:, :-1]), 1) - z).to(k.dtype)
-
         recurrent_state = None
         q_offset = 0
+        if self.scalar_decay:
+            shape = (b, 1, self.num_heads)
+        else:
+            shape = (b, 1, self.num_heads, self.head_dim)
+
+        if self.lse_state.shape[0] == 0 or self.lse_state.shape[0] != b:
+            self.lse_state = torch.zeros(shape, device=x.device, dtype=torch.float32)
+        lse_state = self.lse_state
+
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
-            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
+            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
+            lse_state = past_key_values[self.layer_idx]["recurrent_state"][1]
             q_offset = past_key_values.get_seq_length(self.layer_idx)
+
+        if self.scalar_decay:
+            f = self.f_proj(x).to(torch.float32)
+        else:
+            f = k.to(torch.float32)
+
+        if attention_mask is not None and not attention_mask.all():
+            start = q_offset
+            attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
+            f = f.masked_fill(attention_mask_ == 0, -float("inf"))
+
+        f = torch.cat([lse_state, f], dim=1)
+        z = f.float().logcumsumexp(1)
+        log_f = (z[:, :-1] - z[:, 1:]).to(k.dtype)
+        lse_state = z[:, -1:]
+
+        if self.scalar_decay:
+            k = self.k_act(k)
+        else:
+            k = torch.exp(k - z[:, 1:])
 
         if self.use_lrpe:
             q = self.lrpe(q, offset=q_offset)
@@ -140,6 +161,7 @@ class LightNetAttention(nn.Module):
 
         dtype = q.dtype
         q, k, v, log_f = map(lambda x: x.to(dtype), [q, k, v, log_f])
+
         # left padding
         if attention_mask is not None and not attention_mask.all():
             start = q_offset
@@ -180,7 +202,7 @@ class LightNetAttention(nn.Module):
 
         if past_key_values is not None:
             past_key_values.update(
-                recurrent_state=recurrent_state,
+                recurrent_state=[recurrent_state, lse_state],
                 layer_idx=self.layer_idx,
                 offset=n,
             )
