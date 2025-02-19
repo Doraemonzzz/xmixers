@@ -8,6 +8,7 @@ model_type=llama
 # model_type=tpa
 model_type=hgrn2
 model_type=lightnet
+# model_type=lightnet_scalar_decay
 
 dtype=bf16
 dtype=fp32

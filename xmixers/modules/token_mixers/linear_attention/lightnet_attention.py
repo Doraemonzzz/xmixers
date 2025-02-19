@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange, repeat
-from fla.ops.gla import chunk_gla, fused_recurrent_gla
+from fla.ops.common.fused_recurrent import fused_recurrent
+from fla.ops.gla import chunk_gla
 from fla.ops.simple_gla import chunk_simple_gla
 from transformers.cache_utils import Cache
 
@@ -140,7 +141,10 @@ class LightNetAttention(nn.Module):
 
         if attention_mask is not None and not attention_mask.all():
             start = q_offset
-            attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
+            if self.scalar_decay:
+                attention_mask_ = attention_mask[:, start:].unsqueeze(-1)
+            else:
+                attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
             f = f.masked_fill(attention_mask_ == 0, -float("inf"))
 
         f = torch.cat([lse_state, f], dim=1)
@@ -165,9 +169,10 @@ class LightNetAttention(nn.Module):
         # left padding
         if attention_mask is not None and not attention_mask.all():
             start = q_offset
-            attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
-            k = k.masked_fill(attention_mask_ == 0, 0)
             log_f = log_f.masked_fill(attention_mask_ == 0, 0)
+            if self.scalar_decay:
+                attention_mask_ = attention_mask_.unsqueeze(-1)
+            k = k.masked_fill(attention_mask_ == 0, 0)
 
         scale = 1
         if self.causal:
@@ -187,11 +192,19 @@ class LightNetAttention(nn.Module):
                     head_first=False,
                 )
             else:
-                output, recurrent_state = fused_recurrent_gla(
+                if self.scalar_decay:
+                    g = log_f
+                    gk = None
+                else:
+                    g = None
+                    gk = log_f
+
+                output, recurrent_state = fused_recurrent(
                     q=q,
                     k=k,
                     v=v,
-                    gk=log_f,
+                    g=g,
+                    gk=gk,
                     scale=scale,
                     initial_state=recurrent_state,
                     output_final_state=use_cache,

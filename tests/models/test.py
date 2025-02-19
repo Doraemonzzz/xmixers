@@ -26,6 +26,9 @@ def get_config(model_type):
         config = Hgrn2Config()
     elif model_type == "lightnet":
         config = LightNetConfig()
+    elif model_type == "lightnet_scalar_decay":
+        config = LightNetConfig()
+        config.scalar_decay = True
 
     return config
 
@@ -127,7 +130,7 @@ if __name__ == "__main__":
         "--model_type",
         type=str,
         default="llama",
-        choices=["llama", "mpa", "tpa", "hgrn2", "lightnet"],
+        choices=["llama", "mpa", "tpa", "hgrn2", "lightnet", "lightnet_scalar_decay"],
     )
     args = parser.parse_args()
     main(args)
