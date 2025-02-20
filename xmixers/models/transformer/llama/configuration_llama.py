@@ -42,6 +42,8 @@ class LLaMAConfig(PretrainedConfig):
         kv_lora_rank=512,
         qk_rope_head_dim=64,
         window_size=-1,
+        chunk_size=128,
+        token_mixer_top_k=2,
         ###### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
@@ -103,6 +105,8 @@ class LLaMAConfig(PretrainedConfig):
         self.qk_rope_head_dim = qk_rope_head_dim
         self.head_dim = head_dim
         self.window_size = window_size
+        self.chunk_size = chunk_size
+        self.token_mixer_top_k = token_mixer_top_k
         # channel mixer config
         self.channel_mixer_type = channel_mixer_type
         self.mid_dim = mid_dim

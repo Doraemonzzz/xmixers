@@ -16,6 +16,7 @@ from .vanilla_attention import (
     FlexAttention,
     MultiLatentAttention,
     MultiProductAttention,
+    SimpleSparseAttention,
     TensorProductAttention,
     nAttention,
 )
@@ -28,6 +29,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "mpa": MultiProductAttention,
     "tpa": TensorProductAttention,
     "mla": MultiLatentAttention,
+    "ssa": SimpleSparseAttention,
     # linear attn
     "hgru2": Hgru2,
     "hgru3": Hgru3,
@@ -43,7 +45,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "gtu": Gtu,
 }
 
-SOFTMAX_TOKEN_MIXER_LIST = ["attn", "flex_attn", "n_attn", "mpa", "cpa", "mla"]
+SOFTMAX_TOKEN_MIXER_LIST = ["attn", "flex_attn", "n_attn", "mpa", "cpa", "mla", "ssa"]
 LINEAR_TOKEN_MIXER_LIST = [
     "lightnet",
     "hgru2",
@@ -133,6 +135,26 @@ def get_token_mixer(config, layer_idx):
             lrpe_type=config.lrpe_type,
             base=config.base,
             max_position_embeddings=config.max_position_embeddings,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            window_size=config.window_size,
+            init_std=config.init_std,
+            gain=config.gain,
+        )
+    elif config.token_mixer_type in ["ssa"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            kv_heads=config.kv_heads,
+            bias=config.bias,
+            use_lrpe=config.use_lrpe,
+            layer_idx=layer_idx,
+            lrpe_type=config.lrpe_type,
+            base=config.base,
+            max_position_embeddings=config.max_position_embeddings,
+            chunk_size=config.chunk_size,
+            token_mixer_top_k=config.token_mixer_top_k,
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
