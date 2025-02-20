@@ -94,8 +94,8 @@ class SimpleSparseAttention(nn.Module):
         index = torch.arange(n, dtype=torch.int32, device=device).unsqueeze(1)
         array = torch.arange(g, dtype=torch.int32, device=device).unsqueeze(0)
         left_thresh = c * (array)
-        right_thresh = c * (1 + array)
-        return (index >= left_thresh) & (index < right_thresh)
+        c * (1 + array)
+        return index >= left_thresh
 
     def forward(
         self,
@@ -105,6 +105,7 @@ class SimpleSparseAttention(nn.Module):
         **kwargs,
     ):
         b, n, d = x.shape
+        h = self.num_heads
         c = self.chunk_size
         # linear map
         q = self.q_proj(x)
@@ -152,9 +153,17 @@ class SimpleSparseAttention(nn.Module):
             self.mask = self._get_mask(n, c, x.device)
         score = score.masked_fill(self.mask, -float("inf"))
         indices = torch.topk(score, self.top_k, dim=-1)[1]
-        # TODO: update this
-        k_select = torch.gather(k_, dim=-3, index=indices)
-        v_select = torch.gather(v_, dim=-3, index=indices)
+        # TODO: this version has many bug, update it later
+        k_ = k_.permute(0, 3, 1, 2, 4)  # from [b, g, c, h, d] to [b, h, g, c, d]
+        v_ = v_.permute(0, 3, 1, 2, 4)  # from [b, g, c, h, d] to [b, h, g, c, d]
+        batch_idx = torch.arange(b, device=x.device)[
+            :, None, None, None
+        ]  # [b, 1, 1, 1]
+        head_idx = torch.arange(h, device=x.device)[None, :, None, None]  # [1, h, 1, 1]
+        seq_idx = torch.arange(n, device=x.device)[None, None, :, None]  # [1, 1, n, 1]
+
+        k_select = k_[batch_idx, head_idx, indices, :, :]  # [b, h, n, top_k, c, d]
+        v_select = v_[batch_idx, head_idx, indices, :, :]  # [b, h, n, top_k, c, d]
         o_inter = flash_attn_func(q, k_select, v_select)
         o_intra = flash_attn_func(q_, k_, v_, causal=True)
         o_intra = rearrange(o_intra, "b g c h d -> b (g c) h d")
@@ -169,3 +178,11 @@ class SimpleSparseAttention(nn.Module):
         output = self.o_proj(output)
 
         return output, past_key_values
+
+
+if __name__ == "__main__":
+    device = torch.device("cuda")
+    x = torch.randn(2, 1024, 768).to(device)
+    model = SimpleSparseAttention(768, 12).to(device)
+    output = model(x)
+    print(output.shape)
