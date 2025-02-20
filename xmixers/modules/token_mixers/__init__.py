@@ -136,7 +136,9 @@ def get_token_mixer(config, layer_idx):
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
+            window_size=config.window_size,
             init_std=config.init_std,
+            gain=config.gain,
         )
     elif config.token_mixer_type in ["hgru2"]:
         return cls(

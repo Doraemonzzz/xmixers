@@ -6,12 +6,13 @@ file=test
 model_type=llama
 # model_type=mpa
 # model_type=tpa
-model_type=hgrn2
-model_type=lightnet
+# model_type=hgrn2
+# model_type=lightnet
 # model_type=lightnet_scalar_decay
+model_type=mla
 
 dtype=bf16
-dtype=fp32
+# dtype=fp32
 
 mkdir -p $folder/log
 

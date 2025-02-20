@@ -22,6 +22,10 @@ def get_config(model_type):
         config.lrpe_type = 3
         config.q_rank = 8
         config.kv_rank = 2
+    elif model_type == "mla":
+        config = LLaMAConfig()
+        config.token_mixer_type = "mla"
+        config.lrpe_type = 3
     elif model_type == "hgrn2":
         config = Hgrn2Config()
     elif model_type == "lightnet":
@@ -130,7 +134,15 @@ if __name__ == "__main__":
         "--model_type",
         type=str,
         default="llama",
-        choices=["llama", "mpa", "tpa", "hgrn2", "lightnet", "lightnet_scalar_decay"],
+        choices=[
+            "llama",
+            "mpa",
+            "tpa",
+            "hgrn2",
+            "lightnet",
+            "lightnet_scalar_decay",
+            "mla",
+        ],
     )
     args = parser.parse_args()
     main(args)

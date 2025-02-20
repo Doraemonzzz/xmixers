@@ -2,10 +2,8 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
-from xopes.ops import cumsum_fn
 
 from xmixers.modules.pes import Lrpe
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
@@ -18,6 +16,8 @@ except:
     index_first_axis = None
     pad_input = None
     unpad_input = None
+
+from .utils import _upad_input
 
 
 class Attention(nn.Module):
@@ -134,7 +134,7 @@ class Attention(nn.Module):
                 k = k.squeeze(0)
                 v = v.squeeze(0)
             else:
-                q, k, v, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                q, k, v, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
                     q=q, k=k, v=v, attention_mask=attention_mask, q_len=n
                 )
                 cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -165,47 +165,3 @@ class Attention(nn.Module):
         output = self.o_proj(output)
 
         return output, past_key_values
-
-    # credit to: https://github.com/fla-org/flash-linear-attention/blob/main/fla/layers/attn.py
-    def _upad_input(self, q, k, v, attention_mask, q_len):
-        seqlens = attention_mask.sum(-1, dtype=torch.int32)
-        indices_k = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-        max_seqlen_k = seqlens.max().item()
-        cu_seqlens_k = F.pad(cumsum_fn(seqlens, dim=0), (1, 0))
-
-        batch_size, seq_len, num_key_value_heads, head_dim = k.shape
-
-        k = index_first_axis(
-            k.reshape(batch_size * seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        v = index_first_axis(
-            v.reshape(batch_size * seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        if q_len == seq_len:
-            q = index_first_axis(
-                q.reshape(batch_size * seq_len, self.num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_q = max_seqlen_k
-            indices_q = indices_k
-        elif q_len == 1:
-            max_seqlen_q = 1
-            # There is a memcpy here, that is very bad.
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=q.device
-            )
-            indices_q = cu_seqlens_q[:-1]
-            q = q.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -q_len:]
-            q, indices_q, cu_seqlens_q, max_seqlen_q = unpad_input(q, attention_mask)
-
-        return (
-            q,
-            k,
-            v,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_q, max_seqlen_k),
-        )

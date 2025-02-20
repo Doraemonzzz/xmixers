@@ -14,6 +14,13 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
     - Long Convolution
 - Channel Mixers
 
+# Finished Model
+- [x] Mpa
+- [x] T6
+- [x] Mla
+- [x] Hgrn2
+- [x] Llama
+
 # Pretrained weights
 
 - GPT
