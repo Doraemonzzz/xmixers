@@ -45,11 +45,11 @@ class Hgrn2Config(PretrainedConfig):
         norm_pos="ogate",
         ce_type="xopes_flce",
         # init
-        init_type=0,
-        token_mixer_init_type=0,
-        rescale_type=0,
+        init_type=1,
+        token_mixer_init_type=4,
+        rescale_type=2,
+        gain=0.01,
         channel_mixer_init_type=0,
-        gain=0.02,
         **kwargs,
     ):
         super().__init__(

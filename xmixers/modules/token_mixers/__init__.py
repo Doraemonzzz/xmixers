@@ -229,27 +229,23 @@ def get_token_mixer(config, layer_idx):
         return cls(
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,
-            kv_heads=config.kv_heads,
             bias=config.bias,
-            use_lrpe=config.use_lrpe_list[layer_idx]
-            if len(config.use_lrpe_list) > layer_idx
-            else config.use_lrpe_list[0],
             layer_idx=layer_idx,
-            lrpe_type=config.lrpe_type,
-            base=config.base,
-            gate_dim=config.gate_dim,
             use_output_gate=config.use_output_gate,
             norm_type=config.norm_type,
             q_activation=config.q_activation,
             k_activation=config.k_activation,
             v_activation=config.v_activation,
+            q_norm=config.q_norm,
+            k_norm=config.k_norm,
+            v_norm=config.v_norm,
             causal=config.causal,
-            norm_pos=config.norm_pos,
             max_position_embeddings=config.max_position_embeddings,
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
             init_std=config.init_std,
+            gain=config.gain,
         )
     elif config.token_mixer_type in ["metala"]:
         return cls(

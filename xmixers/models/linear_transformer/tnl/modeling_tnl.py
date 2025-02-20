@@ -1,13 +1,11 @@
 # coding=utf-8
 # Tnl: https://arxiv.org/pdf/2405.17381
 """ PyTorch Tnl model."""
-import math
 from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
@@ -19,7 +17,14 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import GLU, TnlAttention, get_log_slopes_general, get_norm_fn
+from xmixers.modules import (
+    get_channel_mixer,
+    get_log_slopes_general,
+    get_norm_fn,
+    get_token_mixer,
+)
+from xmixers.utils import _init_weights, pad_embed_dim
+from xmixers.utils.loss_utils import Loss
 
 from .configuration_tnl import TnlConfig
 
@@ -28,47 +33,15 @@ class TnlLayer(nn.Module):
     def __init__(self, config: TnlConfig, layer_idx=0):
         super().__init__()
 
-        self.token_mixer = TnlAttention(
-            embed_dim=config.embed_dim,
-            num_heads=config.num_heads,
-            kv_heads=config.kv_heads,
-            bias=config.bias,
-            use_lrpe=config.use_lrpe_list[layer_idx]
-            if len(config.use_lrpe_list) > layer_idx
-            else config.use_lrpe_list[0],
-            layer_idx=layer_idx,
-            lrpe_type=config.lrpe_type,
-            base=config.base,
-            gate_dim=config.gate_dim,
-            use_output_gate=config.use_output_gate,
-            norm_type=config.norm_type,
-            q_activation=config.q_activation,
-            k_activation=config.k_activation,
-            v_activation=config.v_activation,
-            causal=config.causal,
-            norm_pos=config.norm_pos,
-            max_position_embeddings=config.max_position_embeddings,
-            token_mixer_init_type=config.token_mixer_init_type,
-            rescale_type=config.rescale_type,
-            num_layers=config.num_layers,
-            init_std=config.init_std,
-        )
-
+        self.token_mixer = get_token_mixer(config, layer_idx)
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
-
-        self.channel_mixer = GLU(
-            embed_dim=config.embed_dim,
-            mid_dim=config.mid_dim,
-            activation=config.glu_activation,
-            bias=config.bias,
-        )
-
+        self.channel_mixer = get_channel_mixer(config)
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
     def forward(
         self,
         x,
-        log_slope: Optional[torch.Tensor] = None,
+        log_decay: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
     ):
@@ -76,7 +49,7 @@ class TnlLayer(nn.Module):
         residual = x
         x, past_key_values = self.token_mixer(
             x=self.token_norm(x),
-            log_slope=log_slope,
+            log_decay=log_decay,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
         )
@@ -96,60 +69,7 @@ class TnlPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["TnlLayer"]
 
     def _init_weights(self, module):
-        if self.config.init_type == 0:
-            std = self.config.init_std
-            if isinstance(module, nn.Linear):
-                nn.init.normal_(module.weight, mean=0.0, std=std)
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-            elif isinstance(module, nn.Embedding):
-                nn.init.normal_(module.weight, mean=0.0, std=std)
-                if module.padding_idx is not None:
-                    nn.init.zeros_(module.weight[module.padding_idx])
-        elif (
-            self.config.init_type == 1
-        ):  # credit to https://arxiv.org/pdf/2409.02060#page=14.84
-            std = self.config.init_std
-            trunc_std = 3 * std
-            if isinstance(module, nn.Linear):
-                nn.init.trunc_normal_(
-                    module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
-                )
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-            elif isinstance(module, nn.Embedding):
-                nn.init.trunc_normal_(
-                    module.weight, mean=0.0, std=std, a=-trunc_std, b=trunc_std
-                )
-                if module.padding_idx is not None:
-                    nn.init.zeros_(module.weight[module.padding_idx])
-        elif self.config.init_type == 2:  # credit to https://arxiv.org/pdf/1910.05895
-            std = (2 / 5 / self.config.embed_dim) ** 0.5
-            if isinstance(module, nn.Linear):
-                nn.init.normal_(module.weight, mean=0.0, std=std)
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-            elif isinstance(module, nn.Embedding):
-                nn.init.normal_(module.weight, mean=0.0, std=std)
-                if module.padding_idx is not None:
-                    nn.init.zeros_(module.weight[module.padding_idx])
-
-        # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
-        #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-        #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-        #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-        #
-        # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
-        for name, p in module.named_parameters():
-            if name in ["w3.weight"]:
-                num_residuals_per_layer = 2
-                # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
-                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
-                # We need to reinit p since this code could be called multiple times
-                # Having just p *= scale would repeatedly scale it down
-                with torch.no_grad():
-                    p /= math.sqrt(num_residuals_per_layer * self.config.num_layers)
+        return _init_weights(self, module)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, TnlModel):
@@ -163,6 +83,7 @@ class TnlModel(TnlPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.gradient_checkpointing = False
+        config.vocab_size = pad_embed_dim(config.vocab_size)
 
         # params
         self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
@@ -172,10 +93,12 @@ class TnlModel(TnlPreTrainedModel):
         self.layers = nn.ModuleList(
             [TnlLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        log_slope = get_log_slopes_general(config.num_heads, config.n_min, config.n_max)
+        log_decay = -get_log_slopes_general(
+            config.num_heads, config.n_min, config.n_max
+        )
         self.register_buffer(
-            "log_slope",
-            torch.tensor(log_slope, dtype=torch.float32),
+            "log_decay",
+            torch.tensor(log_decay, dtype=torch.float32),
             persistent=False,
         )
 
@@ -250,20 +173,20 @@ class TnlModel(TnlPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            log_slope = self.log_slope * (1 - idx / (self.config.num_layers - 1) + 1e-5)
+            log_decay = self.log_decay * (1 - idx / (self.config.num_layers - 1) + 1e-5)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     layer.__call__,
                     hidden_states,
-                    log_slope,
+                    log_decay,
                     attention_mask,
                     past_key_values,
                 )
             else:
                 layer_outputs = layer(
                     hidden_states,
-                    log_slope=log_slope,
+                    log_decay=log_decay,
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                 )
@@ -303,7 +226,7 @@ class TnlForCausalLM(TnlPreTrainedModel):
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
-
+        self.loss = Loss()
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -336,6 +259,7 @@ class TnlForCausalLM(TnlPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -389,20 +313,22 @@ class TnlForCausalLM(TnlPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
 
-        loss = None
-        if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+        fuse_linear_and_cross_entropy = (
+            self.config.ce_type not in ["fla_fce", "naive", "xopes_ce"]
+            and self.training
+        )
+
+        # since we may use forward_pre_hook, we can't use key word arguments
+        logits, loss = self.loss(
+            self.lm_head.weight,
+            hidden_states,
+            labels,
+            self.lm_head.bias,
+            num_logits_to_keep,
+            fuse_linear_and_cross_entropy,
+            ce_type=self.config.ce_type,
+        )
 
         if not return_dict:
             output = (logits,) + outputs[1:]

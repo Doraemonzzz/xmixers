@@ -4,7 +4,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import xmixers  # noqa
-from xmixers.models import Hgrn2Config, LightNetConfig, LLaMAConfig
+from xmixers.models import Hgrn2Config, LightNetConfig, LLaMAConfig, TnlConfig
 
 AUTO_DTYPE_MAP = {"bf16": torch.bfloat16, "fp32": torch.float32}
 
@@ -33,6 +33,8 @@ def get_config(model_type):
     elif model_type == "lightnet_scalar_decay":
         config = LightNetConfig()
         config.scalar_decay = True
+    elif model_type == "tnl":
+        config = TnlConfig()
 
     return config
 
@@ -142,6 +144,7 @@ if __name__ == "__main__":
             "lightnet",
             "lightnet_scalar_decay",
             "mla",
+            "tnl",
         ],
     )
     args = parser.parse_args()
