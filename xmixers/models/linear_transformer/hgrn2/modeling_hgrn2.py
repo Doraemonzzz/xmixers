@@ -190,6 +190,7 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
                     past_key_values,
                     use_cache,
                     lower_bound,
+                    **kwargs,
                 )
             else:
                 hidden_states, past_key_values = layer(
@@ -198,6 +199,7 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
                     past_key_values=past_key_values,
                     use_cache=use_cache,
                     lower_bound=lower_bound,
+                    **kwargs,
                 )
 
         hidden_states = self.final_norm(hidden_states)
@@ -325,6 +327,7 @@ class Hgrn2ForCausalLM(Hgrn2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]

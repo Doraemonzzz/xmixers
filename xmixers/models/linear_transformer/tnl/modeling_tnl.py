@@ -23,7 +23,7 @@ from xmixers.modules import (
     get_norm_fn,
     get_token_mixer,
 )
-from xmixers.utils import XmixersCache, _init_weights, pad_embed_dim
+from xmixers.utils import XmixersCache, _init_weights, _post_init_weights, pad_embed_dim
 from xmixers.utils.loss_utils import Loss
 
 from .configuration_tnl import TnlConfig
@@ -97,14 +97,15 @@ class TnlModel(TnlPreTrainedModel):
         self.layers = nn.ModuleList(
             [TnlLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        log_decay = -get_log_slopes_general(
-            config.num_heads, config.n_min, config.n_max
-        )
-        self.register_buffer(
-            "log_decay",
-            log_decay,
-            persistent=False,
-        )
+        self.log_decay = torch.empty(0)
+        # log_decay = -get_log_slopes_general(
+        #     config.num_heads, config.n_min, config.n_max
+        # )
+        # self.register_buffer(
+        #     "log_decay",
+        #     log_decay,
+        #     persistent=False,
+        # )
 
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
         # Initialize weights and apply final processing
@@ -171,6 +172,11 @@ class TnlModel(TnlPreTrainedModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
+        if self.log_decay.shape[0] == 0:
+            self.log_decay = get_log_slopes_general(
+                self.config.num_heads, self.config.n_min, self.config.n_max
+            ).to(hidden_states.device)
+
         for idx, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -185,6 +191,7 @@ class TnlModel(TnlPreTrainedModel):
                     attention_mask,
                     past_key_values,
                     use_cache,
+                    **kwargs,
                 )
             else:
                 layer_outputs = layer(
@@ -193,6 +200,7 @@ class TnlModel(TnlPreTrainedModel):
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -234,6 +242,11 @@ class TnlForCausalLM(TnlPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def post_init_weights(
+        self,
+    ):
+        _post_init_weights(self)
+
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
@@ -264,6 +277,7 @@ class TnlForCausalLM(TnlPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -314,6 +328,7 @@ class TnlForCausalLM(TnlPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]

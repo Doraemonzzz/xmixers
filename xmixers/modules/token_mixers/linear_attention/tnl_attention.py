@@ -56,7 +56,7 @@ class TnlAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.norm = get_norm_fn(norm_type)(embed_dim)
         self.q_act = q_activation
         self.k_act = k_activation
@@ -164,6 +164,6 @@ class TnlAttention(nn.Module):
         output = self.norm(output)
 
         # outproj
-        output = self.out_proj(output)
+        output = self.o_proj(output)
 
         return output, past_key_values
