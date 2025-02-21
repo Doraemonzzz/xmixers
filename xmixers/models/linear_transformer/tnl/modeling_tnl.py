@@ -6,7 +6,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from transformers.cache_utils import Cache, DynamicCache
+from transformers.cache_utils import Cache
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -23,7 +23,7 @@ from xmixers.modules import (
     get_norm_fn,
     get_token_mixer,
 )
-from xmixers.utils import _init_weights, pad_embed_dim
+from xmixers.utils import XmixersCache, _init_weights, pad_embed_dim
 from xmixers.utils.loss_utils import Loss
 
 from .configuration_tnl import TnlConfig
@@ -44,6 +44,8 @@ class TnlLayer(nn.Module):
         log_decay: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
+        **kwargs,
     ):
         # token mixer
         residual = x
@@ -52,6 +54,8 @@ class TnlLayer(nn.Module):
             log_decay=log_decay,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            **kwargs,
         )
         x = x + residual
 
@@ -98,7 +102,7 @@ class TnlModel(TnlPreTrainedModel):
         )
         self.register_buffer(
             "log_decay",
-            torch.tensor(log_decay, dtype=torch.float32),
+            log_decay,
             persistent=False,
         )
 
@@ -147,10 +151,8 @@ class TnlModel(TnlPreTrainedModel):
                 "You have to specify either decoder_input_ids or decoder_inputs_embeds"
             )
 
-        if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        if use_cache and not isinstance(past_key_values, XmixersCache):
+            past_key_values = XmixersCache.from_legacy_cache(past_key_values)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -182,6 +184,7 @@ class TnlModel(TnlPreTrainedModel):
                     log_decay,
                     attention_mask,
                     past_key_values,
+                    use_cache,
                 )
             else:
                 layer_outputs = layer(
@@ -189,6 +192,7 @@ class TnlModel(TnlPreTrainedModel):
                     log_decay=log_decay,
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
+                    use_cache=use_cache,
                 )
 
             hidden_states = layer_outputs[0]

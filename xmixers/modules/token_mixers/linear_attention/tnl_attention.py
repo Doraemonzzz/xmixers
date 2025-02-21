@@ -9,7 +9,13 @@ from transformers.cache_utils import Cache
 from xopes.ops import lasd_fn
 
 from xmixers.modules.normalizations import get_norm_fn
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
+from xmixers.utils import (
+    XMIXERS_DEBUG,
+    _initialize_weights,
+    _upad_input,
+    pad_input,
+    print_params,
+)
 
 
 class TnlAttention(nn.Module):
@@ -87,6 +93,7 @@ class TnlAttention(nn.Module):
         log_decay,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
         **kwargs,
     ):
         b, n, d = x.shape
@@ -101,9 +108,23 @@ class TnlAttention(nn.Module):
         )
 
         recurrent_state = None
-        if past_key_values is not None:
+        if past_key_values is not None and len(past_key_values) > self.layer_idx:
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
             past_key_values.get_seq_length(self.layer_idx)
+
+        use_attn_mask = attention_mask is not None and not attention_mask.all()
+
+        if use_attn_mask:
+            q, k, v, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
+                q=q, k=k, v=v, attention_mask=attention_mask, q_len=n
+            )
+            q = q.unsqueeze(0)
+            k = k.unsqueeze(0)
+            v = v.unsqueeze(0)
+            cu_seqlens, cu_seqlens_k = cu_seq_lens
+            max_seqlen_q, max_seqlen_k = max_seq_lens
+        else:
+            cu_seqlens = None
 
         if self.causal:
             output, recurrent_state = lasd_fn(
@@ -112,6 +133,7 @@ class TnlAttention(nn.Module):
                 v=v,
                 ld=log_decay,
                 initial_state=recurrent_state,
+                cu_seqlens=cu_seqlens,
                 q_act=self.q_act,
                 k_act=self.k_act,
                 v_act=self.v_act,
@@ -122,8 +144,18 @@ class TnlAttention(nn.Module):
         else:
             assert False, "not implemented"
 
+        if past_key_values is not None:
+            past_key_values.update(
+                recurrent_state=[recurrent_state],
+                layer_idx=self.layer_idx,
+                offset=n,
+            )
+
+        if use_attn_mask:
+            output = pad_input(output.squeeze(0), indices_q, b, n)
+
         # reshape
-        output = rearrange(output, "... h n d -> ... n (h d)")
+        output = rearrange(output, "... n h d -> ... n (h d)")
 
         if self.use_output_gate:
             output_gate = F.sigmoid(self.output_gate(x))

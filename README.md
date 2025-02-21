@@ -30,7 +30,8 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 -
 
 # ToDo
-- [ ] Update init weights for every model.
+- [ ] Update attn mask treat for attention, mpa, tpa, mla;
+- [x] Update init weights for every model.
 - [ ] Rm bias for layernorm since it will raise nan error.
   - [ ] linear attention
     - [x] hgru2

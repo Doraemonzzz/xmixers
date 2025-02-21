@@ -7,7 +7,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from transformers.cache_utils import Cache, DynamicCache
+from transformers.cache_utils import Cache
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -19,6 +19,7 @@ logger = logging.get_logger(__name__)
 
 
 from xmixers.modules import GLU, LearnablePe, SinCosPe, get_norm_fn, get_token_mixer
+from xmixers.utils import XmixersCache
 
 from .configuration_linear_transformer import LinearTransformerConfig
 
@@ -200,10 +201,8 @@ class LinearTransformerModel(LinearTransformerPreTrainedModel):
                 "You have to specify either decoder_input_ids or decoder_inputs_embeds"
             )
 
-        if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        if use_cache and not isinstance(past_key_values, XmixersCache):
+            past_key_values = XmixersCache.from_legacy_cache(past_key_values)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
