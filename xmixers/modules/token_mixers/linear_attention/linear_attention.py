@@ -142,7 +142,6 @@ class LinearAttention(nn.Module):
             if is_causal:
                 n = k.shape[1]
                 causal_mask = self.causal_mask[:n, :n]
-                # print(q.shape, energy.shape, v.shape, causal_mask.shape)
                 energy = energy * causal_mask
             output = torch.einsum("... h n m, ... m h d -> ... n h d", energy, v)
         else:

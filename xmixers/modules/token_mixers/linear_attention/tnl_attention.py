@@ -6,9 +6,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
-from xopes.ops import lasd_fn
+from xopes.ops import lightning_attn_func
 
-from xmixers.modules.normalizations import get_norm_fn
+from xmixers.modules.activations import get_activation_fn
+from xmixers.modules.normalizations import get_norm_fn, l2_norm
 from xmixers.utils import (
     XMIXERS_DEBUG,
     _initialize_weights,
@@ -58,9 +59,9 @@ class TnlAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.norm = get_norm_fn(norm_type)(embed_dim)
-        self.q_act = q_activation
-        self.k_act = k_activation
-        self.v_act = v_activation
+        self.q_act = get_activation_fn(q_activation)
+        self.k_act = get_activation_fn(k_activation)
+        self.v_act = get_activation_fn(v_activation)
         self.q_norm = q_norm
         self.k_norm = k_norm
         self.v_norm = v_norm
@@ -107,12 +108,26 @@ class TnlAttention(nn.Module):
             [q, k, v],
         )
 
+        if self.q_norm:
+            q = l2_norm(q)
+        if self.k_norm:
+            k = l2_norm(k)
+        if self.v_norm:
+            v = l2_norm(v)
+
+        # act
+        q = self.q_act(q)
+        k = self.k_act(k)
+        v = self.v_act(v)
+
         recurrent_state = None
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
             past_key_values.get_seq_length(self.layer_idx)
 
-        use_attn_mask = attention_mask is not None and not attention_mask.all()
+        use_attn_mask = (
+            attention_mask is not None and not attention_mask.all() and (n > 1)
+        )
 
         if use_attn_mask:
             q, k, v, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
@@ -127,19 +142,13 @@ class TnlAttention(nn.Module):
             cu_seqlens = None
 
         if self.causal:
-            output, recurrent_state = lasd_fn(
+            output, recurrent_state = lightning_attn_func(
                 q=q,
                 k=k,
                 v=v,
                 ld=log_decay,
                 initial_state=recurrent_state,
                 cu_seqlens=cu_seqlens,
-                q_act=self.q_act,
-                k_act=self.k_act,
-                v_act=self.v_act,
-                q_norm=self.q_norm,
-                k_norm=self.k_norm,
-                v_norm=self.v_norm,
             )
         else:
             assert False, "not implemented"
