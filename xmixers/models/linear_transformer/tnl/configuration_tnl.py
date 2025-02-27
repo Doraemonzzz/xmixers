@@ -39,6 +39,7 @@ class TnlConfig(PretrainedConfig):
         k_norm=False,
         v_norm=False,
         causal=True,
+        use_initial_state=False,
         ###### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
@@ -88,6 +89,7 @@ class TnlConfig(PretrainedConfig):
         self.k_norm = k_norm
         self.v_norm = v_norm
         self.causal = causal
+        self.use_initial_state = use_initial_state
         self.token_mixer_type = token_mixer_type
         # channel mixer config
         self.channel_mixer_type = channel_mixer_type

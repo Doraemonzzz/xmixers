@@ -240,6 +240,7 @@ def get_token_mixer(config, layer_idx):
             k_norm=config.k_norm,
             v_norm=config.v_norm,
             causal=config.causal,
+            use_initial_state=config.use_initial_state,
             max_position_embeddings=config.max_position_embeddings,
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,

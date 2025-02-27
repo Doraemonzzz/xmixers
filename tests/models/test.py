@@ -35,6 +35,9 @@ def get_config(model_type):
         config.scalar_decay = True
     elif model_type == "tnl":
         config = TnlConfig()
+    elif model_type == "tnl_state":
+        config = TnlConfig()
+        config.use_initial_state = True
 
     return config
 
@@ -145,6 +148,7 @@ if __name__ == "__main__":
             "lightnet_scalar_decay",
             "mla",
             "tnl",
+            "tnl_state",
         ],
     )
     args = parser.parse_args()

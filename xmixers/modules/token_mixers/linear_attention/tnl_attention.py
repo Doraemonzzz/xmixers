@@ -15,6 +15,7 @@ from xmixers.utils import (
     _initialize_weights,
     _upad_input,
     pad_input,
+    print_module,
     print_params,
 )
 
@@ -41,6 +42,7 @@ class TnlAttention(nn.Module):
         num_layers: int = 12,
         init_std: float = 0.02,
         gain: float = 0.01,
+        use_initial_state: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -74,6 +76,14 @@ class TnlAttention(nn.Module):
                 nn.Linear(self.head_dim, embed_dim, bias=bias),
             )
 
+        self.use_initial_state = use_initial_state
+        if self.use_initial_state:
+            self.initial_state = nn.Parameter(
+                torch.zeros(self.num_heads, self.head_dim, self.head_dim)
+            )
+        else:
+            self.initial_state = None
+
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.num_layers = num_layers
@@ -87,6 +97,9 @@ class TnlAttention(nn.Module):
 
     def _initialize_weights(self, module):
         return _initialize_weights(self, module)
+
+    def extra_repr(self):
+        return print_module(self)
 
     def forward(
         self,
@@ -120,7 +133,7 @@ class TnlAttention(nn.Module):
         k = self.k_act(k)
         v = self.v_act(v)
 
-        recurrent_state = None
+        recurrent_state = self.initial_state
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
             past_key_values.get_seq_length(self.layer_idx)
