@@ -34,7 +34,9 @@ class TnlLayer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.token_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
         self.channel_mixer = get_channel_mixer(config)
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
@@ -98,14 +100,6 @@ class TnlModel(TnlPreTrainedModel):
             [TnlLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
         self.log_decay = torch.empty(0)
-        # log_decay = -get_log_slopes_general(
-        #     config.num_heads, config.n_min, config.n_max
-        # )
-        # self.register_buffer(
-        #     "log_decay",
-        #     log_decay,
-        #     persistent=False,
-        # )
 
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
         # Initialize weights and apply final processing
