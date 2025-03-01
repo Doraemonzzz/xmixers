@@ -240,6 +240,11 @@ def get_token_mixer(config, layer_idx):
             k_norm=config.k_norm,
             v_norm=config.v_norm,
             causal=config.causal,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
+            token_mixer_norm_type=config.token_mixer_norm_type
+            if hasattr(config, "token_mixer_norm_type")
+            else config.norm_type,
             use_initial_state=config.use_initial_state,
             max_position_embeddings=config.max_position_embeddings,
             token_mixer_init_type=config.token_mixer_init_type,

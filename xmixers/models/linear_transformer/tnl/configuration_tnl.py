@@ -40,6 +40,9 @@ class TnlConfig(PretrainedConfig):
         v_norm=False,
         causal=True,
         use_initial_state=False,
+        gate_act="sigmoid",
+        gate_pos="pre",
+        token_mixer_norm_type="rmsnorm",
         ###### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
@@ -91,6 +94,9 @@ class TnlConfig(PretrainedConfig):
         self.causal = causal
         self.use_initial_state = use_initial_state
         self.token_mixer_type = token_mixer_type
+        self.gate_act = gate_act
+        self.gate_pos = gate_pos
+        self.token_mixer_norm_type = token_mixer_norm_type
         # channel mixer config
         self.channel_mixer_type = channel_mixer_type
         self.mid_dim = mid_dim

@@ -24,6 +24,9 @@ class NormOp(nn.Module):
         use_mean: bool = False,
         num_groups: int = 1,
         return_residual: bool = False,
+        gate: Optional[torch.Tensor] = None,
+        gate_act: str = "sigmoid",
+        gate_pos: str = "pre",
     ):
         if self.norm_type == "layernorm":
             c = dim**0.5
@@ -60,6 +63,9 @@ class NormOp(nn.Module):
             weight=weight,
             bias=bias,
             residual=residual,
+            gate=gate,
+            gate_act=gate_act,
+            gate_pos=gate_pos,
             c=c,
             eps=eps,
             use_mean=use_mean,

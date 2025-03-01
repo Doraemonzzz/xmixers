@@ -54,6 +54,51 @@ class RMSNorm(torch.nn.Module):
         return o
 
 
+class RMSNormFusedGate(torch.nn.Module):
+    def __init__(
+        self, dim: int, eps: float = 1e-5, gate_act="sigmoid", gate_pos="pre", **kwargs
+    ):
+        super().__init__()
+        if XMIXERS_DEBUG:
+            # get local varables
+            params = locals()
+            # print params
+            print_params(**params)
+
+        self.eps = eps
+        self.dim = dim
+        self.weight = nn.Parameter(torch.ones(dim))
+        self.gate_act = gate_act
+        self.gate_pos = gate_pos
+        self.op = NormOp(norm_type="rmsnorm")
+
+        self._init_weights()
+
+    def _init_weights(self):
+        nn.init.ones_(self.weight)
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}, eps={self.eps}, gate_act={self.gate_act}, gate_pos={self.gate_pos}"
+
+    def forward(self, x, gate):
+        return self.op(
+            x,
+            self.weight,
+            None,
+            None,
+            self.dim,
+            self.eps,
+            False,
+            1,
+            False,
+            gate,
+            self.gate_act,
+            self.gate_pos,
+        )
+
+        return o
+
+
 class GatedRMSNorm(nn.Module):
     def __init__(self, d: int, eps: float = 1e-5, bias: bool = False, **kwargs) -> None:
         super().__init__()

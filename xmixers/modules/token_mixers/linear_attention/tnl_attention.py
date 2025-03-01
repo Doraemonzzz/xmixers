@@ -3,7 +3,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
 from xopes.ops import lightning_attn_func
@@ -28,7 +27,7 @@ class TnlAttention(nn.Module):
         bias: bool = False,
         layer_idx: int = 0,
         use_output_gate: bool = True,
-        norm_type: str = "rmsnorm",
+        token_mixer_norm_type: str = "rmsnorm",
         q_activation: str = "silu",
         k_activation: str = "silu",
         v_activation: str = "silu",
@@ -36,6 +35,8 @@ class TnlAttention(nn.Module):
         k_norm: bool = False,
         v_norm: bool = False,
         causal: bool = True,
+        gate_act: str = "sigmoid",
+        gate_pos: str = "pre",
         max_position_embeddings: int = 1024,
         token_mixer_init_type: int = 4,
         rescale_type: int = 2,
@@ -60,7 +61,14 @@ class TnlAttention(nn.Module):
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.norm = get_norm_fn(norm_type)(embed_dim)
+        norm_type = (
+            f"{token_mixer_norm_type}_fused_gate"
+            if use_output_gate
+            else token_mixer_norm_type
+        )
+        self.norm = get_norm_fn(norm_type)(
+            embed_dim, gate_act=gate_act, gate_pos=gate_pos, num_groups=num_heads
+        )
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
         self.v_act = get_activation_fn(v_activation)
@@ -178,12 +186,11 @@ class TnlAttention(nn.Module):
 
         # reshape
         output = rearrange(output, "... n h d -> ... n (h d)")
-
         if self.use_output_gate:
-            output_gate = F.sigmoid(self.output_gate(x))
-            output = output * output_gate
-
-        output = self.norm(output)
+            gate = self.output_gate(x)
+            output = self.norm(output, gate)
+        else:
+            output = self.norm(output)
 
         # outproj
         output = self.o_proj(output)
