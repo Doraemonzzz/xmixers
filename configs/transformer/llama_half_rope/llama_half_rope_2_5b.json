@@ -1,0 +1,21 @@
+{
+  "base": 10000,
+  "bias": false,
+  "ce_type": "xopes_flce",
+  "embed_dim": 2560,
+  "fuse_norm_add": false,
+  "gain": 0.01,
+  "glu_activation": "silu",
+  "init_type": 1,
+  "lrpe_type": 3,
+  "mid_dim": 6912,
+  "model_type": "llama_",
+  "norm_type": "rmsnorm",
+  "num_heads": 20,
+  "num_layers": 32,
+  "rescale_type": 2,
+  "tie_word_embeddings": false,
+  "token_mixer_init_type": 4,
+  "use_gate_linear": true,
+  "use_lrpe": true
+}
