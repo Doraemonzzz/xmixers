@@ -110,8 +110,10 @@ def _init_weights(self, module):
                     pass
         elif hasattr(module, "reset_parameters"):
             module.reset_parameters()
-    elif self.config.init_type == 2:  # credit to https://arxiv.org/pdf/1910.05895
-        std = (2 / 5 / self.config.embed_dim) ** 0.5
+    elif (
+        self.config.init_type == 2
+    ):  # credit to https://arxiv.org/pdf/1910.05895 and https://arxiv.org/pdf/2405.04434
+        std = min((2 / 5 / self.config.embed_dim) ** 0.5, 0.006)
         if isinstance(module, nn.Linear):
             nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
