@@ -33,6 +33,7 @@ class MultiProductAttention(nn.Module):
         lrpe_type: int = 1,
         base: int = 10000,
         max_position_embeddings: int = 1024,
+        q_rank: int = -1,
         token_mixer_init_type: int = 4,
         rescale_type: int = 2,
         num_layers: int = 12,
@@ -57,7 +58,12 @@ class MultiProductAttention(nn.Module):
         self.window_size = window_size
         mid_dim = self.head_dim * self.num_heads
         self.mpa_type = mpa_type
-        self.q_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
+        self.q_rank = q_rank
+        if self.q_rank == -1:
+            self.q_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
+        else:
+            self.q_proj = nn.Linear(embed_dim, self.head_dim * self.q_rank, bias=bias)
+            self.q_head_proj = nn.Linear(embed_dim, num_heads * self.q_rank, bias=bias)
         self.kv_proj = nn.Linear(embed_dim, 2 * self.head_dim, bias=bias)
         if self.mpa_type == 0:
             self.kv_head_proj = nn.Linear(embed_dim, 2 * num_heads, bias=bias)
@@ -104,7 +110,18 @@ class MultiProductAttention(nn.Module):
     ):
         b, n, d = x.shape
         # linear map
-        q = self.q_proj(x)
+        if self.q_rank == -1:
+            q = self.q_proj(x)
+            q = rearrange(q, "... (h d) -> ... h d", h=self.num_heads)
+        else:
+            q = self.q_proj(x)
+            q_head = self.q_head_proj(x)
+            q, q_head = map(
+                lambda x: rearrange(x, "... (r d) -> ... r d", r=self.q_rank),
+                [q, q_head],
+            )
+            q_head = self.act(q_head)
+
         kv = self.kv_proj(x)
         if self.mpa_type == 0:
             kv_head = self.act(self.kv_head_proj(x))
@@ -113,8 +130,6 @@ class MultiProductAttention(nn.Module):
 
         k, v = kv.chunk(2, dim=-1)
         k_head, v_head = kv_head.chunk(2, dim=-1)
-
-        q = rearrange(q, "... (h d) -> ... h d", h=self.num_heads)
 
         # for lrpe
         q_offset = 0
@@ -137,6 +152,9 @@ class MultiProductAttention(nn.Module):
             lambda arr: torch.einsum("... h, ... d -> ... h d", arr[0], arr[1]),
             [(k_head, k), (v_head, v)],
         )
+
+        if self.q_rank != -1:
+            q = torch.einsum("... r h, ... r d -> ... h d", q_head, q)
 
         causal = True if self.training or q.shape[-3] == k.shape[-3] else False
         window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)

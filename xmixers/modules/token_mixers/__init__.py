@@ -97,6 +97,7 @@ def get_token_mixer(config, layer_idx):
             window_size=config.window_size,
             mpa_type=config.mpa_type,
             mpa_activation=config.mpa_activation,
+            q_rank=config.q_rank,
             head_dim=config.head_dim,
             init_std=config.init_std,
             gain=config.gain,

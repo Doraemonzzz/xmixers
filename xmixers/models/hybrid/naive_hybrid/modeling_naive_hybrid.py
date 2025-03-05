@@ -13,6 +13,15 @@ from transformers.modeling_outputs import (
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
+from xmixers.modules import (
+    get_channel_mixer,
+    get_log_slopes_general,
+    get_norm_fn,
+    get_token_mixer,
+)
+from xmixers.utils import XmixersCache, _init_weights, _post_init_weights, pad_embed_dim
+from xmixers.utils.loss_utils import Loss
+
 logger = logging.get_logger(__name__)
 
 
@@ -23,8 +32,7 @@ from xmixers.modules import (
     get_norm_fn,
     get_token_mixer,
 )
-from xmixers.utils import XmixersCache
-from xmixers.utils.loss_utils import loss_fct
+from xmixers.utils import XmixersCache, logging_info
 
 from .configuration_naive_hybrid import NaiveHybridConfig
 
@@ -85,6 +93,7 @@ class NaiveHybridModel(NaiveHybridPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.gradient_checkpointing = False
+        config.vocab_size = pad_embed_dim(config.vocab_size)
 
         # params
         self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
@@ -93,7 +102,12 @@ class NaiveHybridModel(NaiveHybridPreTrainedModel):
         )
         if config.token_mixer_type_list == []:
             config.token_mixer_type_list = [config.token_mixer_type] * config.num_layers
+        elif len(config.token_mixer_type_list) < config.num_layers:
+            n = len(config.token_mixer_type_list)
+            l = (config.num_layers + n - 1) // n
+            config.token_mixer_type_list = config.token_mixer_type_list * l
         config.token_mixer_type_list = config.token_mixer_type_list[: config.num_layers]
+        logging_info(f"token_mixer_type_list: {config.token_mixer_type_list}")
         assert (
             len(config.token_mixer_type_list) == config.num_layers
         ), "token_mixer_type_list must have the same length as num_layers"
@@ -104,14 +118,22 @@ class NaiveHybridModel(NaiveHybridPreTrainedModel):
                 config.use_lrpe = config.softmax_use_lrpe
                 config.lrpe_type = config.softmax_lrpe_type
                 config.base = config.softmax_base
+                config.num_heads = config.softmax_num_heads
+                config.head_dim = config.softmax_head_dim
             elif config.token_mixer_type in LINEAR_TOKEN_MIXER_LIST:
                 config.use_lrpe = config.linear_use_lrpe
                 config.lrpe_type = config.linear_lrpe_type
                 config.base = config.linear_base
+                config.num_heads = config.linear_num_heads
             layers.append(NaiveHybridLayer(config, layer_idx))
         self.layers = nn.ModuleList(layers)
+        if "tnl_attn" in config.token_mixer_type_list:
+            self.log_decay = torch.empty(0)
+        else:
+            self.log_decay = None
 
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -175,9 +197,23 @@ class NaiveHybridModel(NaiveHybridPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
+        if self.log_decay is not None and self.log_decay.shape[0] == 0:
+            self.log_decay = get_log_slopes_general(
+                self.config.num_heads, self.config.n_min, self.config.n_max
+            ).to(hidden_states.device)
+
         for idx, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
+
+            if self.log_decay is not None:
+                log_decay = self.log_decay * (
+                    1 - idx / (self.config.num_layers - 1) + 1e-5
+                )
+            else:
+                log_decay = None
+
+            kwargs["log_decay"] = log_decay
 
             if self.gradient_checkpointing and self.training:
                 hidden_states, past_key_values = self._gradient_checkpointing_func(
@@ -186,6 +222,7 @@ class NaiveHybridModel(NaiveHybridPreTrainedModel):
                     attention_mask,
                     past_key_values,
                     use_cache,
+                    **kwargs,
                 )
             else:
                 hidden_states, past_key_values = layer(
@@ -193,6 +230,7 @@ class NaiveHybridModel(NaiveHybridPreTrainedModel):
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
+                    **kwargs,
                 )
 
         hidden_states = self.final_norm(hidden_states)
@@ -229,9 +267,15 @@ class NaiveHybridForCausalLM(NaiveHybridPreTrainedModel):
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
+        self.loss = Loss()
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def post_init_weights(
+        self,
+    ):
+        _post_init_weights(self)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -319,49 +363,26 @@ class NaiveHybridForCausalLM(NaiveHybridPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
 
         fuse_linear_and_cross_entropy = (
-            self.config.ce_type not in ["fla_fce", "naive"] and self.training
-        )
-        logits = (
-            None
-            if fuse_linear_and_cross_entropy
-            else self.lm_head(
-                hidden_states[:, -num_logits_to_keep:]
-            )  # when generation or prefilling, num_logits_to_keep is 1
+            self.config.ce_type not in ["fla_fce", "naive", "xopes_ce"]
+            and self.training
         )
 
-        loss = None
-        if labels is not None:
-            shift_labels = labels[..., 1:].contiguous()
-            shift_labels = shift_labels.view(-1)
-            shift_labels = shift_labels.to(hidden_states.device)
-
-            if fuse_linear_and_cross_entropy:
-                # Shift so that tokens < n predict n
-                shift_hidden_states = hidden_states[..., :-1, :].contiguous()
-                shift_hidden_states = shift_hidden_states.view(
-                    -1, self.config.embed_dim
-                )
-                loss = loss_fct(
-                    ce_type=self.config.ce_type,
-                    labels=shift_labels,
-                    hidden_state=shift_hidden_states,
-                    weight=self.lm_head.weight,
-                    bias=self.lm_head.bias,
-                )
-            else:
-                # Shift so that tokens < n predict n
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_logits = shift_logits.view(-1, self.config.vocab_size)
-                loss = loss_fct(
-                    ce_type=self.config.ce_type,
-                    labels=shift_labels,
-                    logits=shift_logits,
-                )
+        # since we may use forward_pre_hook, we can't use key word arguments
+        logits, loss = self.loss(
+            self.lm_head.weight,
+            hidden_states,
+            labels,
+            self.lm_head.bias,
+            num_logits_to_keep,
+            fuse_linear_and_cross_entropy,
+            ce_type=self.config.ce_type,
+        )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
