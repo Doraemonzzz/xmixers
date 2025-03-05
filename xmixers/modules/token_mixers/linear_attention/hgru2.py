@@ -48,6 +48,7 @@ class Hgru2(nn.Module):
         self.causal = causal
         self.use_output_gate = use_output_gate
         self.use_dense_memory = use_dense_memory
+        self.embed_dim = embed_dim
 
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -82,6 +83,21 @@ class Hgru2(nn.Module):
         self.init_std = init_std
         self.gain = gain
         self._init_weights()
+
+    # only for benchmark inference
+    def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None, **kwargs):
+        device = self.o_proj.weight.device
+        dtype = self.o_proj.weight.dtype if dtype is None else dtype
+        head_dim = self.embed_dim // self.expand_ratio
+        recurrent_state = torch.zeros(
+            batch_size,
+            self.expand_ratio,
+            head_dim,
+            head_dim,
+            device=device,
+            dtype=dtype,
+        )
+        return recurrent_state
 
     def _init_weights(self):
         self.apply(self._initialize_weights)

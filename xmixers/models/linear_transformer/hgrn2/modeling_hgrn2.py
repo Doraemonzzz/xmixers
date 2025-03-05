@@ -39,6 +39,12 @@ class Hgrn2Layer(nn.Module):
         self.channel_mixer = get_channel_mixer(config)
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
+    # only for benchmark inference
+    def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None, **kwargs):
+        return self.token_mixer.allocate_inference_cache(
+            batch_size, max_seqlen, dtype=dtype, **kwargs
+        )
+
     def forward(
         self,
         x,
@@ -108,6 +114,15 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    # only for benchmark inference
+    def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None, **kwargs):
+        return {
+            i: layer.allocate_inference_cache(
+                batch_size, max_seqlen, dtype=dtype, **kwargs
+            )
+            for i, layer in enumerate(self.layers)
+        }
 
     def extra_repr(self):
         return print_module(self)
@@ -240,6 +255,12 @@ class Hgrn2ForCausalLM(Hgrn2PreTrainedModel):
         self.loss = Loss()
         # Initialize weights and apply final processing
         self.post_init()
+
+    # only for benchmark inference
+    def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None, **kwargs):
+        return self.model.allocate_inference_cache(
+            batch_size, max_seqlen, dtype=dtype, **kwargs
+        )
 
     def post_init_weights(
         self,

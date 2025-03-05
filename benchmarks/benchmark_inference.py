@@ -2,6 +2,7 @@
 
 import argparse
 import time
+from functools import partial
 from typing import List, Optional
 
 import torch
@@ -10,6 +11,7 @@ from tqdm import trange
 from transformers import AutoConfig, AutoModelForCausalLM
 
 import xmixers  # noqa
+from xmixers.utils.generation import GenerationMixin
 
 
 def sizeof_fmt(num, suffix="B"):
@@ -36,12 +38,14 @@ def profile(
     compile: bool = False,
     warmup_iter: int = 10,
     num_iter: int = 10,
+    cg: bool = False,
     dtype: Optional[torch.dtype] = torch.bfloat16,
 ):
     device = torch.device("cuda")
     config = AutoConfig.from_pretrained(cfg_path)
     config.vocab_size = vocab_size
     model = AutoModelForCausalLM.from_config(config).cuda().to(dtype)
+    model.generate = partial(GenerationMixin.generate, model)
     num_parameters = model.num_parameters()
     embedding_parameters = (
         vocab_size * config.embed_dim * (1 if config.tie_word_embeddings else 2)
@@ -76,6 +80,8 @@ def profile(
         "Warmup",
         "Input_length",
         "Max_length",
+        "Output_length",
+        "CG",
     ]
     res = []
 
@@ -88,24 +94,24 @@ def profile(
         )
         max_length = input_length + max_length
 
+        kwargs = {
+            "input_ids": input_ids,
+            "max_length": max_length,
+            "min_length": max_length,
+        }
+        if cg:
+            kwargs["cg"] = True
+
         print("Start warmup")
         for _ in bar:
             with torch.inference_mode():
-                text = model.generate(
-                    input_ids=input_ids,
-                    max_length=max_length,
-                    min_length=max_length,
-                )
+                text = model.generate(**kwargs)
         print("End warmup")
 
         start = time.time()
         for _ in range(num_iter):
             with torch.inference_mode():
-                text = model.generate(
-                    input_ids=input_ids,
-                    max_length=max_length,
-                    min_length=max_length,
-                )
+                text = model.generate(**kwargs)
         torch.cuda.synchronize()
         elapsed = time.time() - start
 
@@ -121,6 +127,8 @@ def profile(
                 "Warmup": warmup_iter,
                 "Input_length": input_length,
                 "Max_length": max_length,
+                "Output_length": text.shape[-1],
+                "CG": cg,
             }
         )
 
@@ -138,6 +146,7 @@ if __name__ == "__main__":
     parser.add_argument("--warmup_iter", default=10, type=int)
     parser.add_argument("--num_iter", default=10, type=int)
     parser.add_argument("--compile", action="store_true")
+    parser.add_argument("--cg", action="store_true")
     args = parser.parse_args()
 
     assert (
@@ -156,4 +165,5 @@ if __name__ == "__main__":
         compile=args.compile,
         warmup_iter=args.warmup_iter,
         num_iter=args.num_iter,
+        cg=args.cg,
     )
