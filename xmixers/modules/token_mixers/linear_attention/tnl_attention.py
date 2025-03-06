@@ -9,7 +9,14 @@ from xopes.ops import lightning_attn_func
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn, l2_norm
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
+from xmixers.utils import (
+    XMIXERS_DEBUG,
+    _initialize_weights,
+    _upad_input,
+    pad_input,
+    print_module,
+    print_params,
+)
 
 
 class TnlAttention(nn.Module):
@@ -146,22 +153,25 @@ class TnlAttention(nn.Module):
         use_attn_mask = (
             attention_mask is not None and not attention_mask.all() and (n > 1)
         )
-        use_attn_mask = (
-            attention_mask is not None and not attention_mask.all() and (n > 1)
-        )
-        # left padding
+
         if use_attn_mask:
-            start = q_offset
-            attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
-            k = k.masked_fill(attention_mask_ == 0, 0)
-            log_f = log_f.masked_fill(attention_mask_ == 0, 0)
+            q, k, v, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
+                q=q, k=k, v=v, attention_mask=attention_mask, q_len=n
+            )
+            q = q.unsqueeze(0)
+            k = k.unsqueeze(0)
+            v = v.unsqueeze(0)
+            cu_seqlens, cu_seqlens_k = cu_seq_lens
+            max_seqlen_q, max_seqlen_k = max_seq_lens
+        else:
+            cu_seqlens = None
 
         if self.causal:
             output, recurrent_state = lightning_attn_func(
                 q=q,
                 k=k,
                 v=v,
-                ld=log_f,
+                ld=log_decay,
                 initial_state=recurrent_state,
                 cu_seqlens=cu_seqlens,
             )
@@ -174,6 +184,9 @@ class TnlAttention(nn.Module):
                 layer_idx=self.layer_idx,
                 offset=n,
             )
+
+        if use_attn_mask:
+            output = pad_input(output.squeeze(0), indices_q, b, n)
 
         # reshape
         output = rearrange(output, "... n h d -> ... n (h d)")
