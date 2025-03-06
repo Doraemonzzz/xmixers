@@ -1,3 +1,4 @@
+# Hgru3: Hgru2 with negative decay
 import math
 from typing import Optional
 

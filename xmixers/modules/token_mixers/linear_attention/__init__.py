@@ -2,6 +2,7 @@ from .chunk_rnn import ChunkRnn
 from .delta_unit import DeltaUnit
 from .dense_rnn import DenseRnn
 from .hgru2 import Hgru2
+from .hgru2_scalar_decay import Hgru2ScalarDecay
 from .hgru3 import Hgru3
 from .lightnet_attention import LightNetAttention
 from .linear_attention import LinearAttention

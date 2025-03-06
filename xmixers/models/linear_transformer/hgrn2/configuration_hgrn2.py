@@ -26,6 +26,8 @@ class Hgrn2Config(PretrainedConfig):
         embed_dim=1024,
         num_heads=8,
         bias=False,
+        gate_act="sigmoid",
+        gate_pos="pre",
         token_mixer_norm_type="rmsnorm",
         ###### channel mixer config
         channel_mixer_type="glu",
@@ -38,6 +40,7 @@ class Hgrn2Config(PretrainedConfig):
         use_output_gate=False,
         norm_type="rmsnorm",
         q_activation="silu",
+        k_activation="silu",
         causal=True,
         use_embed_scale=False,
         use_dense_memory=False,
@@ -59,36 +62,47 @@ class Hgrn2Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        ##### hf origin
-        self.vocab_size = vocab_size
-        self.use_cache = use_cache
-        self.init_std = init_std
-        ##### add
-        # token mixer config
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.bias = bias
-        self.token_mixer_norm_type = token_mixer_norm_type
-        self.token_mixer_type = token_mixer_type
-        # channel mixer config
-        self.channel_mixer_type = channel_mixer_type
-        self.mid_dim = mid_dim
-        self.channel_mixer_activation = channel_mixer_activation
-        self.use_gate_linear = use_gate_linear
-        # others
-        self.max_position_embeddings = max_position_embeddings
-        self.num_layers = num_layers
-        self.use_output_gate = use_output_gate
-        self.norm_type = norm_type
-        self.q_activation = q_activation
-        self.causal = causal
-        self.use_embed_scale = use_embed_scale
-        self.use_dense_memory = use_dense_memory
-        self.beta_activation = beta_activation
-        self.norm_pos = norm_pos
-        self.init_type = init_type
-        self.token_mixer_init_type = token_mixer_init_type
-        self.rescale_type = rescale_type
-        self.channel_mixer_init_type = channel_mixer_init_type
-        self.gain = gain
-        self.ce_type = ce_type
+        for key, value in locals().items():
+            if key not in [
+                "self",
+                "kwargs",
+                "__class__",
+                "pad_token_id",
+                "bos_token_id",
+                "eos_token_id",
+                "tie_word_embeddings",
+            ]:
+                setattr(self, key, value)
+        # ##### hf origin
+        # self.vocab_size = vocab_size
+        # self.use_cache = use_cache
+        # self.init_std = init_std
+        # ##### add
+        # # token mixer config
+        # self.embed_dim = embed_dim
+        # self.num_heads = num_heads
+        # self.bias = bias
+        # self.token_mixer_norm_type = token_mixer_norm_type
+        # self.token_mixer_type = token_mixer_type
+        # # channel mixer config
+        # self.channel_mixer_type = channel_mixer_type
+        # self.mid_dim = mid_dim
+        # self.channel_mixer_activation = channel_mixer_activation
+        # self.use_gate_linear = use_gate_linear
+        # # others
+        # self.max_position_embeddings = max_position_embeddings
+        # self.num_layers = num_layers
+        # self.use_output_gate = use_output_gate
+        # self.norm_type = norm_type
+        # self.q_activation = q_activation
+        # self.causal = causal
+        # self.use_embed_scale = use_embed_scale
+        # self.use_dense_memory = use_dense_memory
+        # self.beta_activation = beta_activation
+        # self.norm_pos = norm_pos
+        # self.init_type = init_type
+        # self.token_mixer_init_type = token_mixer_init_type
+        # self.rescale_type = rescale_type
+        # self.channel_mixer_init_type = channel_mixer_init_type
+        # self.gain = gain
+        # self.ce_type = ce_type

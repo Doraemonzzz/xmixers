@@ -18,8 +18,12 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 - [x] Mpa
 - [x] T6
 - [x] Mla
-- [x] Hgrn2
+- [ ] Hgrn2
+  - left varlen
+- [ ] Hgrn2-scalar-decay
+  - left varlen
 - [x] Llama
+- [x] Tnl
 
 # Pretrained weights
 

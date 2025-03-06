@@ -31,7 +31,8 @@ class Hgru2(nn.Module):
         gain: float = 0.01,
         beta_activation: str = "silu",
         use_dense_memory: bool = False,
-        norm_pos: str = "ogate",  # choose from ["attn", "ogate"]
+        gate_act: str = "sigmoid",
+        gate_pos: str = "pre",
         **kwargs,
     ):
         super().__init__()
@@ -57,9 +58,12 @@ class Hgru2(nn.Module):
         self.q_act = get_activation_fn(q_activation)
         num_groups = embed_dim // expand_ratio
         self.norm = get_norm_fn(token_mixer_norm_type)(
-            embed_dim, bias=False, num_groups=num_groups
+            embed_dim,
+            bias=bias,
+            gate_act=gate_act,
+            gate_pos=gate_pos,
+            num_groups=num_groups,
         )
-        self.norm_pos = norm_pos
 
         if self.use_output_gate:
             self.output_gate = nn.Sequential(
@@ -153,8 +157,11 @@ class Hgru2(nn.Module):
 
         dtype = q.dtype
         q, k, v, log_f = map(lambda x: x.to(dtype), [q, k, v, log_f])
+        use_attn_mask = (
+            attention_mask is not None and not attention_mask.all() and (n > 1)
+        )
         # left padding
-        if attention_mask is not None and not attention_mask.all():
+        if use_attn_mask:
             start = q_offset
             attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
             k = k.masked_fill(attention_mask_ == 0, 0)
@@ -195,16 +202,11 @@ class Hgru2(nn.Module):
             )
 
         # reshape
-        output = rearrange(output, "b n h d -> b n (h d)")
-
-        if self.norm_pos == "attn":
-            output = self.norm(output)
-
+        output = rearrange(output, "... n h d -> ... n (h d)")
         if self.use_output_gate:
-            output_gate = F.sigmoid(self.output_gate(x))
-            output = output * output_gate
-
-        if self.norm_pos == "ogate":
+            gate = self.output_gate(x)
+            output = self.norm(output, gate)
+        else:
             output = self.norm(output)
 
         # out proj

@@ -28,6 +28,9 @@ def get_config(model_type):
         config.lrpe_type = 3
     elif model_type == "hgrn2":
         config = Hgrn2Config()
+    elif model_type == "hgrn2_scalar_decay":
+        config = Hgrn2Config()
+        config.token_mixer_type = "hgru2_scalar_decay"
     elif model_type == "lightnet":
         config = LightNetConfig()
     elif model_type == "lightnet_scalar_decay":
@@ -144,6 +147,7 @@ if __name__ == "__main__":
             "mpa",
             "tpa",
             "hgrn2",
+            "hgrn2_scalar_decay",
             "lightnet",
             "lightnet_scalar_decay",
             "mla",

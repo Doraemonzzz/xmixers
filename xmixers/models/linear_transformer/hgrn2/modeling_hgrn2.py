@@ -108,8 +108,12 @@ class Hgrn2Model(Hgrn2PreTrainedModel):
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
         # log lower bound
+        if config.token_mixer_type == "hgru2":
+            d = config.embed_dim
+        else:
+            d = config.embed_dim // config.expand_ratio
         self.log_lower_bounds = nn.Parameter(
-            torch.ones(config.num_layers, config.embed_dim), requires_grad=True
+            torch.ones(config.num_layers, d), requires_grad=True
         )
 
         # Initialize weights and apply final processing
