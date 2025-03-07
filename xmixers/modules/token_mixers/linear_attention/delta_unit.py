@@ -228,7 +228,7 @@ class DeltaUnit(nn.Module):
                     q=q,
                     k=k.to(dtype),
                     v=v.to(dtype),
-                    a=(k * beta.unsqueeze(-1) * torch.exp(log_f)).to(dtype),
+                    a=(k * -beta.unsqueeze(-1) * torch.exp(log_f)).to(dtype),
                     b=k.to(dtype),
                     gk=log_f.to(dtype),
                     initial_state=recurrent_state,
