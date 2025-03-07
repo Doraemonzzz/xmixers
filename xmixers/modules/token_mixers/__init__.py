@@ -187,7 +187,6 @@ def get_token_mixer(config, layer_idx):
             token_mixer_norm_type=config.token_mixer_norm_type
             if hasattr(config, "token_mixer_norm_type")
             else config.norm_type,
-            norm_pos=config.norm_pos,
         )
     elif config.token_mixer_type in ["hgru2_scalar_decay"]:
         return cls(
@@ -210,7 +209,6 @@ def get_token_mixer(config, layer_idx):
             token_mixer_norm_type=config.token_mixer_norm_type
             if hasattr(config, "token_mixer_norm_type")
             else config.norm_type,
-            norm_pos=config.norm_pos,
         )
     elif config.token_mixer_type in ["hgru3"]:
         return cls(
@@ -244,9 +242,12 @@ def get_token_mixer(config, layer_idx):
             lrpe_type=config.lrpe_type,
             base=config.base,
             use_output_gate=config.use_output_gate,
+            token_mixer_norm_type=config.token_mixer_norm_type,
             norm_type=config.norm_type,
             linear_activation=config.linear_activation,
             causal=config.causal,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
             use_dense_memory=config.use_dense_memory,
             max_position_embeddings=config.max_position_embeddings,
             token_mixer_init_type=config.token_mixer_init_type,

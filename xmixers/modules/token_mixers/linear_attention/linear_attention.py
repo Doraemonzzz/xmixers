@@ -2,14 +2,20 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
 from transformers.cache_utils import Cache
+from xopes.ops import lightning_attn_func
 
+from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
-
-from ...pes import Lrpe
+from xmixers.modules.pes import Lrpe
+from xmixers.utils import (
+    XMIXERS_DEBUG,
+    _initialize_weights,
+    _upad_input,
+    pad_input,
+    print_params,
+)
 
 
 class LinearAttention(nn.Module):
@@ -24,16 +30,18 @@ class LinearAttention(nn.Module):
         lrpe_type: int = 1,
         base: int = 10000,
         use_output_gate: bool = True,
-        norm_type: str = "layernorm",
+        token_mixer_norm_type: str = "rmsnorm",
         linear_activation: str = "silu",
         causal: bool = True,
+        gate_act: str = "sigmoid",
+        gate_pos: str = "pre",
         use_dense_memory: bool = False,
         max_position_embeddings: int = 1024,
-        token_mixer_init_type: int = 0,
-        rescale_type: int = 0,
+        token_mixer_init_type: int = 4,
+        rescale_type: int = 2,
         num_layers: int = 12,
         init_std: float = 0.02,
-        gain: float = 0.02,
+        gain: float = 0.01,
         **kwargs,
     ):
         super().__init__()
@@ -54,8 +62,20 @@ class LinearAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.norm = get_norm_fn(norm_type)(embed_dim)
+        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        norm_type = (
+            f"{token_mixer_norm_type}_fused_gate"
+            if use_output_gate
+            else token_mixer_norm_type
+        )
+        self.norm = get_norm_fn(norm_type)(
+            embed_dim,
+            bias=bias,
+            gate_act=gate_act,
+            gate_pos=gate_pos,
+            num_groups=num_heads,
+        )
+        self.act = get_activation_fn(linear_activation)
         self.causal = causal
 
         self.use_lrpe = use_lrpe
@@ -65,7 +85,6 @@ class LinearAttention(nn.Module):
                 num_heads=self.num_heads,
                 lrpe_type=lrpe_type,
                 base=base,
-                act=linear_activation,
             )
 
         self.use_output_gate = use_output_gate
@@ -83,14 +102,15 @@ class LinearAttention(nn.Module):
                 nn.Linear(self.head_dim, embed_dim, bias=bias),
             )
 
-        self.causal_mask = None
-        self.max_position_embeddings = max_position_embeddings
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.num_layers = num_layers
         self.embed_dim = embed_dim
         self.init_std = init_std
         self.gain = gain
+        self._init_weights()
+
+    def _init_weights(self):
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
@@ -101,9 +121,10 @@ class LinearAttention(nn.Module):
         x,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
         **kwargs,
     ):
-        # x: b n d
+        b, n, d = x.shape
         # linear map
         q = self.q_proj(x)
         k = self.k_proj(x)
@@ -114,51 +135,69 @@ class LinearAttention(nn.Module):
             [q, k, v],
         )
 
+        q = self.act(q)
+        k = self.act(k)
+
         # lrpe
         q_offset = 0
         if past_key_values is not None:
             q_offset = past_key_values.get_seq_length(self.layer_idx)
 
-        # cache update
-        if past_key_values is not None:
-            k, v = past_key_values.update(k, v, self.layer_idx)
-
         if self.use_lrpe:
             q = self.lrpe(q, offset=q_offset)
-            k = self.lrpe(k)
+            k = self.lrpe(k, offset=q_offset)
+
+        recurrent_state = None
+        if past_key_values is not None and len(past_key_values) > self.layer_idx:
+            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
+            past_key_values.get_seq_length(self.layer_idx)
+
+        use_attn_mask = (
+            attention_mask is not None and not attention_mask.all() and (n > 1)
+        )
+
+        if use_attn_mask:
+            q, k, v, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
+                q=q, k=k, v=v, attention_mask=attention_mask, q_len=n
+            )
+            q = q.unsqueeze(0)
+            k = k.unsqueeze(0)
+            v = v.unsqueeze(0)
+            cu_seqlens, cu_seqlens_k = cu_seq_lens
+            max_seqlen_q, max_seqlen_k = max_seq_lens
+        else:
+            cu_seqlens = None
 
         if self.causal:
-            if self.causal_mask is None:
-                self.causal_mask = (
-                    torch.tril(
-                        torch.ones(
-                            self.max_position_embeddings, self.max_position_embeddings
-                        )
-                    )
-                ).to(q)
-            energy = torch.einsum("... n h d, ... m h d -> ... h n m", q, k)
-            # use causal when training or evaluation(not for generation) or prefill
-            is_causal = True if self.training or (q.shape[1] == k.shape[1]) else False
-            if is_causal:
-                n = k.shape[1]
-                causal_mask = self.causal_mask[:n, :n]
-                energy = energy * causal_mask
-            output = torch.einsum("... h n m, ... m h d -> ... n h d", energy, v)
+            output, recurrent_state = lightning_attn_func(
+                q=q,
+                k=k,
+                v=v,
+                initial_state=recurrent_state,
+                cu_seqlens=cu_seqlens,
+            )
         else:
-            kv = torch.einsum("... n h d, ... n h e -> ... h d e", k, v)
-            output = torch.einsum("... n h d, ... h d e -> ... n h e", q, kv)
+            assert False, "not implemented"
+
+        if past_key_values is not None:
+            past_key_values.update(
+                recurrent_state=[recurrent_state],
+                layer_idx=self.layer_idx,
+                offset=n,
+            )
+
+        if use_attn_mask:
+            output = pad_input(output.squeeze(0), indices_q, b, n)
 
         # reshape
         output = rearrange(output, "... n h d -> ... n (h d)")
-
         if self.use_output_gate:
-            output_gate = F.sigmoid(self.output_gate(x))
-            output = output * output_gate
-
-        # use norm here for better parallel when using tp
-        output = self.norm(output)
+            gate = self.output_gate(x)
+            output = self.norm(output, gate)
+        else:
+            output = self.norm(output)
 
         # outproj
-        output = self.out_proj(output)
+        output = self.o_proj(output)
 
         return output, past_key_values

@@ -4,7 +4,13 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import xmixers  # noqa
-from xmixers.models import Hgrn2Config, LightNetConfig, LLaMAConfig, TnlConfig
+from xmixers.models import (
+    Hgrn2Config,
+    LightNetConfig,
+    LinearTransformerConfig,
+    LLaMAConfig,
+    TnlConfig,
+)
 
 AUTO_DTYPE_MAP = {"bf16": torch.bfloat16, "fp32": torch.float32}
 
@@ -41,6 +47,8 @@ def get_config(model_type):
     elif model_type == "tnl_state":
         config = TnlConfig()
         config.use_initial_state = True
+    elif model_type == "linear_transformer":
+        config = LinearTransformerConfig()
 
     return config
 
@@ -153,6 +161,7 @@ if __name__ == "__main__":
             "mla",
             "tnl",
             "tnl_state",
+            "linear_transformer",
         ],
     )
     args = parser.parse_args()

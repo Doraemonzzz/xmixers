@@ -11,8 +11,9 @@ model_type=llama
 # model_type=lightnet_scalar_decay
 # model_type=mla
 # model_type=tnl
-model_type=tnl_state
+# model_type=tnl_state
 # model_type=hgrn2_scalar_decay
+model_type=linear_transformer
 
 dtype=bf16
 # dtype=fp32

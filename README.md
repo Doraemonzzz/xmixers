@@ -18,10 +18,11 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 - [x] Mpa
 - [x] T6
 - [x] Mla
-- [ ] Hgrn2
+- [x] Hgrn2
   - left varlen
-- [ ] Hgrn2-scalar-decay
+- [x] Hgrn2-scalar-decay
   - left varlen
+- [x] Linear Attention
 - [x] Llama
 - [x] Tnl
 
@@ -34,6 +35,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 -
 
 # ToDo
+- [ ] Add init state for linear attention.
 - [ ] Update attn mask treat for attention, mpa, tpa, mla;
 - [x] Update init weights for every model.
 - [ ] Rm bias for layernorm since it will raise nan error.

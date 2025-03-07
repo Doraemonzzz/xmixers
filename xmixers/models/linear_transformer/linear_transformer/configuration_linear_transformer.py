@@ -20,8 +20,8 @@ class LinearTransformerConfig(PretrainedConfig):
         use_cache=True,
         init_std=0.02,
         tie_word_embeddings=False,
-        ##### model config
-        # attention config
+        ########## model config
+        ##### token mixer config
         token_mixer_type="linear_attn",
         embed_dim=1024,
         num_heads=8,
@@ -30,22 +30,31 @@ class LinearTransformerConfig(PretrainedConfig):
         use_lrpe=True,
         lrpe_type=1,
         base=10000,
-        # glu config
+        gate_act="sigmoid",
+        gate_pos="pre",
+        token_mixer_norm_type="rmsnorm",
+        ###### channel mixer config
+        channel_mixer_type="glu",
         mid_dim=1024,
-        glu_activation="silu",
-        # others
+        channel_mixer_activation="silu",
+        use_gate_linear=True,
+        ##### others
         max_position_embeddings=1024,
         num_layers=24,
         use_output_gate=True,
-        norm_type="layernorm",
+        norm_type="rmsnorm",
         linear_activation="silu",
         causal=True,
         use_ape=False,
+        use_embed_scale=False,
         use_dense_memory=False,
-        token_mixer_init_type=0,
-        init_type=0,
-        rescale_type=0,
-        gain=0.02,
+        ce_type="xopes_flce",
+        ##### init
+        init_type=1,
+        token_mixer_init_type=4,
+        rescale_type=2,
+        gain=0.01,
+        channel_mixer_init_type=0,
         **kwargs,
     ):
         super().__init__(
@@ -55,33 +64,14 @@ class LinearTransformerConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        ##### hf origin
-        self.vocab_size = vocab_size
-        self.use_cache = use_cache
-        self.init_std = init_std
-        ##### add
-        # attention config
-        self.token_mixer_type = token_mixer_type
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.kv_heads = kv_heads
-        self.bias = bias
-        self.use_lrpe = use_lrpe
-        self.lrpe_type = lrpe_type
-        self.base = base
-        self.use_output_gate = use_output_gate
-        self.linear_activation = linear_activation
-        self.causal = causal
-        # glu config
-        self.mid_dim = mid_dim
-        self.glu_activation = glu_activation
-        # others
-        self.max_position_embeddings = max_position_embeddings
-        self.num_layers = num_layers
-        self.norm_type = norm_type
-        self.use_ape = use_ape
-        self.use_dense_memory = use_dense_memory
-        self.token_mixer_init_type = token_mixer_init_type
-        self.init_type = init_type
-        self.rescale_type = rescale_type
-        self.gain = gain
+        for key, value in locals().items():
+            if key not in [
+                "self",
+                "kwargs",
+                "__class__",
+                "pad_token_id",
+                "bos_token_id",
+                "eos_token_id",
+                "tie_word_embeddings",
+            ]:
+                setattr(self, key, value)

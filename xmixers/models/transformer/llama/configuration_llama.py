@@ -66,6 +66,7 @@ class LLaMAConfig(PretrainedConfig):
         use_embed_scale=False,
         ce_type="xopes_flce",
         fuse_norm_add=False,
+        ##### init
         init_type=1,
         token_mixer_init_type=4,
         rescale_type=2,
@@ -79,56 +80,14 @@ class LLaMAConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        ##### hf origin
-        self.vocab_size = vocab_size
-        self.use_cache = use_cache
-        self.init_std = init_std
-        ##### add
-        # token mixer config
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.kv_heads = kv_heads
-        self.bias = bias
-        self.use_lrpe = use_lrpe
-        self.lrpe_type = lrpe_type
-        self.base = base
-        self.token_mixer_type = token_mixer_type
-        self.mpa_type = mpa_type
-        self.mpa_activation = mpa_activation
-        self.use_l2_norm = use_l2_norm
-        self.gate_type = gate_type
-        self.q_rank = q_rank
-        self.kv_rank = kv_rank
-        self.cp_activation = cp_activation
-        self.q_lora_rank = q_lora_rank
-        self.kv_lora_rank = kv_lora_rank
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.head_dim = head_dim
-        self.window_size = window_size
-        self.chunk_size = chunk_size
-        self.token_mixer_top_k = token_mixer_top_k
-        # channel mixer config
-        self.channel_mixer_type = channel_mixer_type
-        self.mid_dim = mid_dim
-        self.channel_mixer_activation = channel_mixer_activation
-        self.qk_dim = qk_dim
-        self.v_dim = v_dim
-        self.mem_dim = mem_dim
-        self.use_scale = use_scale
-        self.use_output_gate = use_output_gate
-        self.output_gate_activation = output_gate_activation
-        self.use_low_rank_output_gate = use_low_rank_output_gate
-        self.channel_mixer_init_type = channel_mixer_init_type
-        self.use_gate_linear = use_gate_linear
-        # others
-        self.max_position_embeddings = max_position_embeddings
-        self.num_layers = num_layers
-        self.norm_type = norm_type
-        self.token_mixer_init_type = token_mixer_init_type
-        self.init_type = init_type
-        self.rescale_type = rescale_type
-        self.use_postnorm = use_postnorm
-        self.use_embed_scale = use_embed_scale
-        self.ce_type = ce_type
-        self.fuse_norm_add = fuse_norm_add
-        self.gain = gain
+        for key, value in locals().items():
+            if key not in [
+                "self",
+                "kwargs",
+                "__class__",
+                "pad_token_id",
+                "bos_token_id",
+                "eos_token_id",
+                "tie_word_embeddings",
+            ]:
+                setattr(self, key, value)

@@ -29,12 +29,12 @@ class Hgrn2Config(PretrainedConfig):
         gate_act="sigmoid",
         gate_pos="pre",
         token_mixer_norm_type="rmsnorm",
-        ###### channel mixer config
+        ##### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
         channel_mixer_activation="silu",
         use_gate_linear=True,
-        # others
+        ##### others
         max_position_embeddings=1024,
         num_layers=24,
         use_output_gate=False,
@@ -45,9 +45,8 @@ class Hgrn2Config(PretrainedConfig):
         use_embed_scale=False,
         use_dense_memory=False,
         beta_activation="silu",
-        norm_pos="ogate",
         ce_type="xopes_flce",
-        # init
+        ##### init
         init_type=1,
         token_mixer_init_type=4,
         rescale_type=2,
