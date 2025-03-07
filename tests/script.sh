@@ -13,7 +13,12 @@ model_type=llama
 # model_type=tnl
 # model_type=tnl_state
 # model_type=hgrn2_scalar_decay
-model_type=linear_transformer
+# model_type=linear_transformer
+model_type=naive_deltanet
+model_type=scalar_decay_deltanet
+model_type=scalar_decay_lower_bound_deltanet
+# model_type=vector_decay_deltanet
+# model_type=vector_decay_lower_bound_deltanet
 
 dtype=bf16
 # dtype=fp32

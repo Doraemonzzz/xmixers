@@ -358,12 +358,12 @@ def get_token_mixer(config, layer_idx):
             bias=config.bias,
             layer_idx=layer_idx,
             use_output_gate=config.use_output_gate,
-            norm_type=config.norm_type,
+            token_mixer_norm_type=config.token_mixer_norm_type,
             q_activation=config.q_activation,
             k_activation=config.k_activation,
             v_activation=config.v_activation,
-            use_gamma=config.use_gamma,
-            gamma_activation=config.gamma_activation,
+            use_beta=config.use_beta,
+            beta_activation=config.beta_activation,
             use_decay=config.use_decay,
             scalar_decay=config.scalar_decay,
             qkv_norm_type=config.qkv_norm_type,
@@ -375,6 +375,8 @@ def get_token_mixer(config, layer_idx):
             num_layers=config.num_layers,
             init_std=config.init_std,
             gain=config.gain,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
         )
     elif config.token_mixer_type in ["chunk_rnn"]:
         return cls(

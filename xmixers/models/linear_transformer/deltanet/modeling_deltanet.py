@@ -3,6 +3,7 @@
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
@@ -16,8 +17,14 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
-from xmixers.utils import XmixersCache, _init_weights, print_module
-from xmixers.utils.loss_utils import compute_loss
+from xmixers.utils import (
+    XmixersCache,
+    _init_weights,
+    _post_init_weights,
+    pad_embed_dim,
+    print_module,
+)
+from xmixers.utils.loss_utils import Loss
 
 from .configuration_deltanet import DeltaNetConfig
 
@@ -27,14 +34,9 @@ class DeltaNetLayer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
-
         self.channel_mixer = get_channel_mixer(config)
-
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
-
-        self.fuse_norm_add = config.fuse_norm_add
 
     def forward(
         self,
@@ -42,43 +44,25 @@ class DeltaNetLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        residual: Optional[torch.Tensor] = None,
+        lower_bound: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
-        if not self.fuse_norm_add:
-            # token mixer
-            residual = x
-            x, past_key_values = self.token_mixer(
-                x=self.token_norm(x),
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-            )
-            x = x + residual
+        # token mixer
+        residual = x
+        x, past_key_values = self.token_mixer(
+            x=self.token_norm(x),
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            lower_bound=lower_bound,
+            **kwargs,
+        )
+        x = x + residual
 
-            # channel mixer
-            x = self.channel_mixer(self.channel_norm(x)) + x
-            residual_channel = None
-        else:
-            # token mixer
-            # !!! for the first layer, the residual input is None, so we need to set return_residual=True
-            x_attn, residual_attn = self.token_norm(
-                x, residual=residual, return_residual=True
-            )
+        # channel mixer
+        x = self.channel_mixer(self.channel_norm(x)) + x
 
-            x_attn, past_key_values = self.token_mixer(
-                x=x_attn,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-            )
-
-            # channel mixer
-            x_channel, residual_channel = self.channel_norm(
-                x_attn, residual=residual_attn
-            )
-            x = self.channel_mixer(x_channel)
-
-        outputs = (x, past_key_values, residual_channel)
+        outputs = (x, past_key_values)
 
         return outputs
 
@@ -103,6 +87,7 @@ class DeltaNetModel(DeltaNetPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.gradient_checkpointing = False
+        config.vocab_size = pad_embed_dim(config.vocab_size)
 
         # params
         self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
@@ -113,6 +98,17 @@ class DeltaNetModel(DeltaNetPreTrainedModel):
             [DeltaNetLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+
+        # log lower bound
+        self.use_lower_bound = config.use_lower_bound and config.use_decay
+        if self.use_lower_bound:
+            if config.scalar_decay:
+                d = config.num_heads
+            else:
+                d = config.embed_dim
+            self.log_lower_bounds = nn.Parameter(
+                torch.ones(config.num_layers, d), requires_grad=True
+            )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -179,38 +175,42 @@ class DeltaNetModel(DeltaNetPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        residual = None
+
+        # lower bound
+        if self.use_lower_bound:
+            lower_bounds = F.softmax(self.log_lower_bounds, dim=0)
+            lower_bounds = torch.cumsum(lower_bounds, dim=0)
+            lower_bounds -= lower_bounds[0, ...].clone()
 
         for idx, layer in enumerate(self.layers):
+            if self.use_lower_bound:
+                lower_bound = lower_bounds[idx]
+            else:
+                lower_bound = None
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                (
-                    hidden_states,
-                    past_key_values,
-                    residual,
-                ) = self._gradient_checkpointing_func(
+                hidden_states, past_key_values = self._gradient_checkpointing_func(
                     layer.__call__,
                     hidden_states,
                     attention_mask,
                     past_key_values,
                     use_cache,
-                    residual,
+                    lower_bound,
+                    **kwargs,
                 )
             else:
-                hidden_states, past_key_values, residual = layer(
+                hidden_states, past_key_values = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
-                    residual=residual,
+                    lower_bound=lower_bound,
+                    **kwargs,
                 )
 
-        if residual is not None:
-            hidden_states = self.final_norm(hidden_states, residual=residual)[0]
-        else:
-            hidden_states = self.final_norm(hidden_states)
+        hidden_states = self.final_norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -245,9 +245,14 @@ class DeltaNetForCausalLM(DeltaNetPreTrainedModel):
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
-
+        self.loss = Loss()
         # Initialize weights and apply final processing
         self.post_init()
+
+    def post_init_weights(
+        self,
+    ):
+        _post_init_weights(self)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -335,6 +340,7 @@ class DeltaNetForCausalLM(DeltaNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -344,13 +350,15 @@ class DeltaNetForCausalLM(DeltaNetPreTrainedModel):
             and self.training
         )
 
-        logits, loss = compute_loss(
-            lm_head=self.lm_head,
+        # since we may use forward_pre_hook, we can't use key word arguments
+        logits, loss = self.loss(
+            self.lm_head.weight,
+            hidden_states,
+            labels,
+            self.lm_head.bias,
+            num_logits_to_keep,
+            fuse_linear_and_cross_entropy,
             ce_type=self.config.ce_type,
-            hidden_states=hidden_states,
-            labels=labels,
-            num_logits_to_keep=num_logits_to_keep,
-            fuse_linear_and_cross_entropy=fuse_linear_and_cross_entropy,
         )
 
         if not return_dict:

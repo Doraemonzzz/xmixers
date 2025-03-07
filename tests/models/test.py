@@ -5,6 +5,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import xmixers  # noqa
 from xmixers.models import (
+    DeltaNetConfig,
     Hgrn2Config,
     LightNetConfig,
     LinearTransformerConfig,
@@ -49,6 +50,28 @@ def get_config(model_type):
         config.use_initial_state = True
     elif model_type == "linear_transformer":
         config = LinearTransformerConfig()
+    elif model_type == "naive_deltanet":
+        config = DeltaNetConfig()
+        config.use_decay = False
+        config.scalar_decay = False
+    elif model_type == "scalar_decay_deltanet":
+        config = DeltaNetConfig()
+        config.use_decay = True
+        config.scalar_decay = True
+    elif model_type == "scalar_decay_lower_bound_deltanet":
+        config = DeltaNetConfig()
+        config.use_decay = True
+        config.scalar_decay = True
+        config.use_lower_bound = True
+    elif model_type == "vector_decay_deltanet":
+        config = DeltaNetConfig()
+        config.use_decay = True
+        config.scalar_decay = False
+    elif model_type == "vector_decay_lower_bound_deltanet":
+        config = DeltaNetConfig()
+        config.use_decay = True
+        config.scalar_decay = False
+        config.use_lower_bound = True
 
     return config
 
@@ -162,6 +185,11 @@ if __name__ == "__main__":
             "tnl",
             "tnl_state",
             "linear_transformer",
+            "naive_deltanet",
+            "scalar_decay_deltanet",
+            "scalar_decay_lower_bound_deltanet",
+            "vector_decay_deltanet",
+            "vector_decay_lower_bound_deltanet",
         ],
     )
     args = parser.parse_args()

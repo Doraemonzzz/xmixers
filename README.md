@@ -22,7 +22,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
   - left varlen
 - [x] Hgrn2-scalar-decay
   - left varlen
-- [x] Linear Attention
+- [x] Linear Transformer
 - [x] Llama
 - [x] Tnl
 
