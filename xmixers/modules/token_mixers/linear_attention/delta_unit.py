@@ -3,8 +3,12 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, repeat
+from einops import rearrange
 from fla.ops.delta_rule import chunk_delta_rule, fused_recurrent_delta_rule
+from fla.ops.gated_delta_rule import (
+    chunk_gated_delta_rule,
+    fused_recurrent_gated_delta_rule,
+)
 from fla.ops.generalized_delta_rule import (
     chunk_dplr_delta_rule,
     fused_recurrent_dplr_delta_rule,
@@ -64,7 +68,8 @@ class DeltaUnit(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.use_beta = use_beta
         if self.use_beta:
-            self.beta_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+            # !!! dont use beta as name in hf: https://github.com/huggingface/transformers/issues/29554
+            self.bet_proj = nn.Linear(embed_dim, num_heads, bias=bias)
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
@@ -152,14 +157,14 @@ class DeltaUnit(nn.Module):
             log_f = None
         # b n h
         if self.use_beta:
-            beta = F.sigmoid(self.beta_proj(x))
+            beta = F.sigmoid(self.bet_proj(x))
             if self.beta_activation == "neg":
                 beta = beta * 2
         else:
             # if no beta, use 2 to get householder matrix
             if self.beta.shape[0] == 0 or self.beta.shape != torch.Size([b, n, h]):
-                self.beta = torch.ones(b, n, h).to(q) * 2
-            beta = self.beta
+                self.bet = torch.ones(b, n, h).to(q) * 2
+            beta = self.bet
         # act
         q = self.q_act(q)
         k = self.k_act(k)
@@ -177,9 +182,7 @@ class DeltaUnit(nn.Module):
             v = l2_norm(v)
 
         if self.use_decay:
-            if self.scalar_decay:
-                log_f = repeat(log_f, "... h -> ... h d", d=self.head_dim)
-            else:
+            if not self.scalar_decay:
                 log_f = rearrange(log_f, "... (h d) -> ... h d", d=self.head_dim)
 
         recurrent_state = None
@@ -197,7 +200,10 @@ class DeltaUnit(nn.Module):
             attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
             k = k.masked_fill(attention_mask_ == 0, 0)
             if log_f is not None:
-                log_f = log_f.masked_fill(attention_mask_ == 0, 0)
+                if self.scalar_decay:
+                    log_f = log_f.masked_fill(attention_mask_.squeeze(-1) == 0, 0)
+                else:
+                    log_f = log_f.masked_fill(attention_mask_ == 0, 0)
 
         scale = 1
         if self.causal:
@@ -219,23 +225,41 @@ class DeltaUnit(nn.Module):
                     head_first=False,
                 )
             else:
-                if self.training or use_cache:
-                    fn = chunk_dplr_delta_rule
-                else:
-                    fn = fused_recurrent_dplr_delta_rule
+                if self.scalar_decay:
+                    if self.training or use_cache:
+                        fn = chunk_gated_delta_rule
+                    else:
+                        fn = fused_recurrent_gated_delta_rule
 
-                output, recurrent_state = fn(
-                    q=q,
-                    k=k.to(dtype),
-                    v=v.to(dtype),
-                    a=(k * -beta.unsqueeze(-1) * torch.exp(log_f)).to(dtype),
-                    b=k.to(dtype),
-                    gk=log_f.to(dtype),
-                    initial_state=recurrent_state,
-                    output_final_state=use_cache,
-                    scale=scale,
-                    head_first=False,
-                )
+                    output, recurrent_state = fn(
+                        q=q,
+                        k=k.to(dtype),
+                        v=v.to(dtype),
+                        g=log_f.to(dtype),
+                        beta=beta,
+                        initial_state=recurrent_state,
+                        output_final_state=use_cache,
+                        scale=scale,
+                        head_first=False,
+                    )
+                else:
+                    if self.training or use_cache:
+                        fn = chunk_dplr_delta_rule
+                    else:
+                        fn = fused_recurrent_dplr_delta_rule
+
+                    output, recurrent_state = fn(
+                        q=q,
+                        k=k.to(dtype),
+                        v=v.to(dtype),
+                        a=(k * -beta.unsqueeze(-1) * torch.exp(log_f)).to(dtype),
+                        b=k.to(dtype),
+                        gk=log_f.to(dtype),
+                        initial_state=recurrent_state,
+                        output_final_state=use_cache,
+                        scale=scale,
+                        head_first=False,
+                    )
         else:
             assert False
 
