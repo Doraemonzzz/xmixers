@@ -29,15 +29,13 @@ def _upad_input(q, k, v, attention_mask, q_len):
     batch_size, seq_len, num_key_value_heads, head_dim = k.shape
 
     k = index_first_axis(
-        k.reshape(batch_size * seq_len, num_key_value_heads, head_dim), indices_k
+        k.reshape(batch_size * seq_len, num_key_value_heads, -1), indices_k
     )
     v = index_first_axis(
-        v.reshape(batch_size * seq_len, num_key_value_heads, head_dim), indices_k
+        v.reshape(batch_size * seq_len, num_key_value_heads, -1), indices_k
     )
     if q_len == seq_len:
-        q = index_first_axis(
-            q.reshape(batch_size * seq_len, num_heads, head_dim), indices_k
-        )
+        q = index_first_axis(q.reshape(batch_size * seq_len, num_heads, -1), indices_k)
         cu_seqlens_q = cu_seqlens_k
         max_seqlen_q = max_seqlen_k
         indices_q = indices_k
