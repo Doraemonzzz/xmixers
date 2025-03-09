@@ -6,6 +6,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import xmixers  # noqa
 from xmixers.models import (
     DeltaNetConfig,
+    DenseRnnConfig,
     Hgrn2Config,
     LightNetConfig,
     LinearTransformerConfig,
@@ -74,6 +75,11 @@ def get_config(model_type):
         config = DeltaNetConfig()
         config.use_decay = True
         config.scalar_decay = False
+        config.use_lower_bound = True
+    elif model_type == "dense_rnn":
+        config = DenseRnnConfig()
+    elif model_type == "dense_rnn_lower_bound":
+        config = DenseRnnConfig()
         config.use_lower_bound = True
 
     return config
@@ -194,6 +200,8 @@ if __name__ == "__main__":
             "scalar_decay_lower_bound_deltanet",
             "vector_decay_deltanet",
             "vector_decay_lower_bound_deltanet",
+            "dense_rnn",
+            "dense_rnn_lower_bound",
         ],
     )
     args = parser.parse_args()

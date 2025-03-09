@@ -23,30 +23,30 @@ class DenseRnn(nn.Module):
     S[t, 2] = (I - k * k ^ T) * S[t, 1] + k * v ^ T
     Since dplr has the following form:
         S[t] = (D + a b ^ T) * S[t-1] + k * v ^ T
-    We can use the following form to implement this:
+    We can use the following form:
         D = concat([f, 0])
         a = concat([f * k, k])
         b = concat([k, k])
         k = concat([0, k])
         v = concat([0, v])
         q = concat([0, q])
-    to implement this.
+    to implement.
 
-    Old versioin:
+    Old versioin(deprecated):
     this is equivalent to the following:
     S[t, 1] = (I - k * k ^ T) * S[t-1] + 0 * 0 ^ T
     S[t, 2] = (Diag(f) - 0 * 0 ^ T) * S[t, 1] + 0 * 0 ^ T
     S[t, 3] = (I - k * k ^ T) * S[t, 2] + k * v ^ T
     Since dplr has the following form:
         S[t] = (D + a b ^ T) * S[t-1] + k * v ^ T
-    We can use the following form to implement this:
+    We can use the following form:
         D = concat([0, f, 0])
         a = concat([k, 0, k])
         b = a
         k = concat([0, 0, k])
         v = concat([0, 0, v])
         q = concat([0, 0, q])
-    to implement this.
+    to implement.
     """
 
     def __init__(
@@ -56,21 +56,24 @@ class DenseRnn(nn.Module):
         bias: bool = False,
         layer_idx: int = 0,
         use_output_gate: bool = True,
-        norm_type: str = "layernorm",
+        token_mixer_norm_type: str = "rmsnorm",
         q_activation: str = "silu",
         k_activation: str = "silu",
         v_activation: str = "silu",
-        use_gamma: bool = True,
-        gamma_activation: str = "pos",
+        use_beta: bool = True,
+        beta_activation: str = "neg",
         qkv_norm_type: int = 2,
         norm_q: bool = False,
         norm_v: bool = False,
         causal: bool = True,
+        max_position_embeddings: int = 1024,
         token_mixer_init_type: int = 4,
         rescale_type: int = 2,
         num_layers: int = 12,
         init_std: float = 0.02,
         gain: float = 0.01,
+        gate_act: str = "sigmoid",
+        gate_pos: str = "pre",
         **kwargs,
     ):
         super().__init__()
@@ -94,15 +97,27 @@ class DenseRnn(nn.Module):
             nn.Linear(embed_dim, self.head_dim, bias=bias),
             nn.Linear(self.head_dim, embed_dim, bias=bias),
         )
-        self.use_gamma = use_gamma
-        if self.use_gamma:
-            self.gamma_proj = nn.Linear(embed_dim, num_heads, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.use_beta = use_beta
+        if self.use_beta:
+            # !!! dont use beta as name in hf: https://github.com/huggingface/transformers/issues/29554
+            self.bet_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
         self.v_act = get_activation_fn(v_activation)
-        self.gamma_activation = gamma_activation
-        self.norm = get_norm_fn(norm_type)(embed_dim, bias=bias)
+        self.beta_activation = beta_activation
+        norm_type = (
+            f"{token_mixer_norm_type}_fused_gate"
+            if use_output_gate
+            else token_mixer_norm_type
+        )
+        self.norm = get_norm_fn(norm_type)(
+            embed_dim,
+            bias=bias,
+            gate_act=gate_act,
+            gate_pos=gate_pos,
+            num_groups=num_heads,
+        )
 
         if self.use_output_gate:
             self.output_gate = nn.Sequential(
@@ -123,6 +138,9 @@ class DenseRnn(nn.Module):
         self.apply(self._initialize_weights)
         self.f = torch.empty(0)
         self.zero = torch.empty(0)
+
+    def _init_weights(self):
+        self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
         return _initialize_weights(self, module)
@@ -154,13 +172,12 @@ class DenseRnn(nn.Module):
         else:
             log_f = F.logsigmoid(f)
         # b n h 1
-        if self.use_gamma:
-            gamma = F.sigmoid(self.gamma_proj(x)).unsqueeze(-1)
-            if self.gamma_activation == "neg":
-                gamma = gamma * 2
+        if self.use_beta:
+            beta = F.sigmoid(self.bet_proj(x)).unsqueeze(-1)
+            if self.beta_activation == "neg":
+                beta = beta * 2
         else:
-            gamma = 2
-        gamma = -gamma
+            beta = 2
         # act
         q = self.q_act(q)
         k = self.k_act(k)
@@ -172,16 +189,28 @@ class DenseRnn(nn.Module):
             [q, k, v, log_f],
         )
 
-        # if self.norm_q:
-        #     q = F.normalize(q, p=self.qkv_norm_type, dim=-1)
-        # k = F.normalize(k, p=self.qkv_norm_type, dim=-1)
-        # if self.norm_v:
-        #     v = F.normalize(v, p=self.qkv_norm_type, dim=-1)
         if self.norm_q:
             q = l2_norm(q)
         k = l2_norm(k)
         if self.norm_v:
             v = l2_norm(v)
+
+        # TODO: update this
+        recurrent_state = None
+        q_offset = 0
+        if past_key_values is not None and len(past_key_values) > self.layer_idx:
+            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
+            q_offset = past_key_values.get_seq_length(self.layer_idx)
+
+        use_attn_mask = (
+            attention_mask is not None and not attention_mask.all() and (n > 1)
+        )
+        # left padding
+        if use_attn_mask:
+            start = q_offset
+            attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
+            k = k.masked_fill(attention_mask_ == 0, 0)
+            log_f = log_f.masked_fill(attention_mask_ == 0, 0)
 
         # old version
         # D = concat([0, f, 0])
@@ -209,7 +238,7 @@ class DenseRnn(nn.Module):
         #     [log_f, a, b, k, v, q],
         # )
 
-        k_ = k * gamma
+        k_ = k * (-beta)
         a = torch.cat([k_ * torch.exp(log_f), k_], dim=1)
         b = torch.cat([k, k], dim=1)
         k = torch.cat([self.zero, k], dim=1)
@@ -221,19 +250,13 @@ class DenseRnn(nn.Module):
             [log_f, a, b, k, v, q],
         )
 
-        # TODO: update this
-        recurrent_state = None
-        if past_key_values is not None and len(past_key_values) > self.layer_idx:
-            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
-
+        scale = 1
         if self.causal:
-            # Unitary update
+            dtype = q.dtype
             if self.training or use_cache:
                 fn = chunk_dplr_delta_rule
             else:
                 fn = fused_recurrent_dplr_delta_rule
-
-            dtype = q.dtype
 
             output, recurrent_state = fn(
                 q=q,
@@ -244,7 +267,7 @@ class DenseRnn(nn.Module):
                 gk=log_f.to(dtype),
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
-                scale=1,
+                scale=scale,
                 head_first=False,
             )
         else:
@@ -257,20 +280,18 @@ class DenseRnn(nn.Module):
             past_key_values.update(
                 recurrent_state=recurrent_state,
                 layer_idx=self.layer_idx,
-                offset=x.shape[-2],
+                offset=n,
             )
 
         # reshape
         output = rearrange(output, "b n h d -> b n (h d)")
-
         if self.use_output_gate:
-            output_gate = F.sigmoid(self.output_gate(x))
-            output = output * output_gate
-
-        # use post norm here for better parallel when using tp
-        output = self.norm(output)
+            gate = self.output_gate(x)
+            output = self.norm(output, gate)
+        else:
+            output = self.norm(output)
 
         # out proj
-        output = self.out_proj(output)
+        output = self.o_proj(output)
 
         return output, past_key_values

@@ -20,7 +20,8 @@ model_type=cosformer2
 # model_type=scalar_decay_lower_bound_deltanet
 # model_type=vector_decay_deltanet
 # model_type=vector_decay_lower_bound_deltanet
-
+model_type=dense_rnn
+model_type=dense_rnn_lower_bound
 dtype=bf16
 # dtype=fp32
 

@@ -25,6 +25,9 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 - [x] Linear Transformer
 - [x] Llama
 - [x] Tnl
+- [x] Deltanet
+- [x] Vector Decay Deltanet
+- [x] Scalar Decay Deltanet
 
 # Pretrained weights
 
