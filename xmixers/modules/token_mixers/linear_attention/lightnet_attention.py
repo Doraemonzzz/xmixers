@@ -2,7 +2,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange, repeat
 from fla.ops.common.fused_recurrent import fused_recurrent
 from fla.ops.gla import chunk_gla
@@ -25,11 +24,13 @@ class LightNetAttention(nn.Module):
         use_lrpe: bool = True,
         base: int = 10000,
         use_output_gate: bool = True,
-        norm_type: str = "rmsnorm",
+        token_mixer_norm_type: str = "rmsnorm",
         q_activation: str = "silu",
         k_activation: str = "silu",
         scalar_decay: bool = False,
         causal: bool = True,
+        gate_act: str = "sigmoid",
+        gate_pos: str = "pre",
         token_mixer_init_type: int = 4,
         rescale_type: int = 2,
         num_layers: int = 12,
@@ -62,7 +63,18 @@ class LightNetAttention(nn.Module):
 
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
-        self.norm = get_norm_fn(norm_type)(embed_dim, bias=False)
+        norm_type = (
+            f"{token_mixer_norm_type}_fused_gate"
+            if use_output_gate
+            else token_mixer_norm_type
+        )
+        self.norm = get_norm_fn(norm_type)(
+            embed_dim,
+            bias=bias,
+            gate_act=gate_act,
+            gate_pos=gate_pos,
+            num_groups=num_heads,
+        )
 
         self.use_lrpe = use_lrpe
         if self.use_lrpe:
@@ -75,8 +87,8 @@ class LightNetAttention(nn.Module):
 
         if self.use_output_gate:
             self.output_gate = nn.Sequential(
-                nn.Linear(embed_dim, self.num_heads, bias=bias),
-                nn.Linear(self.num_heads, embed_dim, bias=bias),
+                nn.Linear(embed_dim, self.head_dim, bias=bias),
+                nn.Linear(self.head_dim, embed_dim, bias=bias),
             )
 
         self.token_mixer_init_type = token_mixer_init_type
@@ -221,13 +233,12 @@ class LightNetAttention(nn.Module):
             )
 
         # reshape
-        output = rearrange(output, "b n h d -> b n (h d)")
-
+        output = rearrange(output, "... n h d -> ... n (h d)")
         if self.use_output_gate:
-            output_gate = F.sigmoid(self.output_gate(x))
-            output = output * output_gate
-
-        output = self.norm(output)
+            gate = self.output_gate(x)
+            output = self.norm(output, gate)
+        else:
+            output = self.norm(output)
 
         # out proj
         output = self.o_proj(output)

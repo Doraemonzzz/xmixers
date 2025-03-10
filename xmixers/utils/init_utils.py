@@ -28,6 +28,15 @@ def _initialize_weights(self, module):
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
 
+        if hasattr(module, "q"):
+            nn.init.ones_(module.q)
+
+        if hasattr(module, "k"):
+            nn.init.ones_(module.k)
+
+        if hasattr(module, "log_decay"):
+            nn.init.zeros_(module.log_decay)
+
         if hasattr(module, "k_head"):
             nn.init.xavier_uniform_(module.k_head, gain=gain)
 

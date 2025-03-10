@@ -41,8 +41,15 @@ def get_config(model_type):
         config.token_mixer_type = "hgru2_scalar_decay"
     elif model_type == "lightnet":
         config = LightNetConfig()
+    elif model_type == "lightnet_no_tpe":
+        config = LightNetConfig()
+        config.use_tpe = False
     elif model_type == "lightnet_scalar_decay":
         config = LightNetConfig()
+        config.scalar_decay = True
+    elif model_type == "lightnet_no_tpe_scalar_decay":
+        config = LightNetConfig()
+        config.use_tpe = False
         config.scalar_decay = True
     elif model_type == "tnl":
         config = TnlConfig()
@@ -189,7 +196,9 @@ if __name__ == "__main__":
             "hgrn2",
             "hgrn2_scalar_decay",
             "lightnet",
+            "lightnet_no_tpe",
             "lightnet_scalar_decay",
+            "lightnet_no_tpe_scalar_decay",
             "mla",
             "tnl",
             "tnl_state",
