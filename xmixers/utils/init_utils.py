@@ -170,6 +170,9 @@ def _post_init_weights(
     init_fn = lambda module: _init_weights(self, module)
     self.model.embed_tokens.apply(init_fn)
     self.model.final_norm._init_weights()
+    if hasattr(self.model, "tpe"):
+        self.model.tpe._init_weights()
+        self.model.tpe.norm._init_weights()
     for layer in self.model.layers:
         # for token mixer, use custom init first
         layer.token_mixer._init_weights()
