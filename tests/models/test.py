@@ -58,8 +58,15 @@ def get_config(model_type):
         config.use_initial_state = True
     elif model_type == "linear_transformer":
         config = LinearTransformerConfig()
+    elif model_type == "linear_transformer_no_tpe":
+        config = LinearTransformerConfig()
+        config.use_tpe = False
     elif model_type == "cosformer2":
         config = LinearTransformerConfig()
+        config.lrpe_type = 6
+    elif model_type == "cosformer2_no_tpe":
+        config = LinearTransformerConfig()
+        config.use_tpe = False
         config.lrpe_type = 6
     elif model_type == "naive_deltanet":
         config = DeltaNetConfig()
@@ -203,7 +210,9 @@ if __name__ == "__main__":
             "tnl",
             "tnl_state",
             "linear_transformer",
+            "linear_transformer_no_tpe",
             "cosformer2",
+            "cosformer2_no_tpe",
             "naive_deltanet",
             "scalar_decay_deltanet",
             "scalar_decay_lower_bound_deltanet",

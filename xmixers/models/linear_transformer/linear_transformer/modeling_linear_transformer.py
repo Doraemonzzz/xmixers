@@ -16,13 +16,8 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import (
-    LearnablePe,
-    SinCosPe,
-    get_channel_mixer,
-    get_norm_fn,
-    get_token_mixer,
-)
+from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
+from xmixers.modules.pes import LearnablePe, SinCosPe, Tpe
 from xmixers.utils import XmixersCache, _init_weights, _post_init_weights, pad_embed_dim
 from xmixers.utils.loss_utils import Loss
 
@@ -86,6 +81,18 @@ class LinearTransformerModel(LinearTransformerPreTrainedModel):
         config.vocab_size = pad_embed_dim(config.vocab_size)
 
         # params
+        self.use_tpe = config.use_tpe
+        if self.use_tpe:
+            self.tpe = Tpe(
+                embed_dim=config.embed_dim,
+                num_heads=config.num_heads,
+                bias=config.bias,
+                layer_idx=0,
+                token_mixer_norm_type=config.token_mixer_norm_type,
+            )
+            offset = 1
+        else:
+            offset = 0
         self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
@@ -99,7 +106,7 @@ class LinearTransformerModel(LinearTransformerPreTrainedModel):
 
         self.layers = nn.ModuleList(
             [
-                LinearTransformerLayer(config, layer_idx)
+                LinearTransformerLayer(config, layer_idx + offset)
                 for layer_idx in range(config.num_layers)
             ]
         )
@@ -155,13 +162,23 @@ class LinearTransformerModel(LinearTransformerPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        hidden_states = inputs_embeds
+        hidden_states = self.embed_scale * inputs_embeds
+
         if self.use_ape:
             # get offset
             offset = 0
             if past_key_values is not None:
                 offset = past_key_values.get_seq_length(0)
             hidden_states = self.ape(hidden_states, offset=offset)
+
+        if self.use_tpe:
+            hidden_states, past_key_values = self.tpe(
+                x=hidden_states,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                **kwargs,
+            )
 
         if self.gradient_checkpointing and self.training:
             if use_cache:

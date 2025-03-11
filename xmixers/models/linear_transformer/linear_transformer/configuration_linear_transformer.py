@@ -33,6 +33,7 @@ class LinearTransformerConfig(PretrainedConfig):
         gate_act="sigmoid",
         gate_pos="pre",
         token_mixer_norm_type="rmsnorm",
+        use_tpe=True,
         ###### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
