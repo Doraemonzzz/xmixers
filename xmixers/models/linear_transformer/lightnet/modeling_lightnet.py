@@ -100,7 +100,6 @@ class LightNetModel(LightNetPreTrainedModel):
             )
             offset = 1
         else:
-            self.tpe = None
             offset = 0
         self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
         self.embed_tokens = nn.Embedding(

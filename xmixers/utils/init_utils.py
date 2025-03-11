@@ -170,7 +170,7 @@ def _post_init_weights(
     init_fn = lambda module: _init_weights(self, module)
     self.model.embed_tokens.apply(init_fn)
     self.model.final_norm._init_weights()
-    if hasattr(self.model, "tpe"):
+    if hasattr(self.model, "tpe") and self.model.tpe is not None:
         self.model.tpe._init_weights()
         self.model.tpe.norm._init_weights()
     for layer in self.model.layers:
