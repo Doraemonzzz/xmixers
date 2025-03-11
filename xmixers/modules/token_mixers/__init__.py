@@ -1,5 +1,6 @@
 from .linear_attention import (
     ChunkRnn,
+    DecayLinearAttention,
     DeltaUnit,
     DenseRnn,
     Hgru2,
@@ -43,6 +44,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "chunk_rnn": ChunkRnn,
     "delta_unit": DeltaUnit,
     "lightnet": LightNetAttention,
+    "decay_linear_attn": DecayLinearAttention,
     # long conv
     "gtu": Gtu,
 }
@@ -420,6 +422,37 @@ def get_token_mixer(config, layer_idx):
             token_mixer_norm_type=config.token_mixer_norm_type,
             q_activation=config.q_activation,
             k_activation=config.k_activation,
+            scalar_decay=config.scalar_decay,
+            causal=config.causal,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            init_std=config.init_std,
+            gain=config.gain,
+        )
+    elif config.token_mixer_type in ["decay_linear_attn"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_lrpe=config.use_lrpe,
+            base=config.base,
+            use_output_gate=config.use_output_gate,
+            token_mixer_norm_type=config.token_mixer_norm_type,
+            q_activation=config.q_activation,
+            k_activation=config.k_activation,
+            decay_type=config.decay_type,
+            # decay parameters
+            A_init_range=config.A_init_range,
+            dt_min=config.dt_min,
+            dt_max=config.dt_max,
+            dt_init_floor=config.dt_init_floor,
+            dt_limit=config.dt_limit,
+            gate_denom=config.gate_denom,
+            share_decay=config.share_decay,
             scalar_decay=config.scalar_decay,
             causal=config.causal,
             gate_act=config.gate_act,

@@ -5,6 +5,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import xmixers  # noqa
 from xmixers.models import (
+    DecayLinearTransformerConfig,
     DeltaNetConfig,
     DenseRnnConfig,
     Hgrn2Config,
@@ -95,7 +96,57 @@ def get_config(model_type):
     elif model_type == "dense_rnn_lower_bound":
         config = DenseRnnConfig()
         config.use_lower_bound = True
-
+    elif model_type == "decay_linear_transformer_hgrn2":
+        config = DecayLinearTransformerConfig()
+        config.use_lower_bound = True
+        config.share_decay = True
+    elif model_type == "decay_linear_transformer_hgrn2_scalar_decay":
+        config = DecayLinearTransformerConfig()
+        config.use_lower_bound = True
+        config.scalar_decay = True
+        config.share_decay = False
+    elif model_type == "decay_linear_transformer_mamba":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "mamba"
+        config.share_decay = False
+    elif model_type == "decay_linear_transformer_mamba_scalar_decay":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "mamba"
+        config.scalar_decay = True
+        config.share_decay = False
+    elif model_type == "decay_linear_transformer_gla":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "gla"
+        config.share_decay = False
+    elif model_type == "decay_linear_transformer_gla_scalar_decay":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "gla"
+        config.scalar_decay = True
+        config.share_decay = False
+    elif model_type == "decay_linear_transformer_lightnet":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "lightnet"
+        config.share_decay = False
+    elif model_type == "decay_linear_transformer_lightnet_scalar_decay":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "lightnet"
+        config.scalar_decay = True
+    elif model_type == "decay_linear_transformer_lssp":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "lssp"
+        config.share_decay = False
+    elif model_type == "decay_linear_transformer_lssp_scalar_decay":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "lssp"
+        config.scalar_decay = True
+    elif model_type == "decay_linear_transformer_tnl":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "tnl"
+        config.scalar_decay = True
+    elif model_type == "decay_linear_transformer_tnl_scalar_decay":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "tnl"
+        config.scalar_decay = True
     return config
 
 
@@ -220,6 +271,18 @@ if __name__ == "__main__":
             "vector_decay_lower_bound_deltanet",
             "dense_rnn",
             "dense_rnn_lower_bound",
+            "decay_linear_transformer_hgrn2",
+            "decay_linear_transformer_hgrn2_scalar_decay",
+            "decay_linear_transformer_mamba",
+            "decay_linear_transformer_mamba_scalar_decay",
+            "decay_linear_transformer_gla",
+            "decay_linear_transformer_gla_scalar_decay",
+            "decay_linear_transformer_lightnet",
+            "decay_linear_transformer_lightnet_scalar_decay",
+            "decay_linear_transformer_lssp",
+            "decay_linear_transformer_lssp_scalar_decay",
+            "decay_linear_transformer_tnl",
+            "decay_linear_transformer_tnl_scalar_decay",
         ],
     )
     args = parser.parse_args()

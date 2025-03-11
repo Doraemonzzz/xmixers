@@ -1,8 +1,9 @@
 # coding=utf-8
-""" PyTorch LightNet model."""
+""" PyTorch DecayLinearTransformer model."""
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
@@ -27,11 +28,11 @@ from xmixers.utils import (
 )
 from xmixers.utils.loss_utils import Loss
 
-from .configuration_lightnet import LightNetConfig
+from .configuration_decay_linear_transformer import DecayLinearTransformerConfig
 
 
-class LightNetLayer(nn.Module):
-    def __init__(self, config: LightNetConfig, layer_idx=0):
+class DecayLinearTransformerLayer(nn.Module):
+    def __init__(self, config: DecayLinearTransformerConfig, layer_idx=0):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
@@ -45,6 +46,7 @@ class LightNetLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
+        lower_bound: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         # token mixer
@@ -54,6 +56,7 @@ class LightNetLayer(nn.Module):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            lower_bound=lower_bound,
             **kwargs,
         )
         x = x + residual
@@ -66,21 +69,21 @@ class LightNetLayer(nn.Module):
         return outputs
 
 
-class LightNetPreTrainedModel(PreTrainedModel):
-    config_class = LightNetConfig
+class DecayLinearTransformerPreTrainedModel(PreTrainedModel):
+    config_class = DecayLinearTransformerConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LightNetLayer"]
+    _no_split_modules = ["DecayLinearTransformerLayer"]
 
     def _init_weights(self, module):
         return _init_weights(self, module)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LightNetModel):
+        if isinstance(module, DecayLinearTransformerModel):
             module.gradient_checkpointing = value
 
 
-class LightNetModel(LightNetPreTrainedModel):
-    def __init__(self, config: LightNetConfig):
+class DecayLinearTransformerModel(DecayLinearTransformerPreTrainedModel):
+    def __init__(self, config: DecayLinearTransformerConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
@@ -107,12 +110,21 @@ class LightNetModel(LightNetPreTrainedModel):
         )
         self.layers = nn.ModuleList(
             [
-                LightNetLayer(config, layer_idx + offset)
+                DecayLinearTransformerLayer(config, layer_idx + offset)
                 for layer_idx in range(config.num_layers)
             ]
         )
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
+        self.use_lower_bound = config.use_lower_bound
+        if self.use_lower_bound:
+            if config.scalar_decay:
+                d = config.num_heads
+            else:
+                d = config.embed_dim
+            self.log_lower_bounds = nn.Parameter(
+                torch.ones(config.num_layers, d), requires_grad=True
+            )
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -188,7 +200,16 @@ class LightNetModel(LightNetPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
+        if self.use_lower_bound:
+            lower_bounds = F.softmax(self.log_lower_bounds, dim=0)
+            lower_bounds = torch.cumsum(lower_bounds, dim=0)
+            lower_bounds -= lower_bounds[0, ...].clone()
+
         for idx, layer in enumerate(self.layers):
+            if self.use_lower_bound:
+                lower_bound = lower_bounds[idx]
+            else:
+                lower_bound = None
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -199,6 +220,7 @@ class LightNetModel(LightNetPreTrainedModel):
                     attention_mask,
                     past_key_values,
                     use_cache,
+                    lower_bound,
                     **kwargs,
                 )
             else:
@@ -207,6 +229,7 @@ class LightNetModel(LightNetPreTrainedModel):
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
+                    lower_bound=lower_bound,
                     **kwargs,
                 )
 
@@ -236,12 +259,12 @@ class LightNetModel(LightNetPreTrainedModel):
         )
 
 
-class LightNetForCausalLM(LightNetPreTrainedModel):
+class DecayLinearTransformerForCausalLM(DecayLinearTransformerPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = LightNetModel(config)
+        self.model = DecayLinearTransformerModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
@@ -298,9 +321,9 @@ class LightNetForCausalLM(LightNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LightNetForCausalLM
+        >>> from transformers import AutoTokenizer, DecayLinearTransformerForCausalLM
 
-        >>> model = LightNetForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = DecayLinearTransformerForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"

@@ -1,4 +1,5 @@
 from .chunk_rnn import ChunkRnn
+from .decay_linear_attention import DecayLinearAttention
 from .delta_unit import DeltaUnit
 from .dense_rnn import DenseRnn
 from .hgru2 import Hgru2

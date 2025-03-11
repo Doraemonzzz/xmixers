@@ -5,7 +5,7 @@ import torch
 
 
 # forgetting transformer: https://openreview.net/pdf?id=q2Lnyegkr8
-def get_log_slopes_general(d, n_min, n_max):
+def get_log_slopes_general(d, n_min=2, n_max=256):
     log_n_min = math.log(n_min)
     log_n_max = math.log(n_max)
     n_list = [
