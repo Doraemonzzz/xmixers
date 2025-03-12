@@ -27,9 +27,11 @@ class LightNetConfig(PretrainedConfig):
         num_heads=8,
         bias=False,
         use_lrpe=True,
+        lrpe_type=1,
         base=10000,
         gate_act="sigmoid",
         gate_pos="pre",
+        use_input_gate=False,
         token_mixer_norm_type="rmsnorm",
         use_tpe=True,
         ##### channel mixer config

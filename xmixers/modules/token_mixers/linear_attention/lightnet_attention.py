@@ -22,6 +22,7 @@ class LightNetAttention(nn.Module):
         bias: bool = False,
         layer_idx: int = 0,
         use_lrpe: bool = True,
+        lrpe_type: int = 1,
         base: int = 10000,
         use_output_gate: bool = True,
         token_mixer_norm_type: str = "rmsnorm",
@@ -31,6 +32,7 @@ class LightNetAttention(nn.Module):
         causal: bool = True,
         gate_act: str = "sigmoid",
         gate_pos: str = "pre",
+        use_input_gate: bool = False,
         token_mixer_init_type: int = 4,
         rescale_type: int = 2,
         num_layers: int = 12,
@@ -77,11 +79,12 @@ class LightNetAttention(nn.Module):
         )
 
         self.use_lrpe = use_lrpe
+
         if self.use_lrpe:
             self.lrpe = Lrpe(
                 head_dim=self.head_dim,
                 num_heads=self.num_heads,
-                lrpe_type=6,
+                lrpe_type=lrpe_type,
                 base=base,
             )
 
@@ -91,6 +94,7 @@ class LightNetAttention(nn.Module):
                 nn.Linear(self.head_dim, embed_dim, bias=bias),
             )
 
+        self.use_input_gate = use_input_gate
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.num_layers = num_layers
@@ -166,6 +170,8 @@ class LightNetAttention(nn.Module):
 
         if self.scalar_decay:
             k = self.k_act(k)
+            if self.use_input_gate:
+                k = (1 - torch.exp(log_f).unsqueeze(-1)) * k
         else:
             k = torch.exp(k - z[:, 1:])
 
