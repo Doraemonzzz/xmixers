@@ -109,11 +109,13 @@ def get_config(model_type):
         config = DecayLinearTransformerConfig()
         config.decay_type = "mamba"
         config.share_decay = False
+        config.use_tpe = False
     elif model_type == "decay_linear_transformer_mamba_scalar_decay":
         config = DecayLinearTransformerConfig()
         config.decay_type = "mamba"
         config.scalar_decay = True
         config.share_decay = False
+        config.use_tpe = False
     elif model_type == "decay_linear_transformer_gla":
         config = DecayLinearTransformerConfig()
         config.decay_type = "gla"
@@ -186,6 +188,7 @@ def main(args):
     config.num_layers = 2
 
     hf_model = AutoModelForCausalLM.from_config(config).to(device).to(dtype)
+    hf_model.post_init_weights()
     print(config)
     print(hf_model)
     hf_model.eval()

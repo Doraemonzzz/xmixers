@@ -226,6 +226,7 @@ class DecayLinearAttention(nn.Module):
         lower_bound: Optional[torch.Tensor] = None,
         q_offset: int = 0,
         decay_state: Optional[torch.Tensor] = None,
+        use_attn_mask: bool = False,
     ):
         if self.decay_type == "hgrn2":
             if self.share_decay:
@@ -268,7 +269,7 @@ class DecayLinearAttention(nn.Module):
             else:
                 f = k
 
-            if attention_mask is not None and not attention_mask.all():
+            if use_attn_mask:
                 start = q_offset
                 attention_mask_ = attention_mask[:, start:].unsqueeze(-1)
                 f = f.masked_fill(attention_mask_ == 0, value)
@@ -312,22 +313,27 @@ class DecayLinearAttention(nn.Module):
         q = self.q_act(q)
 
         q_offset = 0
+        recurrent_state = None
         decay_state = None
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
             decay_state = past_key_values[self.layer_idx]["recurrent_state"][1]
             q_offset = past_key_values.get_seq_length(self.layer_idx)
 
+        use_attn_mask = (
+            attention_mask is not None and not attention_mask.all() and (n > 1)
+        )
         k, log_f, decay_state = self.compute_decay(
             x=x,
             attention_mask=attention_mask,
             lower_bound=lower_bound,
             q_offset=q_offset,
             decay_state=decay_state,
+            use_attn_mask=use_attn_mask,
         )
 
         # left padding
-        if attention_mask is not None and not attention_mask.all():
+        if use_attn_mask:
             start = q_offset
             attention_mask_ = attention_mask[:, start:].unsqueeze(-1)
             log_f = log_f.masked_fill(attention_mask_ == 0, 0)
@@ -344,8 +350,6 @@ class DecayLinearAttention(nn.Module):
         )
         if vector_decay:
             log_f = rearrange(log_f, "... (h d) -> ... h d", d=self.head_dim)
-
-        recurrent_state = None
 
         if self.use_lrpe:
             q = self.lrpe(q, offset=q_offset)
