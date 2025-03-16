@@ -49,7 +49,7 @@ class DecayLinearTransformerConfig(PretrainedConfig):
         causal=True,
         ce_type="xopes_flce",
         ##### decay parameters
-        decay_type="hgrn2",  # choose from ["hgrn2", "gla", "mamba", "lightnet", "tnl", "tnll", "lssp",] # lssp: log sum soft plus
+        decay_type="hgrn2",  # choose from ["hgrn2", "gla", "mamba", "mamba_no_a_no_t", "mamba_no_a", "mamba_no_t", "lightnet", "tnl", "tnll", "lssp",] # lssp: log sum soft plus
         A_init_range=(1, 16),
         dt_min=0.001,
         dt_max=0.1,

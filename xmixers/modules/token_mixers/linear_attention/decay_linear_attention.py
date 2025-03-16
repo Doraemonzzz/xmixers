@@ -31,7 +31,7 @@ class DecayLinearAttention(nn.Module):
         token_mixer_norm_type: str = "rmsnorm",
         q_activation: str = "silu",
         k_activation: str = "silu",
-        decay_type: str = "hgrn2",  # choose from ["hgrn2", "gla", "mamba", "lightnet", "tnl", "tnll", "lssp",] # lssp: log sum soft plus
+        decay_type: str = "hgrn2",  # choose from ["hgrn2", "gla", "mamba", "mamba_no_a_no_t", "mamba_no_a", "mamba_no_t", "lightnet", "tnl", "tnll", "lssp",] # lssp: log sum soft plus
         # decay parameters
         A_init_range: tuple[float, float] = (1, 16),
         dt_min: float = 0.001,
@@ -75,8 +75,6 @@ class DecayLinearAttention(nn.Module):
         self.scalar_decay = scalar_decay
         self.share_decay = share_decay
         self.decay_type = decay_type
-        if self.share_decay:
-            assert decay_type == "hgrn2", "Share_decay=True is only supported for hgrn2"
         if self.decay_type not in ["tnl", "tnll"]:
             if self.scalar_decay:
                 self.f_proj = nn.Linear(embed_dim, self.num_heads, bias=bias)
@@ -155,45 +153,61 @@ class DecayLinearAttention(nn.Module):
             pass
         elif self.decay_type == "gla":
             pass
-        elif self.decay_type == "mamba":
+        elif self.decay_type in [
+            "mamba",
+            "mamba_no_a_no_t",
+            "mamba_no_a",
+            "mamba_no_t",
+        ]:
             A_init_range = kwargs["A_init_range"]
             dt_max = kwargs["dt_max"]
             dt_min = kwargs["dt_min"]
             dt_init_floor = kwargs["dt_init_floor"]
             assert A_init_range[0] > 0 and A_init_range[1] >= A_init_range[0]
 
-            A = torch.empty(self.decay_dim, dtype=torch.float32).uniform_(*A_init_range)
-            log_A = torch.log(A)
-            if hasattr(self, "log_A"):
-                if isinstance(self.log_A, DTensor):
-                    self.log_A.data.copy_(
-                        DTensor.from_local(log_A, device_mesh=self.log_A.device_mesh)
-                    )
-                else:
-                    self.log_A.data.copy_(log_A)
-            else:
-                self.log_A = nn.Parameter(log_A, requires_grad=True)
-
-            dt = torch.exp(
-                torch.rand(
-                    self.decay_dim,
+            if self.decay_type in ["mamba", "mamba_no_t"]:
+                A = torch.empty(self.decay_dim, dtype=torch.float32).uniform_(
+                    *A_init_range
                 )
-                * (math.log(dt_max) - math.log(dt_min))
-                + math.log(dt_min)
-            )
-            dt = torch.clamp(dt, min=dt_init_floor)
-            # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
-            inv_dt = dt + torch.log(-torch.expm1(-dt))  # expm1(x) = exp(x) - 1
-
-            if hasattr(self, "dt_bias"):
-                if isinstance(self.dt_bias, DTensor):
-                    self.dt_bias.data.copy_(
-                        DTensor.from_local(inv_dt, device_mesh=self.dt_bias.device_mesh)
-                    )
+                log_A = torch.log(A)
+                if hasattr(self, "log_A"):
+                    if isinstance(self.log_A, DTensor):
+                        self.log_A.data.copy_(
+                            DTensor.from_local(
+                                log_A, device_mesh=self.log_A.device_mesh
+                            )
+                        )
+                    else:
+                        self.log_A.data.copy_(log_A)
                 else:
-                    self.dt_bias.data.copy_(inv_dt.to(self.dt_bias.dtype))
-            else:
-                self.dt_bias = nn.Parameter(inv_dt, requires_grad=True)
+                    self.log_A = nn.Parameter(log_A, requires_grad=True)
+
+            if self.decay_type in [
+                "mamba",
+                "mamba_no_a",
+            ]:
+                dt = torch.exp(
+                    torch.rand(
+                        self.decay_dim,
+                    )
+                    * (math.log(dt_max) - math.log(dt_min))
+                    + math.log(dt_min)
+                )
+                dt = torch.clamp(dt, min=dt_init_floor)
+                # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
+                inv_dt = dt + torch.log(-torch.expm1(-dt))  # expm1(x) = exp(x) - 1
+
+                if hasattr(self, "dt_bias"):
+                    if isinstance(self.dt_bias, DTensor):
+                        self.dt_bias.data.copy_(
+                            DTensor.from_local(
+                                inv_dt, device_mesh=self.dt_bias.device_mesh
+                            )
+                        )
+                    else:
+                        self.dt_bias.data.copy_(inv_dt.to(self.dt_bias.dtype))
+                else:
+                    self.dt_bias = nn.Parameter(inv_dt, requires_grad=True)
         elif self.decay_type == "lightnet":
             pass
         elif self.decay_type == "tnl":
@@ -241,14 +255,54 @@ class DecayLinearAttention(nn.Module):
             log_f = torch.log(f)
             decay_state = None
         elif self.decay_type == "gla":
-            k = self.k_act(self.k_proj(x))
-            log_f = F.logsigmoid(self.f_proj(x) / self.gate_denom)
+            if self.share_decay:
+                k = F.sigmoid(self.k_proj(x) / self.gate_denom)
+                f = 1 - k
+            else:
+                k = self.k_act(self.k_proj(x))
+                f = F.sigmoid(self.f_proj(x) / self.gate_denom)
+
+            log_f = torch.log(f)
             decay_state = None
         elif self.decay_type == "mamba":
-            k = self.k_act(self.k_proj(x))
-            log_f = -self.log_A.float().exp() * F.softplus(
-                self.f_proj(x) + self.dt_bias
-            )
+            if self.share_decay:
+                k = F.softplus(self.k_proj(x) + self.dt_bias)
+                log_f = -self.log_A.float().exp() * k
+            else:
+                k = self.k_act(self.k_proj(x))
+                log_f = -self.log_A.float().exp() * F.softplus(
+                    self.f_proj(x) + self.dt_bias
+                )
+            decay_state = None
+        elif self.decay_type in [
+            "mamba_no_a",
+        ]:
+            if self.share_decay:
+                k = F.softplus(self.f_proj(x) + self.dt_bias)
+                log_f = -k
+            else:
+                k = self.k_act(self.k_proj(x))
+                log_f = -F.softplus(self.f_proj(x) + self.dt_bias)
+            decay_state = None
+        elif self.decay_type in [
+            "mamba_no_t",
+        ]:
+            if self.share_decay:
+                k = F.softplus(self.f_proj(x))
+                log_f = -self.log_A.float().exp() * k
+            else:
+                k = self.k_act(self.k_proj(x))
+                log_f = -self.log_A.float().exp() * F.softplus(self.f_proj(x))
+            decay_state = None
+        elif self.decay_type in [
+            "mamba_no_a_no_t",
+        ]:
+            if self.share_decay:
+                k = F.softplus(self.f_proj(x))
+                log_f = -k
+            else:
+                k = self.k_act(self.k_proj(x))
+                log_f = -F.softplus(self.f_proj(x))
             decay_state = None
         elif self.decay_type in ["lightnet", "lssp"]:
             b, n, d = x.shape
