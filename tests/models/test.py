@@ -129,6 +129,11 @@ def get_config(model_type):
         config = DecayLinearTransformerConfig()
         config.decay_type = "lightnet"
         config.share_decay = False
+    elif model_type == "decay_linear_transformer_lightnet_share_decay":
+        config = DecayLinearTransformerConfig()
+        config.decay_type = "lightnet"
+        config.share_decay = True
+        config.scalar_decay = False
     elif model_type == "decay_linear_transformer_lightnet_scalar_decay":
         config = DecayLinearTransformerConfig()
         config.decay_type = "lightnet"
@@ -281,6 +286,7 @@ if __name__ == "__main__":
             "decay_linear_transformer_gla",
             "decay_linear_transformer_gla_scalar_decay",
             "decay_linear_transformer_lightnet",
+            "decay_linear_transformer_lightnet_share_decay",
             "decay_linear_transformer_lightnet_scalar_decay",
             "decay_linear_transformer_lssp",
             "decay_linear_transformer_lssp_scalar_decay",

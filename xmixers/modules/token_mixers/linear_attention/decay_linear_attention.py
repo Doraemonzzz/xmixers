@@ -225,7 +225,14 @@ class DecayLinearAttention(nn.Module):
             )
 
             if hasattr(self, "log_decay"):
-                self.log_decay.data.copy_(log_decay)
+                if isinstance(self.log_decay, DTensor):
+                    self.log_decay.data.copy_(
+                        DTensor.from_local(
+                            log_decay, device_mesh=self.log_decay.device_mesh
+                        )
+                    )
+                else:
+                    self.log_decay.data.copy_(log_decay)
             else:
                 self.log_decay = nn.Parameter(log_decay, requires_grad=True)
         elif self.decay_type == "lssp":
@@ -244,20 +251,21 @@ class DecayLinearAttention(nn.Module):
     ):
         if self.decay_type == "hgrn2":
             if self.share_decay:
-                k = F.sigmoid(self.k_proj(x))
-                f = 1 - k
+                f = F.sigmoid(self.k_proj(x))
             else:
                 k = self.k_act(self.k_proj(x))
                 f = F.sigmoid(self.f_proj(x))
             # l + (1 - l) * sigmoid(x)
             if lower_bound is not None:
                 f = lower_bound + (1 - lower_bound) * f
+                if self.share_decay:
+                    k = 1 - f
             log_f = torch.log(f)
             decay_state = None
         elif self.decay_type == "gla":
             if self.share_decay:
-                k = F.sigmoid(self.k_proj(x) / self.gate_denom)
-                f = 1 - k
+                f = F.sigmoid(self.k_proj(x) / self.gate_denom)
+                k = 1 - f
             else:
                 k = self.k_act(self.k_proj(x))
                 f = F.sigmoid(self.f_proj(x) / self.gate_denom)
@@ -306,7 +314,6 @@ class DecayLinearAttention(nn.Module):
             decay_state = None
         elif self.decay_type in ["lightnet", "lssp"]:
             b, n, d = x.shape
-            k = self.k_proj(x)
 
             shape = (b, 1, self.decay_dim)
             value = -float("inf")
@@ -318,10 +325,11 @@ class DecayLinearAttention(nn.Module):
             if decay_state is None:
                 decay_state = self.decay_state
 
-            if self.scalar_decay:
-                f = self.f_proj(x)
+            if self.share_decay:
+                f = self.k_proj(x)
             else:
-                f = k
+                f = self.f_proj(x)
+                k = self.k_proj(x)
 
             if use_attn_mask:
                 start = q_offset
@@ -334,13 +342,18 @@ class DecayLinearAttention(nn.Module):
             else:
                 z = torch.log(cumsum_fn(F.softplus(f), dim=1))
 
-            log_f = (z[:, :-1] - z[:, 1:]).to(k.dtype)
+            log_f = (z[:, :-1] - z[:, 1:]).to(f.dtype)
             decay_state = z[:, -1:]
 
-            if self.scalar_decay:
-                k = self.k_act(k)
+            if self.share_decay:
+                k = torch.exp(f[:, :-1] - z[:, 1:])
             else:
-                k = torch.exp(k - z[:, 1:])
+                k = self.k_act(k)
+
+            # if self.scalar_decay:
+            #     k = self.k_act(k)
+            # else:
+            #     k = torch.exp(k - z[:, 1:])
         elif self.decay_type in ["tnl", "tnll"]:
             b, n, d = x.shape
             k = self.k_act(self.k_proj(x))
