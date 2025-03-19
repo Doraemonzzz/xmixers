@@ -100,11 +100,22 @@ def get_config(model_type):
         config = DecayLinearTransformerConfig()
         config.use_lower_bound = True
         config.share_decay = True
+    elif model_type == "decay_linear_transformer_hgrn2_rope":
+        config = DecayLinearTransformerConfig()
+        config.use_lower_bound = True
+        config.share_decay = True
+        config.use_lrpe = True
     elif model_type == "decay_linear_transformer_hgrn2_scalar_decay":
         config = DecayLinearTransformerConfig()
         config.use_lower_bound = True
         config.scalar_decay = True
         config.share_decay = False
+    elif model_type == "decay_linear_transformer_hgrn2_rope_scalar_decay":
+        config = DecayLinearTransformerConfig()
+        config.use_lower_bound = True
+        config.scalar_decay = True
+        config.share_decay = False
+        config.use_lrpe = True
     elif model_type == "decay_linear_transformer_mamba":
         config = DecayLinearTransformerConfig()
         config.decay_type = "mamba"
@@ -280,7 +291,9 @@ if __name__ == "__main__":
             "dense_rnn",
             "dense_rnn_lower_bound",
             "decay_linear_transformer_hgrn2",
+            "decay_linear_transformer_hgrn2_rope",
             "decay_linear_transformer_hgrn2_scalar_decay",
+            "decay_linear_transformer_hgrn2_rope_scalar_decay",
             "decay_linear_transformer_mamba",
             "decay_linear_transformer_mamba_scalar_decay",
             "decay_linear_transformer_gla",
