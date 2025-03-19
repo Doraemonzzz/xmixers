@@ -211,14 +211,7 @@ class DecayLinearAttention(nn.Module):
         elif self.decay_type == "lightnet":
             pass
         elif self.decay_type == "tnl":
-            log_decay = get_log_slopes_general(self.num_heads) * (
-                1 - self.layer_idx / (self.num_layers - 1) + 1e-5
-            )
-
-            if hasattr(self, "log_decay"):
-                self.log_decay.data.copy_(log_decay)
-            else:
-                self.register_buffer("log_decay", log_decay)
+            self.log_decay = torch.empty(0)
         elif self.decay_type == "tnll":
             log_decay = get_log_slopes_general(self.num_heads) * (
                 1 - self.layer_idx / (self.num_layers - 1) + 1e-5
@@ -350,11 +343,12 @@ class DecayLinearAttention(nn.Module):
             else:
                 k = self.k_act(k)
 
-            # if self.scalar_decay:
-            #     k = self.k_act(k)
-            # else:
-            #     k = torch.exp(k - z[:, 1:])
         elif self.decay_type in ["tnl", "tnll"]:
+            if self.log_decay.shape[0] == 0:
+                self.log_decay = (
+                    get_log_slopes_general(self.num_heads)
+                    * (1 - self.layer_idx / (self.num_layers - 1) + 1e-5)
+                ).to(x.device)
             b, n, d = x.shape
             k = self.k_act(self.k_proj(x))
             log_f = repeat(self.log_decay, "h -> b n h", b=b, n=n)
