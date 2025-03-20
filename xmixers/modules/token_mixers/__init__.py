@@ -3,6 +3,7 @@ from .linear_attention import (
     DecayLinearAttention,
     DeltaUnit,
     DenseRnn,
+    GatedSlotAttention,
     Hgru2,
     Hgru2ScalarDecay,
     Hgru3,
@@ -47,6 +48,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "delta_unit": DeltaUnit,
     "lightnet": LightNetAttention,
     "decay_linear_attn": DecayLinearAttention,
+    "gsa": GatedSlotAttention,
     # long conv
     "gtu": Gtu,
 }
@@ -481,6 +483,27 @@ def get_token_mixer(config, layer_idx):
             causal=config.causal,
             gate_act=config.gate_act,
             gate_pos=config.gate_pos,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            init_std=config.init_std,
+            gain=config.gain,
+        )
+    elif config.token_mixer_type in ["gsa"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_output_gate=config.use_output_gate,
+            token_mixer_norm_type=config.token_mixer_norm_type,
+            q_activation=config.q_activation,
+            k_activation=config.k_activation,
+            num_slots=config.num_slots,
+            causal=config.causal,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
+            max_position_embeddings=config.max_position_embeddings,
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,

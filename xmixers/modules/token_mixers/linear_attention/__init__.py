@@ -2,6 +2,7 @@ from .chunk_rnn import ChunkRnn
 from .decay_linear_attention import DecayLinearAttention
 from .delta_unit import DeltaUnit
 from .dense_rnn import DenseRnn
+from .gsa import GatedSlotAttention
 from .hgru2 import Hgru2
 from .hgru2_scalar_decay import Hgru2ScalarDecay
 from .hgru3 import Hgru3
