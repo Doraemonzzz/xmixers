@@ -178,6 +178,8 @@ def _post_init_weights(
         layer.token_mixer._init_weights()
         if hasattr(layer.token_mixer, "lrpe"):
             layer.token_mixer.lrpe._init_weights()
+        if hasattr(layer.token_mixer, "norm"):
+            layer.token_mixer.norm._init_weights()
         # if not using custom init, use default init
         layer.token_mixer.apply(init_fn)
         layer.channel_mixer.apply(init_fn)

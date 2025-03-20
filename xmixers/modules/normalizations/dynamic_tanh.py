@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.distributed.tensor import DTensor
 
 
 class DynamicTanh(nn.Module):
@@ -10,6 +11,18 @@ class DynamicTanh(nn.Module):
 
         self.alpha = nn.Parameter(torch.ones(1) * alpha_init_value)
         self.weight = nn.Parameter(torch.ones(normalized_shape))
+
+        self._init_weights()
+
+    def _init_weights(self):
+        alpha = torch.ones(1) * self.alpha_init_value
+        if isinstance(self.alpha, DTensor):
+            self.alpha.data.copy_(
+                DTensor.from_local(alpha, device_mesh=self.alpha.device_mesh)
+            )
+        else:
+            self.alpha.data.copy_(alpha)
+        nn.init.ones_(self.weight)
 
     def forward(self, x):
         # TODO: add a fusion here
@@ -27,6 +40,18 @@ class DynamicTanhFusedGate(nn.Module):
 
         self.alpha = nn.Parameter(torch.ones(1) * alpha_init_value)
         self.weight = nn.Parameter(torch.ones(normalized_shape))
+
+        self._init_weights()
+
+    def _init_weights(self):
+        alpha = torch.ones(1) * self.alpha_init_value
+        if isinstance(self.alpha, DTensor):
+            self.alpha.data.copy_(
+                DTensor.from_local(alpha, device_mesh=self.alpha.device_mesh)
+            )
+        else:
+            self.alpha.data.copy_(alpha)
+        nn.init.ones_(self.weight)
 
     def forward(self, x, gate):
         # TODO: add a fusion here
