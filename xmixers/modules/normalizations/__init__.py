@@ -1,5 +1,6 @@
 import torch.nn as nn
 
+from .dynamic_tanh import DynamicTanh, DynamicTanhFusedGate
 from .group_norm import GroupNorm
 from .group_rms_norm import GroupRMSNorm, GroupRMSNormFusedGate
 from .group_srms_norm import GroupSRMSNorm
@@ -30,5 +31,9 @@ def get_norm_fn(norm_type: str):
         return GroupRMSNormFusedGate
     elif norm_type == "groupsrmsnorm":
         return GroupSRMSNorm
+    elif norm_type == "dynamictanh":
+        return DynamicTanh
+    elif norm_type == "dynamictanh_fused_gate":
+        return DynamicTanhFusedGate
     else:
         return LayerNorm
