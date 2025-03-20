@@ -3,5 +3,6 @@ from .flex_attention import FlexAttention
 from .multi_latent_attention import MultiLatentAttention
 from .multi_product_attention import MultiProductAttention
 from .n_attention import nAttention
+from .naive_sparse_attention import NaiveSparseAttention
 from .simple_sparse_attention import SimpleSparseAttention
 from .tensor_product_attention import TensorProductAttention

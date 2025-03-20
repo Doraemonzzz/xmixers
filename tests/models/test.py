@@ -165,6 +165,13 @@ def get_config(model_type):
         config = DecayLinearTransformerConfig()
         config.decay_type = "tnl"
         config.scalar_decay = True
+    if model_type == "nsa":
+        config = LLaMAConfig()
+        config.token_mixer_type = "nsa"
+        config.head_dim = 64
+        config.num_heads = 16
+        config.kv_heads = 1
+        config.window_size = 128
     return config
 
 
@@ -305,6 +312,7 @@ if __name__ == "__main__":
             "decay_linear_transformer_lssp_scalar_decay",
             "decay_linear_transformer_tnl",
             "decay_linear_transformer_tnl_scalar_decay",
+            "nsa",
         ],
     )
     args = parser.parse_args()

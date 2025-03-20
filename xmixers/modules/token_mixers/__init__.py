@@ -18,6 +18,7 @@ from .vanilla_attention import (
     FlexAttention,
     MultiLatentAttention,
     MultiProductAttention,
+    NaiveSparseAttention,
     SimpleSparseAttention,
     TensorProductAttention,
     nAttention,
@@ -32,6 +33,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "tpa": TensorProductAttention,
     "mla": MultiLatentAttention,
     "ssa": SimpleSparseAttention,
+    "nsa": NaiveSparseAttention,
     # linear attn
     "hgru2": Hgru2,
     "hgru2_scalar_decay": Hgru2ScalarDecay,
@@ -79,6 +81,26 @@ def get_token_mixer(config, layer_idx):
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
             window_size=config.window_size,
+            init_std=config.init_std,
+            gain=config.gain,
+        )
+    elif config.token_mixer_type in ["nsa"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            kv_heads=config.kv_heads,
+            bias=config.bias,
+            use_lrpe=config.use_lrpe,
+            layer_idx=layer_idx,
+            lrpe_type=config.lrpe_type,
+            base=config.base,
+            max_position_embeddings=config.max_position_embeddings,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            window_size=config.window_size,
+            head_dim=config.head_dim,
+            block_size=config.block_size,
             init_std=config.init_std,
             gain=config.gain,
         )

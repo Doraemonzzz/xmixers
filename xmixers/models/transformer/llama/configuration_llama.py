@@ -42,6 +42,7 @@ class LLaMAConfig(PretrainedConfig):
         kv_lora_rank=512,
         qk_rope_head_dim=64,
         window_size=-1,
+        block_size=64,
         chunk_size=128,
         token_mixer_top_k=2,
         ###### channel mixer config

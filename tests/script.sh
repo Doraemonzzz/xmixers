@@ -41,6 +41,7 @@ model_type=decay_linear_transformer_lightnet_share_decay
 # model_type=decay_linear_transformer_tnl_scalar_decay
 model_type=decay_linear_transformer_hgrn2_rope
 # model_type=decay_linear_transformer_hgrn2_rope_scalar_decay
+model_type=nsa
 
 dtype=bf16
 # dtype=fp32
