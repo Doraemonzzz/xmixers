@@ -1,6 +1,8 @@
 import math
+import os
 from typing import Optional
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -148,6 +150,15 @@ class DecayLinearAttention(nn.Module):
     def extra_repr(self):
         return print_module(self)
 
+    def save_decay(self, log_f, **kwargs):
+        save_dir = os.path.join(
+            kwargs["save_dir"],
+        )
+        os.makedirs(os.path.dirname(save_dir), exist_ok=True)
+        data = log_f.float().cpu().numpy()
+        file_path = os.path.join(save_dir, f"layer_{self.layer_idx}.npy")
+        np.save(file_path, data)
+
     def setup_decay(self, **kwargs):
         if self.decay_type == "hgrn2":
             pass
@@ -241,6 +252,7 @@ class DecayLinearAttention(nn.Module):
         q_offset: int = 0,
         decay_state: Optional[torch.Tensor] = None,
         use_attn_mask: bool = False,
+        **kwargs,
     ):
         if self.decay_type == "hgrn2":
             if self.share_decay:
@@ -354,6 +366,9 @@ class DecayLinearAttention(nn.Module):
             log_f = repeat(self.log_decay, "h -> b n h", b=b, n=n)
             decay_state = None
 
+        if kwargs.get("save_decay", False):
+            self.save_decay(log_f, **kwargs)
+
         return k, log_f, decay_state
 
     def forward(
@@ -391,6 +406,7 @@ class DecayLinearAttention(nn.Module):
             q_offset=q_offset,
             decay_state=decay_state,
             use_attn_mask=use_attn_mask,
+            **kwargs,
         )
 
         # left padding

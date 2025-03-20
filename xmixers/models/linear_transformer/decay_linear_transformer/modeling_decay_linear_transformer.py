@@ -358,6 +358,7 @@ class DecayLinearTransformerForCausalLM(DecayLinearTransformerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
