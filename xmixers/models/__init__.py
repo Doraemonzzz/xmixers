@@ -47,6 +47,10 @@ from .linear_transformer import (
     TnlConfig,
     TnlForCausalLM,
     TnlModel,
+    TTTConfig,
+    TTTForCausalLM,
+    TTTLayer,
+    TTTModel,
 )
 from .long_conv import *
 from .transformer import (

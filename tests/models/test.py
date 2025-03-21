@@ -14,6 +14,7 @@ from xmixers.models import (
     LinearTransformerConfig,
     LLaMAConfig,
     TnlConfig,
+    TTTConfig,
 )
 
 AUTO_DTYPE_MAP = {"bf16": torch.bfloat16, "fp32": torch.float32}
@@ -175,6 +176,8 @@ def get_config(model_type):
         config.window_size = 128
     elif model_type == "gsa":
         config = GsaConfig()
+    elif model_type == "ttt":
+        config = TTTConfig()
 
     return config
 
@@ -318,6 +321,7 @@ if __name__ == "__main__":
             "decay_linear_transformer_tnl_scalar_decay",
             "nsa",
             "gsa",
+            "ttt",
         ],
     )
     args = parser.parse_args()

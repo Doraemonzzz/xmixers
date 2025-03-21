@@ -52,6 +52,13 @@ def _initialize_weights(self, module):
         if hasattr(module, "initial_state") and module.initial_state is not None:
             nn.init.zeros_(module.initial_state)
 
+        # ttt
+        if hasattr(module, "ln_weight") and module.ln_weight is not None:
+            nn.init.ones_(module.ln_weight)
+
+        if hasattr(module, "ln_bias") and module.ln_bias is not None:
+            nn.init.zeros_(module.ln_bias)
+
     if self.rescale_type == 1:
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
