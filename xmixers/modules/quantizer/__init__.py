@@ -1,0 +1,1 @@
+from .finite_scalar_quantizer import FiniteScalarQuantizer

@@ -67,6 +67,8 @@ class LLaMAConfig(PretrainedConfig):
         use_embed_scale=False,
         ce_type="xopes_flce",
         fuse_norm_add=False,
+        num_bins=128,
+        center=False,
         ##### init
         init_type=1,
         token_mixer_init_type=4,
