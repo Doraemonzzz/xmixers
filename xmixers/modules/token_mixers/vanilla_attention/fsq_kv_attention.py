@@ -57,9 +57,11 @@ class FsqKvAttention(nn.Module):
         self.window_size = window_size
         mid_dim = self.head_dim * self.num_heads
         self.q_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
-        self.kv_proj_down = nn.Linear(embed_dim, num_bins, bias=bias)
-        self.kv_proj_up = nn.Linear(num_bins, 2 * mid_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
         self.o_proj = nn.Linear(mid_dim, embed_dim, bias=bias)
+        self.k_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
+        self.v_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
         self.quantizer = FiniteScalarQuantizer(num_bins=num_bins, center=center)
 
         self.use_lrpe = use_lrpe
@@ -95,14 +97,16 @@ class FsqKvAttention(nn.Module):
         b, n, d = x.shape
         # linear map
         q = self.q_proj(x)
-        kv_latent = self.kv_proj_down(x)
-        kv_latent_code = self.quantizer(kv_latent)
-        k, v = self.kv_proj_up(kv_latent_code).chunk(2, dim=-1)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
 
         q, k, v = map(
             lambda x: rearrange(x, "... n (h d) -> ... n h d", d=self.head_dim),
             [q, k, v],
         )
+
+        k = self.k_head_proj(k)
+        v = self.v_head_proj(v)
 
         # lrpe
         q_offset = 0
