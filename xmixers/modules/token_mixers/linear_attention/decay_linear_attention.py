@@ -242,23 +242,21 @@ class DecayLinearAttention(nn.Module):
         elif self.decay_type == "lssp":
             pass
         elif self.decay_type == "hgrn3":
-            # 1 / (1 + exp(-x)) = a => 1 + exp(-x) = 1 / a => exp(-x) = (1 / a - 1) -> exp(x) = a / (1 - a) => x = log(a / (1 - a))
-            # a = 0.6
-            log_lower_bound = get_log_slopes_general(self.decay_dim) * (
-                1 - self.layer_idx / (self.num_layers - 1) + 1e-5
-            )
-            if hasattr(self, "log_lower_bound"):
-                if isinstance(self.log_lower_bound, DTensor):
-                    self.log_lower_bound.data.copy_(
+            # take x = 0 as median, 1 / (1 + exp(-(median + delta))) = a => 1 + exp(-delta) = 1 / a => exp(-delta) = (1 / a - 1) -> exp(delta) = a / (1 - a) => delta = log(a / (1 - a))
+            a = 0.8
+            delta = torch.ones(self.decay_dim) * math.log(a / (1 - a))
+            if hasattr(self, "delta"):
+                if isinstance(self.delta, DTensor):
+                    self.delta.data.copy_(
                         DTensor.from_local(
-                            log_lower_bound,
-                            device_mesh=self.log_lower_bound.device_mesh,
+                            delta,
+                            device_mesh=self.delta.device_mesh,
                         )
                     )
                 else:
-                    self.log_lower_bound.data.copy_(log_lower_bound)
+                    self.delta.data.copy_(delta)
             else:
-                self.log_lower_bound = nn.Parameter(log_lower_bound, requires_grad=True)
+                self.delta = nn.Parameter(delta, requires_grad=True)
         else:
             raise ValueError(f"Unknown decay type: {self.decay_type}")
 
@@ -384,17 +382,11 @@ class DecayLinearAttention(nn.Module):
             decay_state = None
         elif self.decay_type == "hgrn3":
             if self.share_decay:
-                f = F.sigmoid(self.k_proj(x))
+                log_f = F.logsigmoid(self.k_proj(x) + self.delta)
+                k = 1 - torch.exp(log_f)
             else:
                 k = self.k_act(self.k_proj(x))
-                f = F.sigmoid(self.f_proj(x))
-            # l + (1 - l) * sigmoid(x)
-            lower_bound = F.sigmoid(self.log_lower_bound)
-            f = lower_bound + (1 - lower_bound) * f
-            # f = torch.exp(self.log_decay * f)
-            if self.share_decay:
-                k = 1 - f
-            log_f = torch.log(f)
+                log_f = F.logsigmoid(self.f_proj(x) + self.delta)
             decay_state = None
         else:
             raise ValueError(f"Unknown decay type: {self.decay_type}")
