@@ -32,7 +32,31 @@ def plot_model_median_by_layer(
     df = df.sort_values(["model_type", "layer_idx"])
 
     # Get unique model types for plotting with different colors
-    model_types = df["model_type"].unique()
+    all_model_types = df["model_type"].unique()
+
+    # Define the desired order of model types (add all your model types in desired order)
+    model_order = [
+        "dlt_mamba",
+        "dlt_gla",
+        "dlt_hgrn2",
+        "dlt_lightnet",
+        "dlt_mamba_no_a",
+        "dlt_mamba_no_t",
+        "dlt_mamba_no_a_no_t",
+        "dlt_scalar_mamba",
+        "dlt_scalar_gla",
+        "dlt_scalar_hgrn2",
+        "dlt_scalar_lightnet",
+        "dlt_tnl",
+        "dlt_tnll",
+        "dlt_share_mamba",
+        "dlt_share_gla",
+        "dlt_share_hgrn2",
+        "dlt_share_lightnet",
+    ]
+
+    # Filter model_order to include only models present in the data
+    model_types = [m for m in model_order if m in all_model_types]
 
     # Create figure
     plt.figure(figsize=(12, 8))
@@ -43,10 +67,10 @@ def plot_model_median_by_layer(
         "red",
         "green",
         "orange",
+        "gray",
         "purple",
         "brown",
         "pink",
-        "gray",
         "olive",
         "cyan",
     ]
@@ -72,10 +96,22 @@ def plot_model_median_by_layer(
             markersize=10,
         )
 
+    # Determine title suffix based on data_path filename
+    title_suffix = ""
+    if "90m" in data_path:
+        title_suffix = " (160M)"
+    elif "350m" in data_path:
+        title_suffix = " (410M)"
+    elif "1_2b" in data_path:
+        title_suffix = " (1.45B)"
+
     # Set labels and title
-    plt.xlabel("Layer Index", fontsize=24)
-    plt.ylabel("Median Value", fontsize=24)
-    plt.title("Median Values Across Layers for Different Methods", fontsize=24)
+    plt.xlabel("Layer Index", fontsize=28)
+    plt.ylabel("Median Decay Value", fontsize=28)
+    plt.title(
+        f"Median Decay Values Across Layers\n for Different Methods{title_suffix}",
+        fontsize=28,
+    )
 
     # Add grid for better readability
     plt.grid(True, linestyle="--", alpha=0.7)
@@ -83,15 +119,16 @@ def plot_model_median_by_layer(
     # Set x-ticks to show every other layer
     max_layer = int(df["layer_idx"].max())
     plt.xticks(range(1, max_layer + 1, 2))
-    plt.tick_params(axis="both", which="major", labelsize=20)
+    plt.tick_params(axis="both", which="major", labelsize=24)
 
     # Set y-axis limits
-    plt.ylim(0, 1.3)
+    if "scalar" in data_path:
+        plt.ylim(0, 1.55)
+    else:
+        plt.ylim(0, 1.4)
 
     # Add legend
-    # plt.legend(fontsize=18, loc='best')
-    # plt.legend(fontsize=14, loc='lower left')
-    plt.legend(fontsize=14, loc="upper left")
+    plt.legend(fontsize=16, loc="upper left")
 
     # Save figure if output path is provided
     if output_path:
@@ -135,19 +172,21 @@ if __name__ == "__main__":
     model_name_mapping = {
         "dlt_gla": "GLA",
         "dlt_hgrn2": "HGRN2",
-        "dlt_mamba": "Mamba",
+        "dlt_mamba": "Mamba2",
         "dlt_lightnet": "LightNet",
-        "dlt_mamba_no_a": "Mamba W/O A",
-        "dlt_mamba_no_a_no_t": "Mamba W/O A & T",
-        "dlt_mamba_no_t": "Mamba W/O T",
-        "dlt_scalar_gla": "GLA",
-        "dlt_scalar_hgrn2": "HGRN2",
-        "dlt_scalar_mamba": "Mamba",
+        "dlt_mamba_no_a": "Mamba2 W/O A",
+        "dlt_mamba_no_a_no_t": "Mamba2 W/O A & Δ",
+        "dlt_mamba_no_t": "Mamba2 W/O Δ",
+        "dlt_scalar_gla": "GLA-Scalar",
+        "dlt_scalar_hgrn2": "HGRN2-Scalar",
+        "dlt_scalar_mamba": "Mamba2-Scalar",
+        "dlt_scalar_lightnet": "LightNet-Scalar",
         "dlt_tnl": "TNL",
         "dlt_tnll": "TNL-L",
         "dlt_share_gla": "GLA-Share",
         "dlt_share_hgrn2": "HGRN2-Share",
-        "dlt_share_mamba": "Mamba-Share",
+        "dlt_share_mamba": "Mamba2-Share",
+        "dlt_share_lightnet": "LightNet-Share",
     }
 
     # Plot the data
