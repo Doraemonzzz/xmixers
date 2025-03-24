@@ -33,7 +33,7 @@ class DecayLinearAttention(nn.Module):
         token_mixer_norm_type: str = "rmsnorm",
         q_activation: str = "silu",
         k_activation: str = "silu",
-        decay_type: str = "hgrn2",  # choose from ["hgrn2", "gla", "mamba", "mamba_no_a_no_t", "mamba_no_a", "mamba_no_t", "lightnet", "tnl", "tnll", "lssp",] # lssp: log sum soft plus
+        decay_type: str = "hgrn2",  # choose from ["hgrn2", "gla", "mamba", "mamba_no_a_no_t", "mamba_no_a", "mamba_no_t", "lightnet", "tnl", "tnll", "lssp", "hgrn3"] # lssp: log sum soft plus
         # decay parameters
         A_init_range: tuple[float, float] = (1, 16),
         dt_min: float = 0.001,
@@ -241,6 +241,24 @@ class DecayLinearAttention(nn.Module):
                 self.log_decay = nn.Parameter(log_decay, requires_grad=True)
         elif self.decay_type == "lssp":
             pass
+        elif self.decay_type == "hgrn3":
+            # 1 / (1 + exp(-x)) = a => 1 + exp(-x) = 1 / a => exp(-x) = (1 / a - 1) -> exp(x) = a / (1 - a) => x = log(a / (1 - a))
+            # a = 0.6
+            log_lower_bound = get_log_slopes_general(self.decay_dim) * (
+                1 - self.layer_idx / (self.num_layers - 1) + 1e-5
+            )
+            if hasattr(self, "log_lower_bound"):
+                if isinstance(self.log_lower_bound, DTensor):
+                    self.log_lower_bound.data.copy_(
+                        DTensor.from_local(
+                            log_lower_bound,
+                            device_mesh=self.log_lower_bound.device_mesh,
+                        )
+                    )
+                else:
+                    self.log_lower_bound.data.copy_(log_lower_bound)
+            else:
+                self.log_lower_bound = nn.Parameter(log_lower_bound, requires_grad=True)
         else:
             raise ValueError(f"Unknown decay type: {self.decay_type}")
 
@@ -354,7 +372,6 @@ class DecayLinearAttention(nn.Module):
                 k = torch.exp(f[:, :-1] - z[:, 1:])
             else:
                 k = self.k_act(k)
-
         elif self.decay_type in ["tnl", "tnll"]:
             if self.log_decay.shape[0] == 0:
                 self.log_decay = (
@@ -365,6 +382,22 @@ class DecayLinearAttention(nn.Module):
             k = self.k_act(self.k_proj(x))
             log_f = repeat(self.log_decay, "h -> b n h", b=b, n=n)
             decay_state = None
+        elif self.decay_type == "hgrn3":
+            if self.share_decay:
+                f = F.sigmoid(self.k_proj(x))
+            else:
+                k = self.k_act(self.k_proj(x))
+                f = F.sigmoid(self.f_proj(x))
+            # l + (1 - l) * sigmoid(x)
+            lower_bound = F.sigmoid(self.log_lower_bound)
+            f = lower_bound + (1 - lower_bound) * f
+            # f = torch.exp(self.log_decay * f)
+            if self.share_decay:
+                k = 1 - f
+            log_f = torch.log(f)
+            decay_state = None
+        else:
+            raise ValueError(f"Unknown decay type: {self.decay_type}")
 
         if kwargs.get("save_decay", False):
             self.save_decay(log_f, **kwargs)
