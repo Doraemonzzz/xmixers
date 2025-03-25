@@ -41,6 +41,7 @@ class DecayLinearAttention(nn.Module):
         dt_init_floor: float = 1e-4,
         dt_limit: tuple[float, float] = (0.0, float("inf")),
         gate_denom: float = 16,
+        threshold: float = 0.99,
         share_decay: bool = False,
         scalar_decay: bool = False,
         causal: bool = True,
@@ -121,6 +122,7 @@ class DecayLinearAttention(nn.Module):
                 nn.Linear(self.head_dim, embed_dim, bias=bias),
             )
 
+        self.threshold = threshold
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.num_layers = num_layers
@@ -243,7 +245,7 @@ class DecayLinearAttention(nn.Module):
             pass
         elif self.decay_type == "hgrn3":
             # take x = 0 as median, 1 / (1 + exp(-(median + delta))) = a => 1 + exp(-delta) = 1 / a => exp(-delta) = (1 / a - 1) -> exp(delta) = a / (1 - a) => delta = log(a / (1 - a))
-            a = 0.8
+            a = self.threshold
             delta = torch.ones(self.decay_dim) * math.log(a / (1 - a))
             if hasattr(self, "delta"):
                 if isinstance(self.delta, DTensor):

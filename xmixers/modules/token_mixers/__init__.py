@@ -482,6 +482,7 @@ def get_token_mixer(config, layer_idx):
             dt_init_floor=config.dt_init_floor,
             dt_limit=config.dt_limit,
             gate_denom=config.gate_denom,
+            threshold=config.threshold,
             share_decay=config.share_decay,
             scalar_decay=config.scalar_decay,
             causal=config.causal,

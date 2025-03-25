@@ -58,6 +58,7 @@ class DecayLinearTransformerConfig(PretrainedConfig):
         gate_denom=16,
         share_decay=False,
         use_lower_bound=False,
+        threshold=0.99,
         ##### init
         init_type=1,
         token_mixer_init_type=4,
