@@ -27,6 +27,7 @@ class FsqKvAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
+        kv_heads: int = -1,
         bias: bool = False,
         use_lrpe: bool = True,
         layer_idx: int = 0,
@@ -34,7 +35,7 @@ class FsqKvAttention(nn.Module):
         base: int = 10000,
         num_bins: int = 128,
         center: bool = False,
-        head_dim: int = -1,
+        use_proj: bool = True,
         max_position_embeddings: int = 1024,
         token_mixer_init_type: int = 4,
         rescale_type: int = 2,
@@ -52,16 +53,22 @@ class FsqKvAttention(nn.Module):
             print_params(**params)
 
         self.layer_idx = layer_idx
+        self.kv_heads = kv_heads
         self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads if head_dim == -1 else head_dim
+        self.head_dim = embed_dim // num_heads
         self.window_size = window_size
-        mid_dim = self.head_dim * self.num_heads
-        self.q_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
-        self.k_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
-        self.o_proj = nn.Linear(mid_dim, embed_dim, bias=bias)
-        self.k_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
-        self.v_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
+        if self.kv_heads == -1:
+            kv_dim = embed_dim
+        else:
+            kv_dim = self.kv_heads * self.head_dim
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
+        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.use_proj = use_proj
+        if self.use_proj:
+            self.k_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
+            self.v_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
         self.quantizer = FiniteScalarQuantizer(num_bins=num_bins, center=center)
 
         self.use_lrpe = use_lrpe
@@ -104,9 +111,12 @@ class FsqKvAttention(nn.Module):
             lambda x: rearrange(x, "... n (h d) -> ... n h d", d=self.head_dim),
             [q, k, v],
         )
+        k = self.quantizer(k)
+        v = self.quantizer(v)
 
-        k = self.k_head_proj(k)
-        v = self.v_head_proj(v)
+        if self.use_proj:
+            k = self.k_head_proj(k)
+            v = self.v_head_proj(v)
 
         # lrpe
         q_offset = 0

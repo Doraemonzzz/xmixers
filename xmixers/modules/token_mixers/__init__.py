@@ -541,6 +541,7 @@ def get_token_mixer(config, layer_idx):
         return cls(
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,
+            kv_heads=config.kv_heads,
             bias=config.bias,
             use_lrpe=config.use_lrpe,
             layer_idx=layer_idx,
@@ -555,5 +556,5 @@ def get_token_mixer(config, layer_idx):
             gain=config.gain,
             num_bins=config.num_bins,
             center=config.center,
-            head_dim=config.head_dim,
+            use_proj=config.use_proj,
         )

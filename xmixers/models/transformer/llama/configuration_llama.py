@@ -69,6 +69,7 @@ class LLaMAConfig(PretrainedConfig):
         fuse_norm_add=False,
         num_bins=128,
         center=False,
+        use_proj=True,
         ##### init
         init_type=1,
         token_mixer_init_type=4,
