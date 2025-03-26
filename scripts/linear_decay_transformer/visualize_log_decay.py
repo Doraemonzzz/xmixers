@@ -53,6 +53,10 @@ def plot_model_median_by_layer(
         "dlt_share_gla",
         "dlt_share_hgrn2",
         "dlt_share_lightnet",
+        "dlt_hgrn3_0_8",
+        "dlt_hgrn3_0_9",
+        "dlt_hgrn3_0_95",
+        "dlt_hgrn3_0_99",
     ]
 
     # Filter model_order to include only models present in the data
@@ -187,6 +191,10 @@ if __name__ == "__main__":
         "dlt_share_hgrn2": "HGRN2-Share",
         "dlt_share_mamba": "Mamba2-Share",
         "dlt_share_lightnet": "LightNet-Share",
+        "dlt_hgrn3_0_8": "SD-0.8",
+        "dlt_hgrn3_0_9": "SD-0.9",
+        "dlt_hgrn3_0_95": "SD-0.95",
+        "dlt_hgrn3_0_99": "SD-0.99",
     }
 
     # Plot the data
