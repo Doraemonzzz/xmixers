@@ -1,3 +1,4 @@
+# multi product attention
 from typing import Optional
 
 import torch
@@ -5,8 +6,9 @@ import torch.nn as nn
 from einops import rearrange
 from transformers.cache_utils import Cache
 
+from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.pes import Lrpe
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
+from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
 try:
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -22,24 +24,26 @@ from xmixers.modules.quantizer import FiniteScalarQuantizer
 from .utils import _upad_input
 
 
-class FsqKvAttention(nn.Module):
+class FsqKvMultiProductAttention(nn.Module):
     def __init__(
         self,
         embed_dim: int,
         num_heads: int,
-        kv_heads: int = -1,
         bias: bool = False,
         use_lrpe: bool = True,
         layer_idx: int = 0,
         lrpe_type: int = 1,
         base: int = 10000,
-        center: bool = False,
-        use_proj: bool = True,
         max_position_embeddings: int = 1024,
+        q_rank: int = -1,
+        center: bool = False,
         token_mixer_init_type: int = 4,
         rescale_type: int = 2,
         num_layers: int = 12,
         window_size: int = -1,
+        mpa_type: int = 0,
+        mpa_activation: str = "sigmoid",
+        head_dim: int = -1,
         init_std: float = 0.02,
         gain: float = 0.01,
         **kwargs,
@@ -52,22 +56,28 @@ class FsqKvAttention(nn.Module):
             print_params(**params)
 
         self.layer_idx = layer_idx
-        self.kv_heads = kv_heads
         self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
+        self.head_dim = embed_dim // num_heads if head_dim == -1 else head_dim
         self.window_size = window_size
-        if self.kv_heads == -1:
-            kv_dim = embed_dim
+        mid_dim = self.head_dim * self.num_heads
+        self.mpa_type = mpa_type
+        self.q_rank = q_rank
+        if self.q_rank == -1:
+            self.q_proj = nn.Linear(embed_dim, mid_dim, bias=bias)
         else:
-            kv_dim = self.kv_heads * self.head_dim
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
-        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.use_proj = use_proj
-        if self.use_proj:
-            self.k_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
-            self.v_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
+            self.q_proj = nn.Linear(embed_dim, self.head_dim * self.q_rank, bias=bias)
+            self.q_head_proj = nn.Linear(embed_dim, num_heads * self.q_rank, bias=bias)
+        self.kv_proj = nn.Linear(embed_dim, 2 * self.head_dim, bias=bias)
+        if self.mpa_type == 0:
+            self.kv_head_proj = nn.Linear(embed_dim, 2 * num_heads, bias=bias)
+        else:
+            self.kv_head = nn.Parameter(
+                torch.randn(2 * num_heads) * 0.1, requires_grad=True
+            )
+        self.act = get_activation_fn(mpa_activation)
+        self.o_proj = nn.Linear(mid_dim, embed_dim, bias=bias)
+        self.k_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
+        self.v_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
         self.quantizer = FiniteScalarQuantizer(center=center)
 
         self.use_lrpe = use_lrpe
@@ -85,7 +95,10 @@ class FsqKvAttention(nn.Module):
         self.embed_dim = embed_dim
         self.init_std = init_std
         self.gain = gain
-        self._init_weights()
+        self.apply(self._initialize_weights)
+
+    def extra_repr(self):
+        return print_module(self)
 
     def _init_weights(self):
         self.apply(self._initialize_weights)
@@ -98,26 +111,37 @@ class FsqKvAttention(nn.Module):
         x,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
         **kwargs,
     ):
         b, n, d = x.shape
         # linear map
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
+        if self.q_rank == -1:
+            q = self.q_proj(x)
+            q = rearrange(q, "... (h d) -> ... h d", h=self.num_heads)
+        else:
+            q = self.q_proj(x)
+            q_head = self.q_head_proj(x)
+            q, q_head = map(
+                lambda x: rearrange(x, "... (r d) -> ... r d", r=self.q_rank),
+                [q, q_head],
+            )
+            q_head = self.act(q_head)
 
-        q, k, v = map(
-            lambda x: rearrange(x, "... n (h d) -> ... n h d", d=self.head_dim),
-            [q, k, v],
-        )
+        kv = self.kv_proj(x)
+        if self.mpa_type == 0:
+            kv_head = self.act(self.kv_head_proj(x))
+        else:
+            kv_head = self.act(self.kv_head)
+
+        k, v = kv.chunk(2, dim=-1)
         k = self.quantizer(k)
         v = self.quantizer(v)
+        k = self.k_head_proj(k)
+        v = self.v_head_proj(v)
+        k_head, v_head = kv_head.chunk(2, dim=-1)
 
-        if self.use_proj:
-            k = self.k_head_proj(k)
-            v = self.v_head_proj(v)
-
-        # lrpe
+        # for lrpe
         q_offset = 0
         if past_key_values is not None:
             q_offset = past_key_values.get_seq_length(self.layer_idx)
@@ -128,11 +152,19 @@ class FsqKvAttention(nn.Module):
 
         # cache update
         if past_key_values is not None:
-            k, v = past_key_values.update(
-                attn_state=(k, v),
+            k, v, k_head, v_head = past_key_values.update(
+                mpa_state=(k, v, k_head, v_head),
                 layer_idx=self.layer_idx,
                 offset=n,
-            )["attn_state"]
+            )["mpa_state"]
+
+        k, v = map(
+            lambda arr: torch.einsum("... h, ... d -> ... h d", arr[0], arr[1]),
+            [(k_head, k), (v_head, v)],
+        )
+
+        if self.q_rank != -1:
+            q = torch.einsum("... r h, ... r d -> ... h d", q_head, q)
 
         causal = True if self.training or q.shape[-3] == k.shape[-3] else False
         window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)

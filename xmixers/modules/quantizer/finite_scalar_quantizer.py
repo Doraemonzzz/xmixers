@@ -7,12 +7,10 @@ from .utils import round_ste
 class FiniteScalarQuantizer(nn.Module):
     def __init__(
         self,
-        num_bins=128,
         center=False,
         **kwargs,
     ):
         super().__init__()
-        self.num_bins = num_bins
         self.center = center
 
     def forward(self, x):

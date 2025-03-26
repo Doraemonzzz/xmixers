@@ -19,6 +19,7 @@ from .vanilla_attention import (
     Attention,
     FlexAttention,
     FsqKvAttention,
+    FsqKvMultiProductAttention,
     MultiLatentAttention,
     MultiProductAttention,
     NaiveSparseAttention,
@@ -38,6 +39,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "ssa": SimpleSparseAttention,
     "nsa": NaiveSparseAttention,
     "fsq_kv_attn": FsqKvAttention,
+    "fsq_kv_mpa": FsqKvMultiProductAttention,
     # linear attn
     "hgru2": Hgru2,
     "hgru2_scalar_decay": Hgru2ScalarDecay,
@@ -112,6 +114,7 @@ def get_token_mixer(config, layer_idx):
         )
     elif config.token_mixer_type in [
         "mpa",
+        "fsq_kv_mpa",
     ]:
         return cls(
             embed_dim=config.embed_dim,
@@ -130,6 +133,7 @@ def get_token_mixer(config, layer_idx):
             mpa_type=config.mpa_type,
             mpa_activation=config.mpa_activation,
             q_rank=config.q_rank,
+            center=config.center,
             head_dim=config.head_dim,
             init_std=config.init_std,
             gain=config.gain,
