@@ -52,6 +52,12 @@ def _initialize_weights(self, module):
         if hasattr(module, "initial_state") and module.initial_state is not None:
             nn.init.zeros_(module.initial_state)
 
+        if (
+            hasattr(module, "initial_state_bias")
+            and module.initial_state_bias is not None
+        ):
+            nn.init.zeros_(module.initial_state_bias)
+
         # ttt
         if hasattr(module, "ln_weight") and module.ln_weight is not None:
             nn.init.ones_(module.ln_weight)

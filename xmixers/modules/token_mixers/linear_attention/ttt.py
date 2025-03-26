@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
+from einops import rearrange, repeat
 from fla.ops.ttt import chunk_ttt_linear
 from transformers.cache_utils import Cache
 
@@ -91,8 +91,12 @@ class TTT(nn.Module):
             self.initial_state = nn.Parameter(
                 torch.zeros(self.num_heads, self.head_dim, self.head_dim)
             )
+            self.initial_state_bias = nn.Parameter(
+                torch.zeros(self.num_heads, 1, self.head_dim)
+            )
         else:
             self.initial_state = None
+            self.initial_state_bias = None
 
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
@@ -141,11 +145,22 @@ class TTT(nn.Module):
         else:
             k = self.k_act(k)
 
-        recurrent_state = None
+        if self.use_initial_state:
+            recurrent_state = self.initial_state
+            recurrent_state_bias = self.initial_state_bias
+            recurrent_state = repeat(recurrent_state, "... -> b ...", b=b)
+            recurrent_state_bias = repeat(recurrent_state_bias, "... -> b ...", b=b)
+        else:
+            recurrent_state = None
+            recurrent_state_bias = None
         q_offset = 0
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
             q_offset = past_key_values.get_seq_length(self.layer_idx)
+            recurrent_state, recurrent_state_bias = (
+                recurrent_state[0],
+                recurrent_state[1],
+            )
 
         use_attn_mask = (
             attention_mask is not None and not attention_mask.all() and (n > 1)
@@ -172,6 +187,7 @@ class TTT(nn.Module):
                 eta=beta,
                 scale=scale,
                 initial_state=recurrent_state,
+                initial_state_bias=recurrent_state_bias,
                 output_final_state=use_cache,
                 head_first=False,
             )
