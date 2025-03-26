@@ -562,4 +562,5 @@ def get_token_mixer(config, layer_idx):
             num_bins=config.num_bins,
             center=config.center,
             use_proj=config.use_proj,
+            share_proj=config.share_proj,
         )

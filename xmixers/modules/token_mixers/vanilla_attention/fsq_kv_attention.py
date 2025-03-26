@@ -6,7 +6,7 @@ from einops import rearrange
 from transformers.cache_utils import Cache
 
 from xmixers.modules.pes import Lrpe
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
+from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
 try:
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -35,6 +35,7 @@ class FsqKvAttention(nn.Module):
         base: int = 10000,
         center: bool = False,
         use_proj: bool = True,
+        share_proj: bool = True,
         max_position_embeddings: int = 1024,
         token_mixer_init_type: int = 4,
         rescale_type: int = 2,
@@ -58,6 +59,7 @@ class FsqKvAttention(nn.Module):
         self.window_size = window_size
         if self.kv_heads == -1:
             kv_dim = embed_dim
+            self.kv_heads = num_heads
         else:
             kv_dim = self.kv_heads * self.head_dim
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -65,9 +67,20 @@ class FsqKvAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.use_proj = use_proj
+        self.share_proj = share_proj
         if self.use_proj:
-            self.k_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
-            self.v_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
+            if self.share_proj:
+                self.k_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
+                self.v_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
+            else:
+                self.k_head_proj = nn.Parameter(
+                    torch.zeros(self.kv_heads, self.head_dim, self.head_dim),
+                    requires_grad=True,
+                )
+                self.v_head_proj = nn.Parameter(
+                    torch.zeros(self.kv_heads, self.head_dim, self.head_dim),
+                    requires_grad=True,
+                )
         self.quantizer = FiniteScalarQuantizer(center=center)
 
         self.use_lrpe = use_lrpe
@@ -86,6 +99,9 @@ class FsqKvAttention(nn.Module):
         self.init_std = init_std
         self.gain = gain
         self._init_weights()
+
+    def extra_repr(self):
+        return print_module(self)
 
     def _init_weights(self):
         self.apply(self._initialize_weights)
@@ -114,8 +130,12 @@ class FsqKvAttention(nn.Module):
         v = self.quantizer(v)
 
         if self.use_proj:
-            k = self.k_head_proj(k)
-            v = self.v_head_proj(v)
+            if self.share_proj:
+                k = self.k_head_proj(k)
+                v = self.v_head_proj(v)
+            else:
+                k = torch.einsum("... h d, h d e -> ... h e", k, self.k_head_proj)
+                v = torch.einsum("... h d, h d e -> ... h e", v, self.v_head_proj)
 
         # lrpe
         q_offset = 0

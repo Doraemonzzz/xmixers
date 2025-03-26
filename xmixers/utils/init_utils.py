@@ -58,6 +58,19 @@ def _initialize_weights(self, module):
         ):
             nn.init.zeros_(module.initial_state_bias)
 
+        # fsq kv
+        if hasattr(module, "k_head_proj") and module.k_head_proj is not None:
+            fan_in = module.k_head_proj.shape[-2]
+            fan_out = module.k_head_proj.shape[-1]
+            a = gain / (6 / (fan_in + fan_out)) ** 0.5
+            nn.init.uniform_(module.k_head_proj, a=-a, b=a)
+
+        if hasattr(module, "v_head_proj") and module.v_head_proj is not None:
+            fan_in = module.v_head_proj.shape[-2]
+            fan_out = module.v_head_proj.shape[-1]
+            a = gain / (6 / (fan_in + fan_out)) ** 0.5
+            nn.init.uniform_(module.v_head_proj, a=-a, b=a)
+
         # ttt
         if hasattr(module, "ln_weight") and module.ln_weight is not None:
             nn.init.ones_(module.ln_weight)
