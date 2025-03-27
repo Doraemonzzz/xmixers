@@ -87,9 +87,10 @@ class TnlModel(TnlPreTrainedModel):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
+        config.vocab_size = pad_embed_dim(config.vocab_size)
+        self.config = config
         self.vocab_size = config.vocab_size
         self.gradient_checkpointing = False
-        config.vocab_size = pad_embed_dim(config.vocab_size)
 
         # params
         self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
