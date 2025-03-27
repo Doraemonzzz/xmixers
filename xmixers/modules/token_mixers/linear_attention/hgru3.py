@@ -63,7 +63,7 @@ class Hgru3(nn.Module):
         if self.scalar_decay:
             self.decay_dim = embed_dim // expand_ratio
             self.f_proj = nn.Linear(embed_dim, self.decay_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
         self.threshold = threshold
@@ -160,6 +160,7 @@ class Hgru3(nn.Module):
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
             recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
 
+        scale = 1
         if self.causal:
             dtype = q.dtype
             if self.scalar_decay:
@@ -178,6 +179,7 @@ class Hgru3(nn.Module):
                 k=k.to(dtype),
                 v=v.to(dtype),
                 g=log_f.to(dtype),
+                scale=scale,
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
                 head_first=False,
@@ -203,6 +205,6 @@ class Hgru3(nn.Module):
             output = self.norm(output)
 
         # out proj
-        output = self.out_proj(output)
+        output = self.o_proj(output)
 
         return output, past_key_values
