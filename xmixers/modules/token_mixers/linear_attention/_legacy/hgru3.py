@@ -10,6 +10,7 @@ from fla.ops.gla import chunk_gla, fused_recurrent_gla
 from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
 from torch.distributed.tensor import DTensor
 from transformers.cache_utils import Cache
+from xopes.ops import cumsum_fn
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
@@ -69,12 +70,7 @@ class Hgru3(nn.Module):
         self.threshold = threshold
 
         num_groups = embed_dim // expand_ratio
-        norm_type = (
-            f"{token_mixer_norm_type}_fused_gate"
-            if use_output_gate
-            else token_mixer_norm_type
-        )
-        self.norm = get_norm_fn(norm_type)(
+        self.norm = get_norm_fn(token_mixer_norm_type)(
             embed_dim,
             bias=bias,
             gate_act=gate_act,
@@ -138,11 +134,10 @@ class Hgru3(nn.Module):
         q = self.q_proj(x)
         v = self.v_proj(x)
         if self.scalar_decay:
-            log_f = F.logsigmoid(self.f_proj(x) + self.delta)
-            k = self.k_proj(x)
+            log_f = F.logsigmoid(self.f_proj(x + self.delta))
             k = self.k_act(k)
         else:
-            log_f = F.logsigmoid(self.k_proj(x) + self.delta)
+            log_f = F.logsigmoid(self.k_proj(x + self.delta))
             k = 1 - torch.exp(log_f)
 
         # act
@@ -154,7 +149,18 @@ class Hgru3(nn.Module):
             [q, k, v],
         )
         if not self.scalar_decay:
-            log_f = rearrange(log_f, "... (h d) -> ... h d", d=self.expand_ratio)
+            f = rearrange(log_f, "... (h d) -> ... h d", d=self.expand_ratio)
+
+        sign_f = torch.sign(f - 0.5)
+        if self.scalar_decay:
+            sign_f = sign_f.unsqueeze(-1)
+        theta = cumsum_fn(sign_f, dim=1) * math.pi
+        sin = torch.sin(theta)
+        cos = torch.cos(theta)
+        q = torch.cat([q * cos, q * sin], dim=-1)
+        k = torch.cat([k * cos, k * sin], dim=-1)
+        if not self.scalar_decay:
+            log_f = torch.cat([log_f, log_f], dim=-1)
 
         recurrent_state = None
         if past_key_values is not None and len(past_key_values) > self.layer_idx:

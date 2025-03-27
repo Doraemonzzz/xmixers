@@ -254,16 +254,17 @@ def get_token_mixer(config, layer_idx):
             norm_type=config.norm_type,
             q_activation=config.q_activation,
             k_activation=config.k_activation,
-            beta_activation=config.beta_activation,
+            threshold=config.threshold,
             causal=config.causal,
             use_dense_memory=config.use_dense_memory,
-            gate_act=config.gate_act,
-            gate_pos=config.gate_pos,
             scalar_decay=config.scalar_decay,
-            rescale_type=config.rescale_type,
             token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
             num_layers=config.num_layers,
             init_std=config.init_std,
+            gain=config.gain,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
         )
     elif config.token_mixer_type in ["linear_attn"]:
         return cls(

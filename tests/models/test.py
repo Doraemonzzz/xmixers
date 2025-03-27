@@ -10,6 +10,7 @@ from xmixers.models import (
     DenseRnnConfig,
     GsaConfig,
     Hgrn2Config,
+    Hgrn3Config,
     LightNetConfig,
     LinearTransformerConfig,
     LLaMAConfig,
@@ -178,6 +179,11 @@ def get_config(model_type):
         config = GsaConfig()
     elif model_type == "ttt":
         config = TTTConfig()
+    elif model_type == "hgrn3":
+        config = Hgrn3Config()
+    elif model_type == "hgrn3_scalar_decay":
+        config = Hgrn3Config()
+        config.scalar_decay = True
 
     return config
 
@@ -322,6 +328,8 @@ if __name__ == "__main__":
             "nsa",
             "gsa",
             "ttt",
+            "hgrn3",
+            "hgrn3_scalar_decay",
         ],
     )
     args = parser.parse_args()

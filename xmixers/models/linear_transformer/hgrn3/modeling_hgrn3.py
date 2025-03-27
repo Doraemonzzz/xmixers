@@ -3,10 +3,8 @@
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 from transformers.cache_utils import Cache
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
@@ -15,15 +13,19 @@ from transformers.modeling_outputs import (
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
+from xmixers.utils import (
+    XmixersCache,
+    _init_weights,
+    _post_init_weights,
+    pad_embed_dim,
+    print_module,
+)
+from xmixers.utils.loss_utils import Loss
+
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import (
-    get_channel_mixer,
-    get_log_slopes_general,
-    get_norm_fn,
-    get_token_mixer,
-)
+from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
 from xmixers.utils import XmixersCache, _init_weights, print_module
 
 from .configuration_hgrn3 import Hgrn3Config
@@ -34,11 +36,8 @@ class Hgrn3Layer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-
         self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
-
         self.channel_mixer = get_channel_mixer(config)
-
         self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
 
     def forward(
@@ -47,7 +46,7 @@ class Hgrn3Layer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        log_lower_bound: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         # token mixer
         residual = x
@@ -56,7 +55,7 @@ class Hgrn3Layer(nn.Module):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            log_lower_bound=log_lower_bound,
+            **kwargs,
         )
         x = x + residual
 
@@ -85,11 +84,13 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
+        config.vocab_size = pad_embed_dim(config.vocab_size)
         self.vocab_size = config.vocab_size
         self.gradient_checkpointing = False
 
         # params
         self.embed_scale = config.embed_dim**0.5 if config.use_embed_scale else 1
+        config.expand_ratio = config.embed_dim // config.num_heads
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.embed_dim, self.padding_idx
         )
@@ -97,27 +98,6 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
             [Hgrn3Layer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
         self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
-
-        # log lower bound
-        self.lower_bound_type = config.lower_bound_type
-        if self.config.scalar_decay:
-            d = config.embed_dim // config.expand_ratio
-        else:
-            d = config.embed_dim
-
-        if self.lower_bound_type == 1:
-            self.log_lower_bounds = nn.Parameter(
-                torch.ones(config.num_layers, d),
-                requires_grad=True,
-            )
-        else:
-            # a bit different from tnl
-            log_lower_bound = torch.log(
-                -get_log_slopes_general(d, config.n_min, config.n_max)
-            )
-            index = torch.arange(config.num_layers).reshape(-1, 1)
-            log_lower_bounds = log_lower_bound / (index + 1)
-            self.register_buffer("log_lower_bounds", log_lower_bounds, persistent=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -185,18 +165,7 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        if self.lower_bound_type == 1:
-            # lower bound
-            lower_bounds = F.softmax(self.log_lower_bounds.float(), dim=0)
-            lower_bounds = torch.cumsum(lower_bounds, dim=0)
-            lower_bounds -= lower_bounds[0, ...].clone()
-            log_lower_bounds = torch.log(lower_bounds + 1e-6)
-        else:
-            log_lower_bounds = self.log_lower_bounds
-
         for idx, layer in enumerate(self.layers):
-            log_lower_bound = log_lower_bounds[idx]
-
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -207,7 +176,7 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
                     attention_mask,
                     past_key_values,
                     use_cache,
-                    log_lower_bound,
+                    **kwargs,
                 )
             else:
                 hidden_states, past_key_values = layer(
@@ -215,7 +184,7 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
-                    log_lower_bound=log_lower_bound,
+                    **kwargs,
                 )
 
         hidden_states = self.final_norm(hidden_states)
@@ -253,9 +222,14 @@ class Hgrn3ForCausalLM(Hgrn3PreTrainedModel):
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
-
+        self.loss = Loss()
         # Initialize weights and apply final processing
         self.post_init()
+
+    def post_init_weights(
+        self,
+    ):
+        _post_init_weights(self)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -286,6 +260,8 @@ class Hgrn3ForCausalLM(Hgrn3PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        num_logits_to_keep: int = 0,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -336,24 +312,26 @@ class Hgrn3ForCausalLM(Hgrn3PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
 
-        logits = self.lm_head(hidden_states)
+        fuse_linear_and_cross_entropy = (
+            self.config.ce_type not in ["fla_fce", "naive", "xopes_ce"]
+            and self.training
+        )
 
-        loss = None
-        if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+        # since we may use forward_pre_hook, we can't use key word arguments
+        logits, loss = self.loss(
+            self.lm_head.weight,
+            hidden_states,
+            labels,
+            self.lm_head.bias,
+            num_logits_to_keep,
+            fuse_linear_and_cross_entropy,
+            ce_type=self.config.ce_type,
+        )
 
         if not return_dict:
             output = (logits,) + outputs[1:]

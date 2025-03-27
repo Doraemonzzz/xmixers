@@ -44,6 +44,8 @@ model_type=decay_linear_transformer_hgrn2_rope
 model_type=nsa
 model_type=gsa
 model_type=ttt
+model_type=hgrn3
+# model_type=hgrn3_scalar_decay
 
 dtype=bf16
 # dtype=fp32
