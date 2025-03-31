@@ -8,4 +8,5 @@ from .multi_product_attention import MultiProductAttention
 from .n_attention import nAttention
 from .naive_sparse_attention import NaiveSparseAttention
 from .simple_sparse_attention import SimpleSparseAttention
+from .stickbreaking_attention import StickBreakingAttention
 from .tensor_product_attention import TensorProductAttention

@@ -25,6 +25,7 @@ from .vanilla_attention import (
     MultiProductAttention,
     NaiveSparseAttention,
     SimpleSparseAttention,
+    StickBreakingAttention,
     TensorProductAttention,
     nAttention,
 )
@@ -42,6 +43,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "fsq_kv_attn": FsqKvAttention,
     "fsq_kv_mpa": FsqKvMultiProductAttention,
     "forgetting_attn": ForgettingAttention,
+    "sb_attn": StickBreakingAttention,
     # linear attn
     "hgru2": Hgru2,
     "hgru2_scalar_decay": Hgru2ScalarDecay,
@@ -76,7 +78,13 @@ LINEAR_TOKEN_MIXER_LIST = [
 
 def get_token_mixer(config, layer_idx):
     cls = AUTO_TOKEN_MIXER_MAPPING[config.token_mixer_type]
-    if config.token_mixer_type in ["attn", "flex_attn", "n_attn", "forgetting_attn"]:
+    if config.token_mixer_type in [
+        "attn",
+        "flex_attn",
+        "n_attn",
+        "forgetting_attn",
+        "sb_attn",
+    ]:
         return cls(
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,

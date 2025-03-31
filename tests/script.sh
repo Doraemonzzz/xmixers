@@ -49,6 +49,7 @@ model_type=hgrn3
 model_type=alibi
 # model_type=fox
 model_type=fox_window
+model_type=sb_attn
 
 dtype=bf16
 # dtype=fp32

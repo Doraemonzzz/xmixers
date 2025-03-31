@@ -195,6 +195,9 @@ def get_config(model_type):
         config = FlexGPTConfig()
         config.token_mixer_type = "forgetting_attn"
         config.window_size = 4
+    elif model_type == "sb_attn":
+        config = FlexGPTConfig()
+        config.token_mixer_type = "sb_attn"
 
     return config
 
@@ -344,6 +347,7 @@ if __name__ == "__main__":
             "alibi",
             "fox",
             "fox_window",
+            "sb_attn",
         ],
     )
     args = parser.parse_args()

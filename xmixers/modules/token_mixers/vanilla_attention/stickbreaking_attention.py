@@ -1,26 +1,46 @@
-# fox: https://arxiv.org/pdf/2503.02130
+# stick-breaking attention: https://arxiv.org/abs/2410.17980 and https://github.com/IBM/dolomite-engine/blob/main/dolomite_engine/hf_models/modeling_utils/sequence_mixer_blocks/stickbreaking_attention.py
 from typing import Optional
 
 import torch
 import torch.nn as nn
 from einops import rearrange
+from torch.nn import functional as F
 from transformers.cache_utils import Cache
 
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
 try:
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
+    from stickbreaking_attention.sb_attn import sb_attn
+    from stickbreaking_attention.sb_varlen import sb_attn_varlen
 except:
-    flash_attn_func = None
-    index_first_axis = None
-    pad_input = None
-    unpad_input = None
-
-from .utils import _upad_input
+    sb_attn = None
+    sb_attn_varlen = None
 
 
-class FlexAttention(nn.Module):
+def decoding_stickbreaking(q, k, v, scale=None):
+    """
+    Stick-breaking attention weights.
+    """
+    if scale is None:
+        scale = q.shape[-1] ** -0.5
+
+    assert q.shape[2] == 1
+    original_dtype = q.dtype
+    q = q.float()
+    k = k.float()
+    logits = q @ k[..., :-1, :].transpose(-1, -2) * scale
+    log_z = F.logsigmoid(logits).to(original_dtype)
+    log_beta = F.logsigmoid(-logits).to(original_dtype)
+    re_cum_log_beta = log_beta.flip(-1).cumsum(dim=-1).flip(-1) - log_beta
+    log_att = log_z + re_cum_log_beta
+    att: torch.Tensor = log_att.exp()
+    v = v[..., :-1, :]
+    out = torch.einsum("bhij,bhjd->bhid", att, v)
+
+    return out, 1 - att.sum(dim=-1)
+
+
+class StickBreakingAttention(nn.Module):
     def __init__(
         self,
         embed_dim: int,
@@ -77,7 +97,6 @@ class FlexAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        log_slope: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         b, n, d = x.shape
@@ -91,8 +110,9 @@ class FlexAttention(nn.Module):
             [q, k, v],
         )
 
+        q_offset = 0
         if past_key_values is not None:
-            past_key_values.get_seq_length(self.layer_idx)
+            q_offset = past_key_values.get_seq_length(self.layer_idx)
 
         # cache update
         if past_key_values is not None:
@@ -102,54 +122,35 @@ class FlexAttention(nn.Module):
                 offset=n,
             )["attn_state"]
 
-        causal = True if self.training or q.shape[-3] == k.shape[-3] else False
-        window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)
-
-        if log_slope is not None:
-            log_slope = log_slope.to(torch.float32)
+        use_attn_mask = (
+            attention_mask is not None and not attention_mask.all() and (n > 1)
+        )
+        # left padding
+        if use_attn_mask:
+            start = q_offset
+            attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
+            v = v.masked_fill(attention_mask_ == 0, 0)
 
         # only use cu_seqlens in training
-        cu_seqlens = kwargs.get("cu_seqlens", None)
-        if (cu_seqlens is not None) or (
-            attention_mask is not None and not attention_mask.all()
-        ):
-            if cu_seqlens is not None:  # flame training stage
-                cu_seqlens_q = cu_seqlens_k = cu_seqlens
-                max_seqlen_q = max_seqlen_k = n
-                q = q.squeeze(0)
-                k = k.squeeze(0)
-                v = v.squeeze(0)
-            else:
-                q, k, v, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
-                    q=q, k=k, v=v, attention_mask=attention_mask, q_len=n
-                )
-                cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-                max_seqlen_q, max_seqlen_k = max_seq_lens
-
-            output = flash_attn_varlen_func(
+        kwargs.get("cu_seqlens", None)
+        q, k, v = map(lambda x: rearrange(x, "... n h d -> ... h n d"), [q, k, v])
+        if q.shape[2] == k.shape[2]:
+            output, _ = sb_attn(
                 q=q,
                 k=k,
                 v=v,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_q,
-                max_seqlen_k=max_seqlen_k,
-                causal=causal,
-                window_size=window_size,
-                alibi_slopes=log_slope,
             )
-
-            if cu_seqlens is None:
-                output = pad_input(output, indices_q, b, n)
-            else:
-                output = output.unsqueeze(0)
         else:
-            output = flash_attn_func(
-                q, k, v, causal=causal, window_size=window_size, alibi_slopes=log_slope
+            output, _ = decoding_stickbreaking(
+                q=q,
+                k=k,
+                v=v,
             )
+        output = rearrange(output, "... h n d -> ... n h d")
 
         # reshape
         output = rearrange(output, "... n h d -> ... n (h d)")
+
         # outproj
         output = self.o_proj(output)
 
