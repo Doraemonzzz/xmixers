@@ -20,26 +20,34 @@ class FlexGPTConfig(PretrainedConfig):
         use_cache=True,
         init_std=0.02,
         tie_word_embeddings=False,
-        ##### model config
-        # attention config
+        ########## model config
+        ##### token mixer config
+        token_mixer_type="flex_attn",
         embed_dim=1024,
         num_heads=8,
         kv_heads=-1,
         bias=False,
-        # glu config
+        window_size=-1,
+        ###### channel mixer config
+        channel_mixer_type="glu",
         mid_dim=1024,
-        glu_activation="silu",
-        # others
+        channel_mixer_activation="silu",
+        use_gate_linear=True,
+        ##### others
         max_position_embeddings=1024,
         num_layers=24,
-        norm_type="layernorm",
-        token_mixer_init_type=0,
-        init_type=0,
-        rescale_type=0,
+        norm_type="rmsnorm",
         use_embed_scale=False,
+        ce_type="xopes_flce",
+        fuse_norm_add=False,
         rpe_type=0,  # 0: no rpe, 1: alibi
         n_min=2,
         n_max=256,
+        ##### init
+        init_type=1,
+        token_mixer_init_type=4,
+        rescale_type=2,
+        gain=0.01,
         **kwargs,
     ):
         super().__init__(
@@ -49,27 +57,14 @@ class FlexGPTConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        ##### hf origin
-        self.vocab_size = vocab_size
-        self.use_cache = use_cache
-        self.init_std = init_std
-        ##### add
-        # attention config
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.kv_heads = kv_heads
-        self.bias = bias
-        # glu config
-        self.mid_dim = mid_dim
-        self.glu_activation = glu_activation
-        # others
-        self.max_position_embeddings = max_position_embeddings
-        self.num_layers = num_layers
-        self.norm_type = norm_type
-        self.token_mixer_init_type = token_mixer_init_type
-        self.init_type = init_type
-        self.rescale_type = rescale_type
-        self.use_embed_scale = use_embed_scale
-        self.rpe_type = rpe_type
-        self.n_min = n_min
-        self.n_max = n_max
+        for key, value in locals().items():
+            if key not in [
+                "self",
+                "kwargs",
+                "__class__",
+                "pad_token_id",
+                "bos_token_id",
+                "eos_token_id",
+                "tie_word_embeddings",
+            ]:
+                setattr(self, key, value)

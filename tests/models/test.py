@@ -8,6 +8,7 @@ from xmixers.models import (
     DecayLinearTransformerConfig,
     DeltaNetConfig,
     DenseRnnConfig,
+    FlexGPTConfig,
     GsaConfig,
     Hgrn2Config,
     Hgrn3Config,
@@ -184,6 +185,9 @@ def get_config(model_type):
     elif model_type == "hgrn3_scalar_decay":
         config = Hgrn3Config()
         config.scalar_decay = True
+    elif model_type == "alibi":
+        config = FlexGPTConfig()
+        config.rpe_type = 1
 
     return config
 
@@ -330,6 +334,7 @@ if __name__ == "__main__":
             "ttt",
             "hgrn3",
             "hgrn3_scalar_decay",
+            "alibi",
         ],
     )
     args = parser.parse_args()

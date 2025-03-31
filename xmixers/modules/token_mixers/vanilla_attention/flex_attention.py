@@ -1,5 +1,4 @@
 # flex attention: https://pytorch.org/blog/flexattention/
-import math
 from typing import Optional
 
 import torch
@@ -7,12 +6,18 @@ import torch.nn as nn
 from einops import rearrange
 from transformers.cache_utils import Cache
 
-from xmixers.utils import XMIXERS_DEBUG, print_params
+from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
 try:
-    from flash_attn import flash_attn_func
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 except:
     flash_attn_func = None
+    index_first_axis = None
+    pad_input = None
+    unpad_input = None
+
+from .utils import _upad_input
 
 
 class FlexAttention(nn.Module):
@@ -23,9 +28,12 @@ class FlexAttention(nn.Module):
         kv_heads: int = -1,
         bias: bool = False,
         layer_idx: int = 0,
-        token_mixer_init_type: int = 0,
-        rescale_type: int = 0,
+        token_mixer_init_type: int = 4,
+        rescale_type: int = 2,
         num_layers: int = 12,
+        window_size: int = -1,
+        init_std: float = 0.02,
+        gain: float = 0.01,
         **kwargs,
     ):
         super().__init__()
@@ -39,6 +47,7 @@ class FlexAttention(nn.Module):
         self.kv_heads = kv_heads
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
+        self.window_size = window_size
         if self.kv_heads == -1:
             kv_dim = embed_dim
         else:
@@ -46,59 +55,32 @@ class FlexAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
         self.num_layers = num_layers
+        self.embed_dim = embed_dim
+        self.init_std = init_std
+        self.gain = gain
+        self._init_weights()
+
+    def _init_weights(self):
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
-        if getattr(module, "_is_hf_initialized", False):
-            return
-
-        if self.token_mixer_init_type == 0:
-            return
-        elif self.token_mixer_init_type == 1:  # fla init
-            if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(module.weight, gain=2**-2.5)
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-        elif self.token_mixer_init_type == 2:  # fairseq init
-            if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(module.weight, gain=2**-0.5)
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-
-        if self.rescale_type == 1:
-            # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
-            #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-            #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-            #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-            #
-            # Reference: https://github.com/karpathy/nanoGPT/blob/master/model.py#L144 https://github.com/sustcsonglin/flash-linear-attention/blob/main/fla/models/gla/modeling_gla.py#L152
-            for name, p in module.named_parameters():
-                if name in ["out_proj.weight"]:
-                    num_residuals_per_layer = 2
-                    # module.weight.data.normal_(mean=0.0, std=std/math.sqrt(2 * self.config.num_layers))
-                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
-                    # We need to reinit p since this code could be called multiple times
-                    # Having just p *= scale would repeatedly scale it down
-                    with torch.no_grad():
-                        p /= math.sqrt(num_residuals_per_layer * self.num_layers)
-
-        module._is_hf_initialized = True
+        return _initialize_weights(self, module)
 
     def forward(
         self,
         x,
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
         log_slope: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        # x: b n d
+        b, n, d = x.shape
         # linear map
         q = self.q_proj(x)
         k = self.k_proj(x)
@@ -109,26 +91,66 @@ class FlexAttention(nn.Module):
             [q, k, v],
         )
 
-        # lrpe
         if past_key_values is not None:
             past_key_values.get_seq_length(self.layer_idx)
 
         # cache update
         if past_key_values is not None:
-            k, v = past_key_values.update(k, v, self.layer_idx)
+            k, v = past_key_values.update(
+                attn_state=(k, v),
+                layer_idx=self.layer_idx,
+                offset=n,
+            )["attn_state"]
 
-        if (
-            attention_mask is None or attention_mask.all()
-        ):  # if attention mask is None or all elements are True, use sdpa
-            # use causal when training or evaluation(not for generation) or prefill
-            is_causal = True if self.training or q.shape[-2] == k.shape[-2] else False
-            output = flash_attn_func(q, k, v, causal=is_causal, alibi_slopes=log_slope)
+        causal = True if self.training or q.shape[-3] == k.shape[-3] else False
+        window_size = (self.window_size, 0) if self.window_size > 0 else (-1, -1)
+
+        if log_slope is not None:
+            log_slope = log_slope.to(torch.float32)
+
+        # only use cu_seqlens in training
+        cu_seqlens = kwargs.get("cu_seqlens", None)
+        if (cu_seqlens is not None) or (
+            attention_mask is not None and not attention_mask.all()
+        ):
+            if cu_seqlens is not None:  # flame training stage
+                cu_seqlens_q = cu_seqlens_k = cu_seqlens
+                max_seqlen_q = max_seqlen_k = n
+                q = q.squeeze(0)
+                k = k.squeeze(0)
+                v = v.squeeze(0)
+            else:
+                q, k, v, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
+                    q=q, k=k, v=v, attention_mask=attention_mask, q_len=n
+                )
+                cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+                max_seqlen_q, max_seqlen_k = max_seq_lens
+
+            output = flash_attn_varlen_func(
+                q=q,
+                k=k,
+                v=v,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_q,
+                max_seqlen_k=max_seqlen_k,
+                causal=causal,
+                window_size=window_size,
+                alibi_slopes=log_slope,
+            )
+
+            if cu_seqlens is None:
+                output = pad_input(output, indices_q, b, n)
+            else:
+                output = output.unsqueeze(0)
         else:
-            assert False, "flash_attn_varlen_qkvpacked_func current not support"
+            output = flash_attn_func(
+                q, k, v, causal=causal, window_size=window_size, alibi_slopes=log_slope
+            )
 
         # reshape
         output = rearrange(output, "... n h d -> ... n (h d)")
         # outproj
-        output = self.out_proj(output)
+        output = self.o_proj(output)
 
         return output, past_key_values

@@ -46,6 +46,7 @@ model_type=gsa
 model_type=ttt
 model_type=hgrn3
 # model_type=hgrn3_scalar_decay
+model_type=alibi
 
 dtype=bf16
 # dtype=fp32

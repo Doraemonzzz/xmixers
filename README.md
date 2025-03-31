@@ -28,8 +28,8 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 - [x] Deltanet
 - [x] Vector Decay Deltanet
 - [x] Scalar Decay Deltanet
-- [x] TTT
-  - [x] Inference
+- [ ] TTT
+  - [] Inference
 - [x] GSA
 - [ ] Titan
 - [x] NSA
@@ -38,6 +38,8 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 - [ ] GPT
 - [ ] Stick-breaking
 - [ ] Forgetting Transformer
+- [x] Fsq kv
+- [x] Fsq kv mpa
 
 # Pretrained weights
 
