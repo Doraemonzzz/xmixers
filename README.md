@@ -34,10 +34,10 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 - [ ] Titan
 - [x] NSA
   - [ ] Inference
-- [ ] Alibi
-- [ ] GPT
+- [x] Alibi
+- [x] GPT
 - [ ] Stick-breaking
-- [ ] Forgetting Transformer
+- [x] Forgetting Transformer
 - [x] Fsq kv
 - [x] Fsq kv mpa
 
@@ -50,6 +50,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 -
 
 # ToDo
+- [ ] Add use cache for all module.
 - [ ] Add init state for linear attention.
 - [ ] Update attn mask treat for attention, mpa, tpa, mla;
 - [x] Update init weights for every model.
