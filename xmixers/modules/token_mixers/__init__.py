@@ -18,6 +18,7 @@ from .long_conv import Gtu
 from .vanilla_attention import (
     Attention,
     FlexAttention,
+    ForgettingAttention,
     FsqKvAttention,
     FsqKvMultiProductAttention,
     MultiLatentAttention,
@@ -40,6 +41,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "nsa": NaiveSparseAttention,
     "fsq_kv_attn": FsqKvAttention,
     "fsq_kv_mpa": FsqKvMultiProductAttention,
+    "forgetting_attn": ForgettingAttention,
     # linear attn
     "hgru2": Hgru2,
     "hgru2_scalar_decay": Hgru2ScalarDecay,
@@ -74,7 +76,7 @@ LINEAR_TOKEN_MIXER_LIST = [
 
 def get_token_mixer(config, layer_idx):
     cls = AUTO_TOKEN_MIXER_MAPPING[config.token_mixer_type]
-    if config.token_mixer_type in ["attn", "flex_attn", "n_attn"]:
+    if config.token_mixer_type in ["attn", "flex_attn", "n_attn", "forgetting_attn"]:
         return cls(
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,

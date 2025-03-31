@@ -65,9 +65,9 @@ class XmixersCache(transformers.cache_utils.Cache):
                 if cache_kwargs is not None
                 else None
             )
-            if not isinstance(attn_state, Tuple) or len(attn_state) != 2:
+            if not isinstance(attn_state, Tuple) or len(attn_state) < 2:
                 raise ValueError(
-                    "`attn_state` must be a tuple of two tensors for key/value states"
+                    "`attn_state` must be a tuple of at least two tensors for key/value states"
                 )
         if mpa_state is not None:
             input_size = mpa_state[0].shape[-3]
@@ -107,21 +107,22 @@ class XmixersCache(transformers.cache_utils.Cache):
             if recurrent_state is not None:
                 state["recurrent_state"] = recurrent_state
             if attn_state is not None:
-                k_state, v_state = state["attn_state"]
+                k_state, v_state = state["attn_state"][:2]
                 if window_size is not None and k_state.shape[-3] == window_size:
                     # DO NOT allocate new memory if the cache is full
                     # roll the key/value states to the left by `input_size`
-                    k_state = k_state.roll(-input_size, -3)
-                    v_state = v_state.roll(-input_size, -3)
-                    # replace the last `input_size` tokens with the new key/value states
-                    k_state[..., -input_size:, :] = attn_state[0]
-                    v_state[..., -input_size:, :] = attn_state[1]
-                    attn_state = (k_state, v_state)
+                    new_attn_state = []
+                    for i, state_ in enumerate(state["attn_state"]):
+                        state_ = state_.roll(-input_size, 1)
+                        state_[..., -input_size:, :] = attn_state[i]
+                        new_attn_state.append(state)
+                    attn_state = tuple(new_attn_state)
                 else:
-                    attn_state = (
-                        torch.cat([k_state, attn_state[0]], -3),
-                        torch.cat([v_state, attn_state[1]], -3),
-                    )
+                    new_attn_state = []
+                    for i, state_ in enumerate(state["attn_state"]):
+                        new_state = torch.cat([state_, attn_state[i]], dim=1)
+                        new_attn_state.append(new_state)
+                    attn_state = tuple(new_attn_state)
                 state["attn_state"] = attn_state
             if conv_state is not None:
                 state["conv_state"] = conv_state

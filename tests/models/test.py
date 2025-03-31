@@ -188,6 +188,13 @@ def get_config(model_type):
     elif model_type == "alibi":
         config = FlexGPTConfig()
         config.rpe_type = 1
+    elif model_type == "fox":
+        config = FlexGPTConfig()
+        config.token_mixer_type = "forgetting_attn"
+    elif model_type == "fox_window":
+        config = FlexGPTConfig()
+        config.token_mixer_type = "forgetting_attn"
+        config.window_size = 4
 
     return config
 
@@ -335,6 +342,8 @@ if __name__ == "__main__":
             "hgrn3",
             "hgrn3_scalar_decay",
             "alibi",
+            "fox",
+            "fox_window",
         ],
     )
     args = parser.parse_args()

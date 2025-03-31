@@ -47,6 +47,8 @@ model_type=ttt
 model_type=hgrn3
 # model_type=hgrn3_scalar_decay
 model_type=alibi
+# model_type=fox
+model_type=fox_window
 
 dtype=bf16
 # dtype=fp32

@@ -1,5 +1,6 @@
 from .attention import Attention
 from .flex_attention import FlexAttention
+from .forgetting_attention import ForgettingAttention
 from .fsq_kv_attention import FsqKvAttention
 from .fsq_kv_multi_product_attention import FsqKvMultiProductAttention
 from .multi_latent_attention import MultiLatentAttention
