@@ -11,6 +11,8 @@ except:
     pad_input = None
     unpad_input = None
 
+_pad_input = pad_input
+
 # credit to: https://github.com/fla-org/flash-linear-attention/blob/main/fla/layers/attn.py
 def _upad_input(q, k, v, attention_mask, q_len):
     seqlens = attention_mask.sum(-1, dtype=torch.int32)

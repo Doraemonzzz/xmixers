@@ -198,6 +198,13 @@ def get_config(model_type):
     elif model_type == "sb_attn":
         config = FlexGPTConfig()
         config.token_mixer_type = "sb_attn"
+    elif model_type == "mfa":
+        config = LLaMAConfig()
+        config.token_mixer_type = "mfa"
+    elif model_type == "mfa_kv_share":
+        config = LLaMAConfig()
+        config.token_mixer_type = "mfa"
+        config.share_kv = True
 
     return config
 
@@ -348,6 +355,8 @@ if __name__ == "__main__":
             "fox",
             "fox_window",
             "sb_attn",
+            "mfa",
+            "mfa_kv_share",
         ],
     )
     args = parser.parse_args()

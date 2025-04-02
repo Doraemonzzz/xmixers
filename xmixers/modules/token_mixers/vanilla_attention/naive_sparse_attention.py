@@ -11,12 +11,8 @@ from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
 try:
     from flash_attn import flash_attn_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 except:
     flash_attn_func = None
-    index_first_axis = None
-    pad_input = None
-    unpad_input = None
 
 from fla.ops.nsa.parallel import parallel_nsa
 

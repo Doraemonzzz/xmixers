@@ -10,14 +10,10 @@ from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
 try:
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 except:
     flash_attn_func = None
-    index_first_axis = None
-    pad_input = None
-    unpad_input = None
 
-from .utils import _upad_input
+from .utils import _pad_input, _upad_input
 
 
 class Attention(nn.Module):
@@ -153,7 +149,7 @@ class Attention(nn.Module):
             )
 
             if cu_seqlens is None:
-                output = pad_input(output, indices_q, b, n)
+                output = _pad_input(output, indices_q, b, n)
             else:
                 output = output.unsqueeze(0)
         else:

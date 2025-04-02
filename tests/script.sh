@@ -48,8 +48,10 @@ model_type=hgrn3
 # model_type=hgrn3_scalar_decay
 model_type=alibi
 # model_type=fox
-model_type=fox_window
-model_type=sb_attn
+# model_type=fox_window
+# model_type=sb_attn
+# model_type=mfa
+# model_type=mfa_kv_share
 
 dtype=bf16
 # dtype=fp32

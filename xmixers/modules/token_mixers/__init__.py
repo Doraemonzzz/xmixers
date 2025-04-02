@@ -21,6 +21,7 @@ from .vanilla_attention import (
     ForgettingAttention,
     FsqKvAttention,
     FsqKvMultiProductAttention,
+    MultiFactorAttention,
     MultiLatentAttention,
     MultiProductAttention,
     NaiveSparseAttention,
@@ -44,6 +45,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "fsq_kv_mpa": FsqKvMultiProductAttention,
     "forgetting_attn": ForgettingAttention,
     "sb_attn": StickBreakingAttention,
+    "mfa": MultiFactorAttention,
     # linear attn
     "hgru2": Hgru2,
     "hgru2_scalar_decay": Hgru2ScalarDecay,
@@ -570,4 +572,24 @@ def get_token_mixer(config, layer_idx):
             center=config.center,
             use_proj=config.use_proj,
             share_proj=config.share_proj,
+        )
+    elif config.token_mixer_type in ["mfa"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            kv_heads=config.kv_heads,
+            bias=config.bias,
+            use_lrpe=config.use_lrpe,
+            layer_idx=layer_idx,
+            lrpe_type=config.lrpe_type,
+            base=config.base,
+            max_position_embeddings=config.max_position_embeddings,
+            token_mixer_init_type=config.token_mixer_init_type,
+            share_kv=config.share_kv,
+            head_dim=config.head_dim,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            window_size=config.window_size,
+            init_std=config.init_std,
+            gain=config.gain,
         )

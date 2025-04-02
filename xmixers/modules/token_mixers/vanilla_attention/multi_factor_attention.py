@@ -6,19 +6,17 @@ from einops import rearrange
 from transformers.cache_utils import Cache
 
 from xmixers.modules.pes import Lrpe
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
+from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
 try:
     from flash_attn import flash_attn_func, flash_attn_varlen_func
 except:
     flash_attn_func = None
 
-from xmixers.modules.quantizer import FiniteScalarQuantizer
-
 from .utils import _pad_input, _upad_input
 
 
-class FsqKvAttention(nn.Module):
+class MultiFactorAttention(nn.Module):
     def __init__(
         self,
         embed_dim: int,
@@ -29,11 +27,10 @@ class FsqKvAttention(nn.Module):
         layer_idx: int = 0,
         lrpe_type: int = 1,
         base: int = 10000,
-        center: bool = False,
-        use_proj: bool = True,
-        share_proj: bool = True,
         max_position_embeddings: int = 1024,
         token_mixer_init_type: int = 4,
+        share_kv: bool = False,
+        head_dim: int = -1,
         rescale_type: int = 2,
         num_layers: int = 12,
         window_size: int = -1,
@@ -51,33 +48,21 @@ class FsqKvAttention(nn.Module):
         self.layer_idx = layer_idx
         self.kv_heads = kv_heads
         self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
+        self.head_dim = embed_dim // num_heads if head_dim == -1 else head_dim
         self.window_size = window_size
-        if self.kv_heads == -1:
-            kv_dim = embed_dim
-            self.kv_heads = num_heads
+        self.share_kv = share_kv
+        mid_dim = self.head_dim * self.num_heads
+        self.q_proj = nn.Linear(embed_dim, self.head_dim, bias=bias)
+        self.q_head_proj = nn.Parameter(
+            torch.zeros(self.num_heads, self.head_dim, self.head_dim),
+            requires_grad=True,
+        )
+        self.k_proj = nn.Linear(embed_dim, self.head_dim, bias=bias)
+        if self.share_kv:
+            self.v_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
         else:
-            kv_dim = self.kv_heads * self.head_dim
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
-        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.use_proj = use_proj
-        self.share_proj = share_proj
-        if self.use_proj:
-            if self.share_proj:
-                self.k_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
-                self.v_head_proj = nn.Linear(self.head_dim, self.head_dim, bias=bias)
-            else:
-                self.k_head_proj = nn.Parameter(
-                    torch.zeros(self.kv_heads, self.head_dim, self.head_dim),
-                    requires_grad=True,
-                )
-                self.v_head_proj = nn.Parameter(
-                    torch.zeros(self.kv_heads, self.head_dim, self.head_dim),
-                    requires_grad=True,
-                )
-        self.quantizer = FiniteScalarQuantizer(center=center)
+            self.v_proj = nn.Linear(embed_dim, self.head_dim, bias=bias)
+        self.o_proj = nn.Linear(mid_dim, embed_dim, bias=bias)
 
         self.use_lrpe = use_lrpe
         if self.use_lrpe:
@@ -96,9 +81,6 @@ class FsqKvAttention(nn.Module):
         self.gain = gain
         self._init_weights()
 
-    def extra_repr(self):
-        return print_module(self)
-
     def _init_weights(self):
         self.apply(self._initialize_weights)
 
@@ -115,23 +97,15 @@ class FsqKvAttention(nn.Module):
         b, n, d = x.shape
         # linear map
         q = self.q_proj(x)
+        q = torch.einsum("... d, h d e -> ... h e", q, self.q_head_proj)
         k = self.k_proj(x)
-        v = self.v_proj(x)
+        if self.share_kv:
+            v = k + self.v_proj(k)
+        else:
+            v = self.v_proj(x)
 
-        q, k, v = map(
-            lambda x: rearrange(x, "... n (h d) -> ... n h d", d=self.head_dim),
-            [q, k, v],
-        )
-        k = self.quantizer(k)
-        v = self.quantizer(v)
-
-        if self.use_proj:
-            if self.share_proj:
-                k = self.k_head_proj(k)
-                v = self.v_head_proj(v)
-            else:
-                k = torch.einsum("... h d, h d e -> ... h e", k, self.k_head_proj)
-                v = torch.einsum("... h d, h d e -> ... h e", v, self.v_head_proj)
+        k = k.unsqueeze(-2)
+        v = v.unsqueeze(-2)
 
         # lrpe
         q_offset = 0

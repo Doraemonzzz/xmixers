@@ -45,6 +45,7 @@ class LLaMAConfig(PretrainedConfig):
         block_size=64,
         chunk_size=128,
         token_mixer_top_k=2,
+        share_kv=False,
         ###### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
