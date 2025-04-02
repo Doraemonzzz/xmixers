@@ -40,6 +40,34 @@ def decoding_stickbreaking(q, k, v, scale=None):
     return out, 1 - att.sum(dim=-1)
 
 
+def sb_attn(q, k, v, mask=None, cum_weight=None):
+    """
+    Stick-breaking attention weights.
+    """
+    n = q.shape[1]
+    if mask is None:
+        mask = torch.ones(n, n).triu(0).to(q).bool()
+    if cum_weight is None:
+        cum_weight = torch.ones(n, n).tril(-1).to(q)
+
+    scale = q.shape[-1] ** -0.5
+
+    logits = (q @ k.transpose(-1, -2)) * scale
+
+    original_dtype = logits.dtype
+
+    log_z = F.logsigmoid(logits).masked_fill(mask, -1e5).to(original_dtype)
+    log_beta = F.logsigmoid(-logits).masked_fill(mask, 0).to(original_dtype)
+
+    re_cum_log_beta = torch.einsum("bhij,jk->bhik", log_beta, cum_weight.to(log_beta))
+    log_att = log_z + re_cum_log_beta
+    att = log_att.exp()
+    o, rem = att @ v, 1 - att.sum(dim=-1)
+    o = o + rem[..., None] * v
+
+    return o, None
+
+
 class StickBreakingAttention(nn.Module):
     def __init__(
         self,
@@ -83,6 +111,8 @@ class StickBreakingAttention(nn.Module):
         self.embed_dim = embed_dim
         self.init_std = init_std
         self.gain = gain
+        self.mask = torch.empty(0)
+        self.cum_weight = torch.empty(0)
         self._init_weights()
 
     def _init_weights(self):
@@ -131,14 +161,18 @@ class StickBreakingAttention(nn.Module):
             attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
             v = v.masked_fill(attention_mask_ == 0, 0)
 
-        # only use cu_seqlens in training
-        kwargs.get("cu_seqlens", None)
+        if self.mask.shape[0] < n:
+            self.mask = torch.ones(n, n).triu(0).to(q).bool()
+            self.cum_weight = torch.ones(n, n).tril(-1).to(q)
+
         q, k, v = map(lambda x: rearrange(x, "... n h d -> ... h n d"), [q, k, v])
         if q.shape[2] == k.shape[2]:
             output, _ = sb_attn(
                 q=q,
                 k=k,
                 v=v,
+                mask=self.mask,
+                cum_weight=self.cum_weight,
             )
         else:
             output, _ = decoding_stickbreaking(
