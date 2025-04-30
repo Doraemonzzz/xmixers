@@ -4,9 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from fla.ops.gla import chunk_gla, fused_recurrent_gla
+
+# from fla.ops.gla import chunk_gla, fused_recurrent_gla
 from transformers.cache_utils import Cache
-from xopes.ops import householder_fn
+from xopes.ops import householder_fn, lightning_attn_func
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
@@ -140,13 +141,11 @@ class Hgru2(nn.Module):
         else:
             log_f = F.logsigmoid(f)
 
-        k = 1 - f
-
-        q, k, v, log_f = map(
+        q, v, log_f = map(
             lambda x: rearrange(
                 x, "b n (h d) -> b n h d", d=self.expand_ratio
             ).contiguous(),
-            [q, k, v, log_f],
+            [q, v, log_f],
         )
 
         recurrent_state = None
@@ -156,7 +155,7 @@ class Hgru2(nn.Module):
             q_offset = past_key_values.get_seq_length(self.layer_idx)
 
         dtype = q.dtype
-        q, k, v, log_f = map(lambda x: x.to(dtype), [q, k, v, log_f])
+        q, v, log_f = map(lambda x: x.to(dtype), [q, v, log_f])
         use_attn_mask = (
             attention_mask is not None and not attention_mask.all() and (n > 1)
         )
@@ -164,33 +163,17 @@ class Hgru2(nn.Module):
         if use_attn_mask:
             start = q_offset
             attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
-            k = k.masked_fill(attention_mask_ == 0, 0)
+            v = v.masked_fill(attention_mask_ == 0, 0)
             log_f = log_f.masked_fill(attention_mask_ == 0, 0)
 
-        scale = 1
         if self.causal:
-            if self.training or recurrent_state is None:  # training or prefilling
-                output, recurrent_state = chunk_gla(
-                    q=q,
-                    k=k,
-                    v=v,
-                    g=log_f,
-                    scale=scale,
-                    initial_state=recurrent_state,
-                    output_final_state=use_cache,
-                    head_first=False,
-                )
-            else:
-                output, recurrent_state = fused_recurrent_gla(
-                    q=q,
-                    k=k,
-                    v=v,
-                    gk=log_f,
-                    scale=scale,
-                    initial_state=recurrent_state,
-                    output_final_state=use_cache,
-                    head_first=False,
-                )
+            output, recurrent_state = lightning_attn_func(
+                q=q,
+                v=v,
+                ldk=log_f,
+                initial_state=recurrent_state,
+                decay_type="vector",
+            )
         else:
             assert False
 

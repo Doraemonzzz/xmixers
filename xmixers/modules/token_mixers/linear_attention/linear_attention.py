@@ -175,6 +175,7 @@ class LinearAttention(nn.Module):
                 v=v,
                 initial_state=recurrent_state,
                 cu_seqlens=cu_seqlens,
+                decay_type="constant",
             )
         else:
             assert False, "not implemented"

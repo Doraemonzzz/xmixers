@@ -4,9 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
+
+# from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
 from transformers.cache_utils import Cache
-from xopes.ops import householder_fn
+from xopes.ops import householder_fn, lightning_attn_func
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
@@ -153,29 +154,21 @@ class Hgru2ScalarDecay(nn.Module):
             k = k.masked_fill(attention_mask_ == 0, 0)
             log_f = log_f.masked_fill(attention_mask_.squeeze(-1) == 0, 0)
 
-        scale = 1
         if self.causal:
-            if self.training or recurrent_state is None:
-                fn = chunk_simple_gla
-            else:
-                fn = fused_recurrent_simple_gla
-
-            output, recurrent_state = fn(
+            output, recurrent_state = lightning_attn_func(
                 q=q,
                 k=k,
                 v=v,
-                g=log_f,
-                scale=scale,
+                ld=log_f,
                 initial_state=recurrent_state,
-                output_final_state=use_cache,
-                head_first=False,
+                decay_type="scalar",
             )
         else:
             assert False
 
         if past_key_values is not None:
             past_key_values.update(
-                recurrent_state=recurrent_state,
+                recurrent_state=[recurrent_state],
                 layer_idx=self.layer_idx,
                 offset=n,
             )

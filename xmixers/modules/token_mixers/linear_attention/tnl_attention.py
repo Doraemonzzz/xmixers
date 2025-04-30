@@ -174,6 +174,7 @@ class TnlAttention(nn.Module):
                 ld=log_decay,
                 initial_state=recurrent_state,
                 cu_seqlens=cu_seqlens,
+                decay_type="constant",
             )
         else:
             assert False, "not implemented"

@@ -3,10 +3,8 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from einops import rearrange, repeat
-from fla.ops.common.fused_recurrent import fused_recurrent
-from fla.ops.gla import chunk_gla
-from fla.ops.simple_gla import chunk_simple_gla
 from transformers.cache_utils import Cache
+from xopes.ops import lightning_attn_func
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
@@ -192,42 +190,25 @@ class LightNetAttention(nn.Module):
                 attention_mask_ = attention_mask_.unsqueeze(-1)
             k = k.masked_fill(attention_mask_ == 0, 0)
 
-        scale = 1
         if self.causal:
-            if self.training or recurrent_state is None:  # training or prefilling
-                if self.scalar_decay:
-                    fn = chunk_simple_gla
-                else:
-                    fn = chunk_gla
-                output, recurrent_state = fn(
-                    q=q,
-                    k=k,
-                    v=v,
-                    g=log_f,
-                    scale=scale,
-                    initial_state=recurrent_state,
-                    output_final_state=use_cache,
-                    head_first=False,
-                )
+            if self.scalar_decay:
+                ld = log_f
+                ldk = None
+                decay_type = "scalar"
             else:
-                if self.scalar_decay:
-                    g = log_f
-                    gk = None
-                else:
-                    g = None
-                    gk = log_f
+                ld = None
+                ldk = log_f
+                decay_type = "vector"
 
-                output, recurrent_state = fused_recurrent(
-                    q=q,
-                    k=k,
-                    v=v,
-                    g=g,
-                    gk=gk,
-                    scale=scale,
-                    initial_state=recurrent_state,
-                    output_final_state=use_cache,
-                    head_first=False,
-                )
+            output, recurrent_state = lightning_attn_func(
+                q=q,
+                k=k,
+                v=v,
+                ld=ld,
+                ldk=ldk,
+                initial_state=recurrent_state,
+                decay_type=decay_type,
+            )
         else:
             assert False
 

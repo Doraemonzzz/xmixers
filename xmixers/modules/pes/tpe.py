@@ -98,6 +98,7 @@ class Tpe(nn.Module):
             v=v,
             ld=log_decay,
             initial_state=recurrent_state,
+            decay_type="positional",
         )
 
         if past_key_values is not None:
