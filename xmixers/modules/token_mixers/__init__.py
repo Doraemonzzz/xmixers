@@ -5,6 +5,7 @@ from .linear_attention import (
     DeltaUnit,
     DenseRnn,
     GatedSlotAttention,
+    Hgru1,
     Hgru2,
     Hgru2ScalarDecay,
     Hgru3,
@@ -47,6 +48,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "sb_attn": StickBreakingAttention,
     "mfa": MultiFactorAttention,
     # linear attn
+    "hgru1": Hgru1,
     "hgru2": Hgru2,
     "hgru2_scalar_decay": Hgru2ScalarDecay,
     "hgru3": Hgru3,
@@ -592,4 +594,27 @@ def get_token_mixer(config, layer_idx):
             window_size=config.window_size,
             init_std=config.init_std,
             gain=config.gain,
+        )
+    elif config.token_mixer_type in ["hgru1"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            head_dim=config.head_dim,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_output_gate=config.use_output_gate,
+            norm_type=config.norm_type,
+            q_activation=config.q_activation,
+            causal=config.causal,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
+            rescale_type=config.rescale_type,
+            token_mixer_init_type=config.token_mixer_init_type,
+            num_layers=config.num_layers,
+            init_std=config.init_std,
+            gain=config.gain,
+            beta_activation=config.beta_activation,
+            use_dense_memory=config.use_dense_memory,
+            token_mixer_norm_type=config.token_mixer_norm_type
+            if hasattr(config, "token_mixer_norm_type")
+            else config.norm_type,
         )

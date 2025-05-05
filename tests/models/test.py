@@ -10,6 +10,7 @@ from xmixers.models import (
     DenseRnnConfig,
     FlexGPTConfig,
     GsaConfig,
+    Hgrn1Config,
     Hgrn2Config,
     Hgrn3Config,
     LightNetConfig,
@@ -205,6 +206,8 @@ def get_config(model_type):
         config = LLaMAConfig()
         config.token_mixer_type = "mfa"
         config.share_kv = True
+    elif model_type == "hgrn1":
+        config = Hgrn1Config()
 
     return config
 
@@ -225,6 +228,7 @@ def generate(model, x):
             y.append(output["logits"])
 
     y = torch.cat(y, dim=1)
+
     return y
 
 
@@ -357,6 +361,7 @@ if __name__ == "__main__":
             "sb_attn",
             "mfa",
             "mfa_kv_share",
+            "hgrn1",
         ],
     )
     args = parser.parse_args()
