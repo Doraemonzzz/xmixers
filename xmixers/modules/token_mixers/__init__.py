@@ -398,6 +398,8 @@ def get_token_mixer(config, layer_idx):
             gain=config.gain,
             gate_act=config.gate_act,
             gate_pos=config.gate_pos,
+            threshold=config.threshold,
+            use_bias=config.use_bias,
         )
     elif config.token_mixer_type in ["delta_unit"]:
         return cls(

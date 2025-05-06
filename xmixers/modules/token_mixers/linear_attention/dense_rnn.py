@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 
 import torch
@@ -8,11 +9,12 @@ from fla.ops.generalized_delta_rule import (
     chunk_dplr_delta_rule,
     fused_recurrent_dplr_delta_rule,
 )
+from torch.distributed.tensor import DTensor
 from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn, l2_norm
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
+from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
 
 class DenseRnn(nn.Module):
@@ -74,6 +76,8 @@ class DenseRnn(nn.Module):
         gain: float = 0.01,
         gate_act: str = "sigmoid",
         gate_pos: str = "pre",
+        threshold: float = 0.99,
+        use_bias: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -125,6 +129,10 @@ class DenseRnn(nn.Module):
                 nn.Linear(self.head_dim, embed_dim, bias=bias),
             )
 
+        self.embed_dim = embed_dim
+        self.use_bias = use_bias
+        self.threshold = threshold
+
         self.qkv_norm_type = qkv_norm_type
         self.norm_q = norm_q
         self.norm_v = norm_v
@@ -140,10 +148,34 @@ class DenseRnn(nn.Module):
         self.zero = torch.empty(0)
 
     def _init_weights(self):
+        self.setup_decay()
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
+        self.setup_decay()
         return _initialize_weights(self, module)
+
+    def setup_decay(self):
+        if not self.use_bias:
+            return
+        # take x = 0 as median, 1 / (1 + exp(-(median + delta))) = a => 1 + exp(-delta) = 1 / a => exp(-delta) = (1 / a - 1) -> exp(delta) = a / (1 - a) => delta = log(a / (1 - a))
+        a = self.threshold
+        bias = torch.ones(self.embed_dim) * math.log(a / (1 - a))
+        if hasattr(self, "bias"):
+            if isinstance(self.bias, DTensor):
+                self.bias.data.copy_(
+                    DTensor.from_local(
+                        bias,
+                        device_mesh=self.bias.device_mesh,
+                    )
+                )
+            else:
+                self.bias.data.copy_(bias)
+        else:
+            self.bias = nn.Parameter(bias, requires_grad=True)
+
+    def extra_repr(self):
+        return print_module(self)
 
     def forward(
         self,
@@ -161,7 +193,10 @@ class DenseRnn(nn.Module):
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
-        f = self.f_proj(x)
+        if self.use_bias:
+            f = self.f_proj(x) + self.bias
+        else:
+            f = self.f_proj(x)
 
         if self.zero.shape[0] == 0 or self.zero.shape != torch.Size([b, n, h, d // h]):
             self.zero = torch.zeros(b, n, h, d // h).to(q)
