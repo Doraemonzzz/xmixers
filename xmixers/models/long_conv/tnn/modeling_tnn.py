@@ -31,7 +31,7 @@ class TnnLayer(nn.Module):
         self.token_mixer = Gtu(
             embed_dim=config.embed_dim,
             expand_ratio=config.expand_ratio,
-            bias=config.bias,
+            bias=False,
             activation=config.gtu_activation,
             causal=config.causal,
             norm_type=config.norm_type,
@@ -43,16 +43,20 @@ class TnnLayer(nn.Module):
             lower_bound=config.lower_bound,
         )
 
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.token_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         self.channel_mixer = GLU(
             embed_dim=config.embed_dim,
             mid_dim=config.mid_dim,
             activation=config.glu_activation,
-            bias=config.bias,
+            bias=False,
         )
 
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.channel_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
     def forward(
         self,
@@ -274,7 +278,7 @@ class TnnForCausalLM(TnnPreTrainedModel):
         super().__init__(config)
         self.model = TnnModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
         self.max_position_embeddings = config.max_position_embeddings
 
         # Initialize weights and apply final processing

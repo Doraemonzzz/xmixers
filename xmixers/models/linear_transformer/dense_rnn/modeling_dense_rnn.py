@@ -34,9 +34,13 @@ class DenseRnnLayer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.token_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
         self.channel_mixer = get_channel_mixer(config)
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.channel_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
     def forward(
         self,
@@ -98,7 +102,9 @@ class DenseRnnModel(DenseRnnPreTrainedModel):
         self.layers = nn.ModuleList(
             [DenseRnnLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.final_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         # log lower bound
         self.use_lower_bound = config.use_lower_bound

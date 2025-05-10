@@ -9,6 +9,7 @@ from .hgru2_scalar_decay import Hgru2ScalarDecay
 from .hgru3 import Hgru3
 from .lightnet_attention import LightNetAttention
 from .linear_attention import LinearAttention
+from .mamba2 import Mamba2
 from .meta_la import MetaLa
 from .polar_rnn import PolarRnn
 from .tnl_attention import TnlAttention

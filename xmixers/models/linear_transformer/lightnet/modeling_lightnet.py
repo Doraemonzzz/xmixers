@@ -35,9 +35,13 @@ class LightNetLayer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.token_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
         self.channel_mixer = get_channel_mixer(config)
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.channel_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
     def forward(
         self,
@@ -95,7 +99,7 @@ class LightNetModel(LightNetPreTrainedModel):
             self.tpe = Tpe(
                 embed_dim=config.embed_dim,
                 num_heads=config.num_heads,
-                bias=config.bias,
+                bias=False,
                 layer_idx=0,
                 token_mixer_norm_type=config.token_mixer_norm_type,
             )
@@ -112,7 +116,9 @@ class LightNetModel(LightNetPreTrainedModel):
                 for layer_idx in range(config.num_layers)
             ]
         )
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.final_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

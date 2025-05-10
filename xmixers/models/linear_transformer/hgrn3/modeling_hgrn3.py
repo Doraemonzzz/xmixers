@@ -36,9 +36,13 @@ class Hgrn3Layer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.token_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
         self.channel_mixer = get_channel_mixer(config)
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.channel_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
     def forward(
         self,
@@ -98,7 +102,9 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         self.layers = nn.ModuleList(
             [Hgrn3Layer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.final_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

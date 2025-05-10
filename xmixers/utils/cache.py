@@ -92,6 +92,7 @@ class XmixersCache(transformers.cache_utils.Cache):
                     mpa_state = (
                         x[..., -window_size:, :].contiguous() for x in mpa_state
                     )
+
             state = dict(
                 recurrent_state=recurrent_state,
                 attn_state=attn_state,

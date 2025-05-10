@@ -16,6 +16,7 @@ from xmixers.models import (
     LightNetConfig,
     LinearTransformerConfig,
     LLaMAConfig,
+    Mamba2XmixersConfig,
     TnlConfig,
     TTTConfig,
 )
@@ -208,6 +209,8 @@ def get_config(model_type):
         config.share_kv = True
     elif model_type == "hgrn1":
         config = Hgrn1Config()
+    elif model_type == "mamba2":
+        config = Mamba2XmixersConfig()
 
     return config
 
@@ -241,7 +244,7 @@ def main(args):
     tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    b = 2
+    b = 1
     m = len(tokenizer)
 
     config = get_config(model_type)
@@ -362,6 +365,7 @@ if __name__ == "__main__":
             "mfa",
             "mfa_kv_share",
             "hgrn1",
+            "mamba2",
         ],
     )
     args = parser.parse_args()

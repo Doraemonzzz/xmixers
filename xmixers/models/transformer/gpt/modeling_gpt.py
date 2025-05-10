@@ -31,7 +31,7 @@ class GPTLayer(nn.Module):
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,
             kv_heads=config.kv_heads,
-            bias=config.bias,
+            bias=False,
             use_lrpe=False,
             layer_idx=layer_idx,
             base=config.base,
@@ -41,16 +41,20 @@ class GPTLayer(nn.Module):
             init_std=config.init_std,
         )
 
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.token_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         self.channel_mixer = FFN(
             embed_dim=config.embed_dim,
             mid_dim=config.mid_dim,
             activation=config.ffn_activation,
-            bias=config.bias,
+            bias=False,
         )
 
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.channel_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
     def forward(
         self,
@@ -173,7 +177,9 @@ class GPTModel(GPTPreTrainedModel):
             [GPTLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
 
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.final_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

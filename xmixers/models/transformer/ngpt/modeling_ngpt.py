@@ -33,7 +33,7 @@ class nGPTLayer(nn.Module):
             embed_dim=config.embed_dim,
             num_heads=config.num_heads,
             kv_heads=config.kv_heads,
-            bias=config.bias,
+            bias=False,
             use_lrpe=config.use_lrpe,
             layer_idx=layer_idx,
             base=config.base,
@@ -54,7 +54,7 @@ class nGPTLayer(nn.Module):
             embed_dim=config.embed_dim,
             mid_dim=config.mid_dim,
             activation=config.glu_activation,
-            bias=config.bias,
+            bias=False,
         )
         self.channel_alpha_init_value = 0.05
         self.channel_alpha_init_scaling = base_scale

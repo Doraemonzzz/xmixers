@@ -28,9 +28,13 @@ class LLaMALayer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.token_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
         self.channel_mixer = get_channel_mixer(config)
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.channel_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         self.use_postnorm = config.use_postnorm
         if self.use_postnorm:
@@ -168,7 +172,9 @@ class LLaMAModel(LLaMAPreTrainedModel):
         self.layers = nn.ModuleList(
             [LLaMALayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.final_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

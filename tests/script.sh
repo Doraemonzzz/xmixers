@@ -53,9 +53,10 @@ model_type=fox
 # model_type=mfa
 # model_type=mfa_kv_share
 model_type=hgrn1
+model_type=mamba2
 
-dtype=bf16
-# dtype=fp32
+# dtype=bf16
+dtype=fp32
 
 mkdir -p $folder/log
 

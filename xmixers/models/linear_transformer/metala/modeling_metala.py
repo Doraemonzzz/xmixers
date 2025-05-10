@@ -32,7 +32,7 @@ class MetaLaLayer(nn.Module):
         self.token_mixer = MetaLa(
             embed_dim=config.embed_dim,
             expand_ratio=config.expand_ratio,
-            bias=config.bias,
+            bias=False,
             layer_idx=layer_idx,
             use_output_gate=config.use_output_gate,
             non_sparse_ratio=config.non_sparse_ratio,
@@ -46,16 +46,20 @@ class MetaLaLayer(nn.Module):
             init_std=config.init_std,
         )
 
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.token_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         self.channel_mixer = GLU(
             embed_dim=config.embed_dim,
             mid_dim=config.mid_dim,
             activation=config.glu_activation,
-            bias=config.bias,
+            bias=False,
         )
 
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.channel_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
     def forward(
         self,
@@ -166,7 +170,9 @@ class MetaLaModel(MetaLaPreTrainedModel):
         self.layers = nn.ModuleList(
             [MetaLaLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.final_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         # log lower bound
         self.log_lower_bounds = nn.Parameter(

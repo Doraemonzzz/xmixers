@@ -1,5 +1,5 @@
 # coding=utf-8
-""" DenseRnn configuration"""
+""" Mamba2 configuration"""
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
@@ -7,8 +7,8 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-class DenseRnnConfig(PretrainedConfig):
-    model_type = "dense_rnn"
+class Mamba2XmixersConfig(PretrainedConfig):
+    model_type = "mamba2_"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -22,34 +22,32 @@ class DenseRnnConfig(PretrainedConfig):
         tie_word_embeddings=False,
         ########## model config
         ##### token mixer config
-        token_mixer_type="dense_rnn",
+        token_mixer_type="mamba2",
         embed_dim=1024,
-        num_heads=8,
+        d_state=64,
+        d_conv=4,
+        conv_init=None,
+        expand=2,
+        headdim=128,
+        ngroups=1,
+        A_init_range=(1, 16),
+        dt_min=0.001,
+        dt_max=0.1,
+        dt_init_floor=1e-4,
+        dt_limit=(0.0, float("inf")),
+        activation="swish",
         bias=False,
+        conv_bias=True,
+        chunk_size=256,
+        layer_idx=0,
         token_mixer_norm_type="rmsnorm",
-        q_activation="silu",
-        k_activation="silu",
-        v_activation="silu",
-        use_beta=True,
-        beta_activation="neg",
-        qkv_norm_type=2,
-        norm_q=False,
-        norm_v=False,
-        causal=True,
         gate_act="sigmoid",
         gate_pos="pre",
-        threshold=0.99,
-        ##### channel mixer config
-        channel_mixer_type="glu",
-        mid_dim=1024,
-        channel_mixer_activation="silu",
-        use_gate_linear=True,
         ##### others
-        use_lower_bound=False,
         max_position_embeddings=1024,
-        use_output_gate=True,
+        num_layers=24,
         norm_type="rmsnorm",
-        num_layers=12,
+        causal=True,
         use_embed_scale=False,
         ce_type="xopes_flce",
         ##### init

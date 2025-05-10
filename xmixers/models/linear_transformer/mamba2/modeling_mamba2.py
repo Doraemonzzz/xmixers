@@ -1,9 +1,8 @@
 # coding=utf-8
-""" PyTorch ChunkRnn model."""
+""" PyTorch Mamba2 model."""
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
@@ -17,26 +16,25 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
-from xmixers.utils import XmixersCache, _init_weights, print_module
-from xmixers.utils.loss_utils import compute_loss
+from xmixers.modules import get_norm_fn, get_token_mixer
+from xmixers.utils import (
+    XmixersCache,
+    _init_weights,
+    _post_init_weights,
+    pad_embed_dim,
+    print_module,
+)
+from xmixers.utils.loss_utils import Loss
 
-from .configuration_chunk_rnn import ChunkRnnConfig
+from .configuration_mamba2 import Mamba2XmixersConfig
 
 
-class ChunkRnnLayer(nn.Module):
-    def __init__(self, config: ChunkRnnConfig, layer_idx=0):
+class Mamba2Layer(nn.Module):
+    def __init__(self, config: Mamba2XmixersConfig, layer_idx=0):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-
         self.token_norm = get_norm_fn(config.norm_type)(
-            config.embed_dim, bias=config.bias
-        )
-
-        self.channel_mixer = get_channel_mixer(config)
-
-        self.channel_norm = get_norm_fn(config.norm_type)(
             config.embed_dim, bias=config.bias
         )
 
@@ -46,45 +44,44 @@ class ChunkRnnLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        lower_bound: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         # token mixer
         residual = x
         x, past_key_values = self.token_mixer(
-            x=self.token_norm(x),
+            self.token_norm(x),
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            lower_bound=lower_bound,
+            **kwargs,
         )
         x = x + residual
-
-        # channel mixer
-        x = self.channel_mixer(self.channel_norm(x)) + x
 
         outputs = (x, past_key_values)
 
         return outputs
 
 
-class ChunkRnnPreTrainedModel(PreTrainedModel):
-    config_class = ChunkRnnConfig
+class Mamba2PreTrainedModel(PreTrainedModel):
+    config_class = Mamba2XmixersConfig
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ChunkRnnLayer"]
+    _no_split_modules = ["Mamba2Layer"]
 
     def _init_weights(self, module):
         return _init_weights(self, module)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ChunkRnnModel):
+        if isinstance(module, Mamba2Model):
             module.gradient_checkpointing = value
 
 
-class ChunkRnnModel(ChunkRnnPreTrainedModel):
-    def __init__(self, config: ChunkRnnConfig):
+class Mamba2Model(Mamba2PreTrainedModel):
+    def __init__(self, config: Mamba2XmixersConfig):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
+        config.vocab_size = pad_embed_dim(config.vocab_size)
+        self.config = config
         self.vocab_size = config.vocab_size
         self.gradient_checkpointing = False
 
@@ -94,15 +91,10 @@ class ChunkRnnModel(ChunkRnnPreTrainedModel):
             config.vocab_size, config.embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
-            [ChunkRnnLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
+            [Mamba2Layer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
         self.final_norm = get_norm_fn(config.norm_type)(
             config.embed_dim, bias=config.bias
-        )
-
-        # log lower bound
-        self.log_lower_bounds = nn.Parameter(
-            torch.ones(config.num_layers, config.embed_dim), requires_grad=True
         )
 
         # Initialize weights and apply final processing
@@ -171,13 +163,7 @@ class ChunkRnnModel(ChunkRnnPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        # lower bound
-        lower_bounds = F.softmax(self.log_lower_bounds, dim=0)
-        lower_bounds = torch.cumsum(lower_bounds, dim=0)
-        lower_bounds -= lower_bounds[0, ...].clone()
-
         for idx, layer in enumerate(self.layers):
-            lower_bound = lower_bounds[idx]
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -188,7 +174,7 @@ class ChunkRnnModel(ChunkRnnPreTrainedModel):
                     attention_mask,
                     past_key_values,
                     use_cache,
-                    lower_bound,
+                    **kwargs,
                 )
             else:
                 hidden_states, past_key_values = layer(
@@ -196,7 +182,7 @@ class ChunkRnnModel(ChunkRnnPreTrainedModel):
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
-                    lower_bound=lower_bound,
+                    **kwargs,
                 )
 
         hidden_states = self.final_norm(hidden_states)
@@ -225,18 +211,23 @@ class ChunkRnnModel(ChunkRnnPreTrainedModel):
         )
 
 
-class ChunkRnnForCausalLM(ChunkRnnPreTrainedModel):
+class Mamba2ForCausalLM(Mamba2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = ChunkRnnModel(config)
+        self.model = Mamba2Model(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
-
+        self.loss = Loss()
         # Initialize weights and apply final processing
         self.post_init()
+
+    def post_init_weights(
+        self,
+    ):
+        _post_init_weights(self)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -268,6 +259,7 @@ class ChunkRnnForCausalLM(ChunkRnnPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -281,9 +273,9 @@ class ChunkRnnForCausalLM(ChunkRnnPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, ChunkRnnForCausalLM
+        >>> from transformers import AutoTokenizer, Mamba2ForCausalLM
 
-        >>> model = ChunkRnnForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = Mamba2ForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
@@ -318,6 +310,7 @@ class ChunkRnnForCausalLM(ChunkRnnPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -327,13 +320,15 @@ class ChunkRnnForCausalLM(ChunkRnnPreTrainedModel):
             and self.training
         )
 
-        logits, loss = compute_loss(
-            lm_head=self.lm_head,
+        # since we may use forward_pre_hook, we can't use key word arguments
+        logits, loss = self.loss(
+            self.lm_head.weight,
+            hidden_states,
+            labels,
+            self.lm_head.bias,
+            num_logits_to_keep,
+            fuse_linear_and_cross_entropy,
             ce_type=self.config.ce_type,
-            hidden_states=hidden_states,
-            labels=labels,
-            num_logits_to_keep=num_logits_to_keep,
-            fuse_linear_and_cross_entropy=fuse_linear_and_cross_entropy,
         )
 
         if not return_dict:

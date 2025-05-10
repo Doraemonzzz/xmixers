@@ -18,6 +18,7 @@ from .linear_transformer import (
     LinearTransformerLayer,
     LinearTransformerModel,
 )
+from .mamba2 import Mamba2ForCausalLM, Mamba2Layer, Mamba2Model, Mamba2XmixersConfig
 from .metala import MetaLaConfig, MetaLaForCausalLM, MetaLaLayer, MetaLaModel
 from .polar_rnn import PolarRnnConfig, PolarRnnForCausalLM, PolarRnnLayer, PolarRnnModel
 from .tnl import TnlConfig, TnlForCausalLM, TnlLayer, TnlModel

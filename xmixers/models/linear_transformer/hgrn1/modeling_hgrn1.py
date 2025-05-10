@@ -35,9 +35,13 @@ class Hgrn1Layer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-        self.token_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.token_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
         self.channel_mixer = get_channel_mixer(config)
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.channel_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
     # only for benchmark inference
     def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None, **kwargs):
@@ -105,7 +109,9 @@ class Hgrn1Model(Hgrn1PreTrainedModel):
         self.layers = nn.ModuleList(
             [Hgrn1Layer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.final_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
         # log lower bound
         d = config.embed_dim * 2

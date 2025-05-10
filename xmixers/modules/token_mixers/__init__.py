@@ -11,6 +11,7 @@ from .linear_attention import (
     Hgru3,
     LightNetAttention,
     LinearAttention,
+    Mamba2,
     MetaLa,
     PolarRnn,
     TnlAttention,
@@ -63,6 +64,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "decay_linear_attn": DecayLinearAttention,
     "gsa": GatedSlotAttention,
     "ttt": TTT,
+    "mamba2": Mamba2,
     # long conv
     "gtu": Gtu,
 }
@@ -619,4 +621,33 @@ def get_token_mixer(config, layer_idx):
             token_mixer_norm_type=config.token_mixer_norm_type
             if hasattr(config, "token_mixer_norm_type")
             else config.norm_type,
+        )
+    elif config.token_mixer_type in ["mamba2"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            d_state=config.d_state,
+            d_conv=config.d_conv,
+            conv_init=config.conv_init,
+            expand=config.expand,
+            headdim=config.headdim,
+            ngroups=config.ngroups,
+            A_init_range=config.A_init_range,
+            dt_min=config.dt_min,
+            dt_max=config.dt_max,
+            dt_init_floor=config.dt_init_floor,
+            dt_limit=config.dt_limit,
+            activation=config.activation,
+            bias=config.bias,
+            conv_bias=config.conv_bias,
+            chunk_size=config.chunk_size,
+            layer_idx=layer_idx,
+            token_mixer_norm_type=config.token_mixer_norm_type,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
+            causal=config.causal,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            init_std=config.init_std,
+            gain=config.gain,
         )

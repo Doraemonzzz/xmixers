@@ -38,7 +38,9 @@ class TnlLayer(nn.Module):
             config.embed_dim, bias=config.bias
         )
         self.channel_mixer = get_channel_mixer(config)
-        self.channel_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.channel_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
 
     def forward(
         self,
@@ -102,7 +104,9 @@ class TnlModel(TnlPreTrainedModel):
         )
         self.log_decay = torch.empty(0)
 
-        self.final_norm = get_norm_fn(config.norm_type)(config.embed_dim, bias=False)
+        self.final_norm = get_norm_fn(config.norm_type)(
+            config.embed_dim, bias=config.bias
+        )
         # Initialize weights and apply final processing
         self.post_init()
 

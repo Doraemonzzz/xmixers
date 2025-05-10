@@ -206,9 +206,11 @@ def _post_init_weights(
             layer.token_mixer.lrpe._init_weights()
         # if not using custom init, use default init
         layer.token_mixer.apply(init_fn)
-        layer.channel_mixer.apply(init_fn)
+        if hasattr(layer, "channel_mixer"):
+            layer.channel_mixer.apply(init_fn)
         layer.token_norm._init_weights()
-        layer.channel_norm._init_weights()
+        if hasattr(layer, "channel_norm"):
+            layer.channel_norm._init_weights()
 
     if self.config.tie_word_embeddings:
         output_embeddings = self.get_output_embeddings()
