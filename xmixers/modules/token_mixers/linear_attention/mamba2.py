@@ -6,8 +6,9 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
+from einops import rearrange, repeat
 from transformers.cache_utils import Cache
+from xopes.ops import lightning_attn_func
 
 try:
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
@@ -57,6 +58,7 @@ class Mamba2(nn.Module):
         num_layers: int = 12,
         init_std: float = 0.02,
         gain: float = 0.01,
+        use_lightning: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -114,6 +116,9 @@ class Mamba2(nn.Module):
             gate_pos=gate_pos,
             num_groups=num_groups,
         )
+
+        if use_lightning:
+            self.forward = self.forward_simple
 
         self.causal = causal
         self.token_mixer_init_type = token_mixer_init_type
@@ -288,6 +293,7 @@ class Mamba2(nn.Module):
                 **dt_limit_kwargs,
             )
         else:
+            dtype = u.dtype
             dt = dt.squeeze(1)
             x = x.squeeze(1)
             B = B.squeeze(1)
@@ -300,8 +306,8 @@ class Mamba2(nn.Module):
             recurrent_state.copy_(
                 recurrent_state * rearrange(dA, "b h -> b h 1 1") + dBx
             )
-            y = torch.einsum("bhpn,bn->bhp", recurrent_state, C)
-            y = y + rearrange(self.D, "h -> h 1") * x
+            y = torch.einsum("bhpn,bn->bhp", recurrent_state.to(dtype), C)
+            y = y + rearrange(self.D.to(dtype), "h -> h 1") * x
             y = y.unsqueeze(1)
 
         if past_key_values is not None:
@@ -319,3 +325,118 @@ class Mamba2(nn.Module):
         out = self.o_proj(y)
 
         return out, past_key_values
+
+    def forward_simple(
+        self,
+        u,
+        attention_mask: Optional[torch.Tensor] = None,  # (b, m)
+        past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
+        **kwargs,
+    ):
+        b, n, d = u.shape
+
+        # b n d_in_proj
+        zxbcdt = self.in_proj(u)
+        # h
+        A = -torch.exp(self.A_log)
+        recurrent_state = None
+
+        z, xBC, dt = torch.split(
+            zxbcdt,
+            [self.d_inner, self.d_inner + 2 * self.ngroups * self.d_state, self.nheads],
+            dim=-1,
+        )
+
+        q_offset = 0
+        conv_state = None
+        if past_key_values is not None and len(past_key_values) > self.layer_idx:
+            conv_state = past_key_values[self.layer_idx]["conv_state"][0]
+            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
+            q_offset = past_key_values.get_seq_length(self.layer_idx)
+
+        use_attn_mask = (
+            attention_mask is not None and not attention_mask.all() and (n > 1)
+        )
+        # left padding
+        if use_attn_mask:
+            start = q_offset
+            attention_mask_ = attention_mask[:, start:].unsqueeze(-1)
+            xBC = xBC.masked_fill(attention_mask_ == 0, 0)
+            dt = dt.masked_fill(attention_mask_ == 0, 0)
+
+        # 1D Convolution
+        if self.training or conv_state is None:  # training or prefilling
+            if not self.training and conv_state is None:  # !!! important, update first
+                w = self.d_conv
+                l = min(w, n)
+                # b d w
+                conv_state = xBC.new_zeros(b, xBC.shape[-1], w)
+                conv_state[:, :, -l:] = xBC[:, -l:, :].transpose(1, 2)
+
+            xBC = causal_conv1d_fn(
+                x=xBC.transpose(1, 2),
+                weight=rearrange(self.conv1d.weight, "d 1 w -> d w"),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+            )
+        else:
+            xBC = causal_conv1d_update(
+                x=xBC.transpose(1, 2),
+                conv_state=conv_state,
+                weight=rearrange(self.conv1d.weight, "d 1 w -> d w"),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+            )
+
+        xBC = xBC.transpose(1, 2)
+
+        # x: v, B: k, C: q
+        x, B, C = torch.split(
+            xBC,
+            [self.d_inner, self.ngroups * self.d_state, self.ngroups * self.d_state],
+            dim=-1,
+        )
+        q = rearrange(C, "b n (g d) -> b n g d", d=self.d_state)
+        k = rearrange(B, "b n (g d) -> b n g d", d=self.d_state)
+        v = rearrange(x, "b n (h d) -> b n h d", d=self.headdim)
+        g = q.shape[-2]
+        h = v.shape[-2]
+
+        # b n h d
+        q, k = map(lambda x: repeat(x, "b n g d -> b n (g h) d", h=h // g), (q, k))
+        # b n h
+        dt = F.softplus(dt + self.dt_bias.to(dtype=dt.dtype))
+        log_f = dt * A
+        k = dt.unsqueeze(-1) * k
+
+        if self.causal:
+            output, recurrent_state = lightning_attn_func(
+                q=q,
+                k=k,
+                v=v,
+                ld=log_f,
+                initial_state=recurrent_state,
+                decay_type="scalar",
+            )
+        else:
+            assert False
+
+        if past_key_values is not None:
+            past_key_values.update(
+                conv_state=[conv_state],
+                recurrent_state=[recurrent_state],
+                layer_idx=self.layer_idx,
+                offset=n,
+            )
+
+        output = output + self.D.to(v.dtype).unsqueeze(-1) * v
+
+        # reshape
+        output = rearrange(output, "... n h d -> ... n (h d)")
+        output = self.norm(output, z)
+
+        # out proj
+        output = self.o_proj(output)
+
+        return output, past_key_values

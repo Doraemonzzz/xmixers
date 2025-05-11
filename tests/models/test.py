@@ -302,7 +302,7 @@ def main(args):
                     )["logits"][:, -1]
                 )
     o2 = torch.cat(o2, dim=0)
-    print(f"n: {n}, diff: {torch.norm(o1 - o2)}")
+    print(f"diff: {torch.norm(o1 - o2)}")
 
     print("-" * 5, "End test generate with attention mask", "-" * 5)
 

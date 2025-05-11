@@ -42,11 +42,12 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 - [x] Fsq kv mpa
 
 # Change to xopes
-- [ ] Tnl
-- [ ] Hgrn2
-- [ ] Hgrn2-scalar-decay
-- [ ] Linear Transformer
-- [ ] Lightnet
+- [x] Tnl
+- [x] Hgrn2
+- [x] Hgrn2-scalar-decay
+- [x] Linear Transformer
+- [x] Lightnet
+- [ ] Mamba2, need rm extra residual.
 
 # Pretrained weights
 

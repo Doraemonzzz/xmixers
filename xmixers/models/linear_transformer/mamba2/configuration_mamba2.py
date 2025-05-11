@@ -43,6 +43,7 @@ class Mamba2XmixersConfig(PretrainedConfig):
         token_mixer_norm_type="rmsnorm",
         gate_act="sigmoid",
         gate_pos="pre",
+        use_lightning=False,
         ##### others
         max_position_embeddings=1024,
         num_layers=24,
