@@ -20,7 +20,7 @@ from xmixers.modules.normalizations import get_norm_fn, l2_norm
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
 
-class DeltaUnit(nn.Module):
+class DeltaProductUnit(nn.Module):
     def __init__(
         self,
         embed_dim: int,
@@ -48,6 +48,7 @@ class DeltaUnit(nn.Module):
         gain: float = 0.01,
         gate_act: str = "sigmoid",
         gate_pos: str = "pre",
+        rank: int = 2,
         **kwargs,
     ):
         super().__init__()
@@ -64,12 +65,12 @@ class DeltaUnit(nn.Module):
         self.use_output_gate = use_output_gate
 
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim * rank, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim * rank, bias=bias)
         self.use_beta = use_beta
         if self.use_beta:
             # !!! dont use beta as name in hf: https://github.com/huggingface/transformers/issues/29554
-            self.bet_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+            self.bet_proj = nn.Linear(embed_dim, num_heads * rank, bias=bias)
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
@@ -98,11 +99,11 @@ class DeltaUnit(nn.Module):
         self.scalar_decay = scalar_decay
         if self.use_decay:
             if self.scalar_decay:
-                self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+                self.f_proj = nn.Linear(embed_dim, num_heads * rank, bias=bias)
             else:
                 self.f_proj = nn.Sequential(
                     nn.Linear(embed_dim, self.head_dim, bias=bias),
-                    nn.Linear(self.head_dim, embed_dim, bias=bias),
+                    nn.Linear(self.head_dim, embed_dim * rank, bias=bias),
                 )
 
         self.qkv_norm_type = qkv_norm_type
@@ -115,6 +116,7 @@ class DeltaUnit(nn.Module):
         self.num_heads = num_heads
         self.init_std = init_std
         self.gain = gain
+        self.rank = rank
         self.apply(self._initialize_weights)
         self.f = torch.empty(0)
         self.zero = torch.empty(0)
@@ -144,6 +146,8 @@ class DeltaUnit(nn.Module):
         k = self.k_proj(x)
         v = self.v_proj(x)
 
+        if self.zero.shape[0] == 0 or self.zero.shape[1] != n:
+            self.zero = torch.zeros(b, n * (self.rank - 1), h, d // h).to(q)
         # b n h
         if self.use_decay:
             # l + (1 - l) * sigmoid(x)
@@ -163,7 +167,7 @@ class DeltaUnit(nn.Module):
         else:
             # if no beta, use 2 to get householder matrix
             if self.beta.shape[0] == 0 or self.beta.shape[1] != n:
-                self.bet = torch.ones(b, n, h).to(q) * 2
+                self.bet = torch.ones(b, n, h * self.rank).to(q) * 2
             beta = self.bet
         # act
         q = self.q_act(q)
@@ -204,6 +208,25 @@ class DeltaUnit(nn.Module):
                     log_f = log_f.masked_fill(attention_mask_.squeeze(-1) == 0, 0)
                 else:
                     log_f = log_f.masked_fill(attention_mask_ == 0, 0)
+
+        # reset shape
+        k, v = map(
+            lambda x: rearrange(x, "b n (h r) d -> b (r n) h d", r=self.rank),
+            [k, v],
+        )
+        if log_f is not None:
+            log_f = rearrange(log_f, "b n (h r) -> b (r n) h", r=self.rank)
+        beta = rearrange(beta, "b n (h r) -> b (r n) h", r=self.rank)
+
+        # update to interleaved format
+        q = torch.cat([self.zero, q], dim=1)
+        q, k, v = map(
+            lambda x: rearrange(x, "b (r n) h d -> b (n r) h d", r=self.rank),
+            [q, k, v],
+        )
+        beta = rearrange(beta, "b (r n) h -> b (n r) h", r=self.rank)
+        if log_f is not None:
+            log_f = rearrange(log_f, "b (r n) h -> b (n r) h", r=self.rank)
 
         scale = 1
         if self.causal:
@@ -262,6 +285,9 @@ class DeltaUnit(nn.Module):
                     )
         else:
             assert False
+
+        output = rearrange(output, "b (n r) h d -> b (r n) h d", r=self.rank)
+        output = output[:, -n:]
 
         if past_key_values is not None:
             past_key_values.update(

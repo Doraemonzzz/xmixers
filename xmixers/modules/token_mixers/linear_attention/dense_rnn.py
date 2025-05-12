@@ -187,7 +187,7 @@ class DenseRnn(nn.Module):
         **kwargs,
     ):
         b, n, d = x.shape
-        h = self.num_heads
+        h = d // self.head_dim
         # x: b n d
         # linear map
         q = self.q_proj(x)
@@ -198,7 +198,7 @@ class DenseRnn(nn.Module):
         else:
             f = self.f_proj(x)
 
-        if self.zero.shape[0] == 0 or self.zero.shape != torch.Size([b, n, h, d // h]):
+        if self.zero.shape[0] == 0 or self.zero.shape[1] != n:
             self.zero = torch.zeros(b, n, h, d // h).to(q)
         # l + (1 - l) * sigmoid(x)
         if lower_bound is not None:

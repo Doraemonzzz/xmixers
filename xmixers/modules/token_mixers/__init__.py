@@ -2,6 +2,7 @@ from .linear_attention import (
     TTT,
     ChunkRnn,
     DecayLinearAttention,
+    DeltaProductUnit,
     DeltaUnit,
     DenseRnn,
     GatedSlotAttention,
@@ -65,6 +66,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "gsa": GatedSlotAttention,
     "ttt": TTT,
     "mamba2": Mamba2,
+    "delta_product_unit": DeltaProductUnit,
     # long conv
     "gtu": Gtu,
 }
@@ -651,4 +653,32 @@ def get_token_mixer(config, layer_idx):
             init_std=config.init_std,
             gain=config.gain,
             use_lightning=config.use_lightning,
+        )
+    elif config.token_mixer_type in ["delta_product_unit"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_output_gate=config.use_output_gate,
+            token_mixer_norm_type=config.token_mixer_norm_type,
+            q_activation=config.q_activation,
+            k_activation=config.k_activation,
+            v_activation=config.v_activation,
+            use_beta=config.use_beta,
+            beta_activation=config.beta_activation,
+            use_decay=config.use_decay,
+            scalar_decay=config.scalar_decay,
+            qkv_norm_type=config.qkv_norm_type,
+            norm_q=config.norm_q,
+            norm_v=config.norm_v,
+            causal=config.causal,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            init_std=config.init_std,
+            gain=config.gain,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
+            rank=config.rank,
         )

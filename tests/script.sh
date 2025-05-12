@@ -20,7 +20,7 @@ model_type=lightnet
 # model_type=cosformer2
 # model_type=cosformer2_no_tpe
 # model_type=naive_deltanet
-# model_type=scalar_decay_deltanet
+model_type=scalar_decay_deltanet
 # model_type=scalar_decay_lower_bound_deltanet
 # model_type=vector_decay_deltanet
 # model_type=vector_decay_lower_bound_deltanet
@@ -47,16 +47,17 @@ model_type=lightnet
 # model_type=hgrn3
 # model_type=hgrn3_scalar_decay
 # model_type=alibi
-model_type=fox
+# model_type=fox
 # model_type=fox_window
 # model_type=sb_attn
 # model_type=mfa
 # model_type=mfa_kv_share
-model_type=hgrn1
-model_type=mamba2
+# model_type=hgrn1
+# model_type=mamba2
+# model_type=scalar_decay_delta_product_net
 
-# dtype=bf16
-dtype=fp32
+dtype=bf16
+# dtype=fp32
 
 mkdir -p $folder/log
 

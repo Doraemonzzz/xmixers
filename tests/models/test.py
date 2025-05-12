@@ -211,6 +211,12 @@ def get_config(model_type):
         config = Hgrn1Config()
     elif model_type == "mamba2":
         config = Mamba2XmixersConfig()
+    elif model_type == "scalar_decay_delta_product_net":
+        config = DeltaNetConfig()
+        config.token_mixer_type = "delta_product_unit"
+        config.rank = 2
+        config.use_decay = True
+        config.scalar_decay = True
 
     return config
 
@@ -246,6 +252,7 @@ def main(args):
         tokenizer.pad_token = tokenizer.eos_token
     b = 1
     m = len(tokenizer)
+    n = 32
 
     config = get_config(model_type)
     config.vocab_size = len(tokenizer)
@@ -302,7 +309,7 @@ def main(args):
                     )["logits"][:, -1]
                 )
     o2 = torch.cat(o2, dim=0)
-    print(f"diff: {torch.norm(o1 - o2)}")
+    print(f"n: {n}, diff: {torch.norm(o1 - o2)}")
 
     print("-" * 5, "End test generate with attention mask", "-" * 5)
 
@@ -366,6 +373,7 @@ if __name__ == "__main__":
             "mfa_kv_share",
             "hgrn1",
             "mamba2",
+            "scalar_decay_delta_product_net",
         ],
     )
     args = parser.parse_args()
