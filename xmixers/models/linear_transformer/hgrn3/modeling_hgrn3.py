@@ -6,6 +6,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
+from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -220,7 +221,7 @@ class Hgrn3Model(Hgrn3PreTrainedModel):
         )
 
 
-class Hgrn3ForCausalLM(Hgrn3PreTrainedModel):
+class Hgrn3ForCausalLM(Hgrn3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

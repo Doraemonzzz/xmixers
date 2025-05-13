@@ -6,6 +6,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
+from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -265,7 +266,7 @@ class NaiveHybridModel(NaiveHybridPreTrainedModel):
         )
 
 
-class NaiveHybridForCausalLM(NaiveHybridPreTrainedModel):
+class NaiveHybridForCausalLM(NaiveHybridPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

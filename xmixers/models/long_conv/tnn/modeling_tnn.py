@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 from transformers.cache_utils import Cache, DynamicCache
+from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -271,7 +272,7 @@ class TnnModel(TnnPreTrainedModel):
         )
 
 
-class TnnForCausalLM(TnnPreTrainedModel):
+class TnnForCausalLM(TnnPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

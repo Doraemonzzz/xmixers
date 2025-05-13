@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
+from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -251,7 +252,7 @@ class GsaModel(GsaPreTrainedModel):
         )
 
 
-class GsaForCausalLM(GsaPreTrainedModel):
+class GsaForCausalLM(GsaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

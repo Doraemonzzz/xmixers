@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
+from transformers.generation import GenerationMixin
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
@@ -296,7 +297,7 @@ class LmHeadHybridModel(LmHeadHybridPreTrainedModel):
         )
 
 
-class LmHeadHybridForCausalLM(LmHeadHybridPreTrainedModel):
+class LmHeadHybridForCausalLM(LmHeadHybridPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     supports_report_metrics: bool = True
 

@@ -146,7 +146,7 @@ class DeltaProductUnit(nn.Module):
         k = self.k_proj(x)
         v = self.v_proj(x)
 
-        if self.zero.shape[0] == 0 or self.zero.shape[1] != n:
+        if self.zero.shape[0] == 0 or self.zero.shape[1] != n * (self.rank - 1):
             self.zero = torch.zeros(b, n * (self.rank - 1), h, d // h).to(q)
         # b n h
         if self.use_decay:
