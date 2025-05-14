@@ -77,7 +77,7 @@ class DenseRnn(nn.Module):
         gate_act: str = "sigmoid",
         gate_pos: str = "pre",
         threshold: float = 0.99,
-        use_bias: bool = False,
+        use_offset: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -130,7 +130,7 @@ class DenseRnn(nn.Module):
             )
 
         self.embed_dim = embed_dim
-        self.use_bias = use_bias
+        self.use_offset = use_offset
         self.threshold = threshold
 
         self.qkv_norm_type = qkv_norm_type
@@ -156,23 +156,24 @@ class DenseRnn(nn.Module):
         return _initialize_weights(self, module)
 
     def setup_decay(self):
-        if not self.use_bias:
+        if not self.use_offset:
             return
         # take x = 0 as median, 1 / (1 + exp(-(median + delta))) = a => 1 + exp(-delta) = 1 / a => exp(-delta) = (1 / a - 1) -> exp(delta) = a / (1 - a) => delta = log(a / (1 - a))
         a = self.threshold
-        bias = torch.ones(self.embed_dim) * math.log(a / (1 - a))
-        if hasattr(self, "bias"):
-            if isinstance(self.bias, DTensor):
-                self.bias.data.copy_(
+        # !!! important: don't use bias as hf fail to save it
+        offset = torch.ones(self.embed_dim) * math.log(a / (1 - a))
+        if hasattr(self, "offset"):
+            if isinstance(self.offset, DTensor):
+                self.offset.data.copy_(
                     DTensor.from_local(
-                        bias,
-                        device_mesh=self.bias.device_mesh,
+                        offset,
+                        device_mesh=self.offset.device_mesh,
                     )
                 )
             else:
-                self.bias.data.copy_(bias)
+                self.offset.data.copy_(offset)
         else:
-            self.bias = nn.Parameter(bias, requires_grad=True)
+            self.offset = nn.Parameter(offset, requires_grad=True)
 
     def extra_repr(self):
         return print_module(self)
@@ -193,8 +194,8 @@ class DenseRnn(nn.Module):
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
-        if self.use_bias:
-            f = self.f_proj(x) + self.bias
+        if self.use_offset:
+            f = self.f_proj(x) + self.offset
         else:
             f = self.f_proj(x)
 

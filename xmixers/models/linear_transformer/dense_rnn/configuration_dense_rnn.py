@@ -39,7 +39,7 @@ class DenseRnnConfig(PretrainedConfig):
         gate_act="sigmoid",
         gate_pos="pre",
         threshold=0.99,
-        use_bias=False,
+        use_offset=False,
         ##### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,

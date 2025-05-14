@@ -17,6 +17,7 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
 # ToDo
 - [ ] Pad embed dim;
   - [ ] hybrid, transformer, hybrid;
+- [ ] Update use bias to use offset;
 
 # Finished Model
 - [x] Mpa

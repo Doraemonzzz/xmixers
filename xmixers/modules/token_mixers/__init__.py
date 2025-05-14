@@ -403,7 +403,7 @@ def get_token_mixer(config, layer_idx):
             gate_act=config.gate_act,
             gate_pos=config.gate_pos,
             threshold=config.threshold,
-            use_bias=config.use_bias,
+            use_offset=config.use_offset,
         )
     elif config.token_mixer_type in ["delta_unit"]:
         return cls(
