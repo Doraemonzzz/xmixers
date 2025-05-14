@@ -43,12 +43,12 @@ class TnlConfig(PretrainedConfig):
         gate_act="sigmoid",
         gate_pos="pre",
         token_mixer_norm_type="rmsnorm",
-        ###### channel mixer config
+        ##### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
         channel_mixer_activation="silu",
         use_gate_linear=True,
-        # others
+        ##### others
         max_position_embeddings=1024,
         num_layers=24,
         use_lrpe_list=[False],
@@ -56,7 +56,8 @@ class TnlConfig(PretrainedConfig):
         n_max=256,
         use_embed_scale=False,
         ce_type="xopes_flce",
-        # init
+        pad_embed_dim=True,
+        ##### init
         init_type=1,
         token_mixer_init_type=4,
         rescale_type=2,

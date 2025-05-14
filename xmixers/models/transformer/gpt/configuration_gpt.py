@@ -39,6 +39,7 @@ class GPTConfig(PretrainedConfig):
         init_type=0,
         rescale_type=0,
         use_embed_scale=False,
+        pad_embed_dim=True,
         **kwargs,
     ):
         super().__init__(

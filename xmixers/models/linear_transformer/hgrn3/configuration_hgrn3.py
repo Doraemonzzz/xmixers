@@ -47,7 +47,8 @@ class Hgrn3Config(PretrainedConfig):
         use_dense_memory=True,
         use_embed_scale=False,
         ce_type="xopes_flce",
-        # init
+        pad_embed_dim=True,
+        ##### init
         init_type=1,
         token_mixer_init_type=4,
         rescale_type=2,

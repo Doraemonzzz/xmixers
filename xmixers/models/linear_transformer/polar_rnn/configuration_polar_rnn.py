@@ -20,18 +20,18 @@ class PolarRnnConfig(PretrainedConfig):
         use_cache=True,
         init_std=0.02,
         tie_word_embeddings=False,
-        ##### model config
-        # attention config
+        ########## model config
+        ##### token mixer config
         token_mixer_type="polar_rnn",
         embed_dim=1024,
         num_heads=8,
         bias=False,
-        # channel mixer config
+        ##### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
         channel_mixer_activation="silu",
         use_gate_linear=False,
-        # others
+        ##### others
         max_position_embeddings=1024,
         use_output_gate=True,
         norm_type="layernorm",
@@ -48,7 +48,8 @@ class PolarRnnConfig(PretrainedConfig):
         causal=True,
         num_layers=12,
         use_embed_scale=False,
-        # init
+        pad_embed_dim=True,
+        ##### init
         init_type=0,
         token_mixer_init_type=0,
         rescale_type=0,

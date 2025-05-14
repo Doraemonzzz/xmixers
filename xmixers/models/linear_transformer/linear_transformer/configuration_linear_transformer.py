@@ -34,7 +34,7 @@ class LinearTransformerConfig(PretrainedConfig):
         gate_pos="pre",
         token_mixer_norm_type="rmsnorm",
         use_tpe=True,
-        ###### channel mixer config
+        ##### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
         channel_mixer_activation="silu",
@@ -50,6 +50,7 @@ class LinearTransformerConfig(PretrainedConfig):
         use_embed_scale=False,
         use_dense_memory=False,
         ce_type="xopes_flce",
+        pad_embed_dim=True,
         ##### init
         init_type=1,
         token_mixer_init_type=4,

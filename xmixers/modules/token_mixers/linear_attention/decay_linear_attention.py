@@ -12,7 +12,7 @@ from fla.ops.gla import chunk_gla
 from fla.ops.simple_gla import chunk_simple_gla
 from torch.distributed.tensor import DTensor
 from transformers.cache_utils import Cache
-from xopes.ops import cumsum_fn
+from xopes.ops import cumsum_fn, lightning_attn_func
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn
@@ -52,6 +52,7 @@ class DecayLinearAttention(nn.Module):
         num_layers: int = 12,
         init_std: float = 0.02,
         gain: float = 0.01,
+        use_lightning: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -122,6 +123,7 @@ class DecayLinearAttention(nn.Module):
                 nn.Linear(self.head_dim, embed_dim, bias=bias),
             )
 
+        self.use_lightning = use_lightning
         self.threshold = threshold
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
@@ -466,44 +468,62 @@ class DecayLinearAttention(nn.Module):
         dtype = q.dtype
         q, k, v, log_f = map(lambda x: x.to(dtype), [q, k, v, log_f])
 
-        scale = 1
-        if self.causal:
-            if self.training or recurrent_state is None:  # training or prefilling
-                if self.scalar_decay:
-                    fn = chunk_simple_gla
-                else:
-                    fn = chunk_gla
-                output, recurrent_state = fn(
-                    q=q,
-                    k=k,
-                    v=v,
-                    g=log_f,
-                    scale=scale,
-                    initial_state=recurrent_state,
-                    output_final_state=use_cache,
-                    head_first=False,
-                )
+        if self.use_lightning:
+            if self.scalar_decay:
+                decay_type = "scalar"
+                ld = log_f
+                ldk = None
             else:
-                if self.scalar_decay:
-                    g = log_f
-                    gk = None
-                else:
-                    g = None
-                    gk = log_f
-
-                output, recurrent_state = fused_recurrent(
-                    q=q,
-                    k=k,
-                    v=v,
-                    g=g,
-                    gk=gk,
-                    scale=scale,
-                    initial_state=recurrent_state,
-                    output_final_state=use_cache,
-                    head_first=False,
-                )
+                decay_type = "vector"
+                ld = None
+                ldk = log_f
+            output, recurrent_state = lightning_attn_func(
+                q=q,
+                k=k,
+                v=v,
+                ld=ld,
+                ldk=ldk,
+                decay_type=decay_type,
+            )
         else:
-            assert False
+            scale = 1
+            if self.causal:
+                if self.training or recurrent_state is None:  # training or prefilling
+                    if self.scalar_decay:
+                        fn = chunk_simple_gla
+                    else:
+                        fn = chunk_gla
+                    output, recurrent_state = fn(
+                        q=q,
+                        k=k,
+                        v=v,
+                        g=log_f,
+                        scale=scale,
+                        initial_state=recurrent_state,
+                        output_final_state=use_cache,
+                        head_first=False,
+                    )
+                else:
+                    if self.scalar_decay:
+                        g = log_f
+                        gk = None
+                    else:
+                        g = None
+                        gk = log_f
+
+                    output, recurrent_state = fused_recurrent(
+                        q=q,
+                        k=k,
+                        v=v,
+                        g=g,
+                        gk=gk,
+                        scale=scale,
+                        initial_state=recurrent_state,
+                        output_final_state=use_cache,
+                        head_first=False,
+                    )
+            else:
+                assert False
 
         if past_key_values is not None:
             past_key_values.update(

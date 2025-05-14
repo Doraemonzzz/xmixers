@@ -81,7 +81,8 @@ class LinearTransformerModel(LinearTransformerPreTrainedModel):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
-        config.vocab_size = pad_embed_dim(config.vocab_size)
+        if config.pad_embed_dim:
+            config.vocab_size = pad_embed_dim(config.vocab_size)
         self.config = config
         self.vocab_size = config.vocab_size
         self.gradient_checkpointing = False

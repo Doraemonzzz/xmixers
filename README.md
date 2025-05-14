@@ -14,6 +14,10 @@ This repository aims to implement SOTA efficient token/channel mixers. Any techn
     - Long Convolution
 - Channel Mixers
 
+# ToDo
+- [ ] Pad embed dim;
+  - [ ] hybrid, transformer, hybrid;
+
 # Finished Model
 - [x] Mpa
 - [x] T6

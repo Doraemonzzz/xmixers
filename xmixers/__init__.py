@@ -1,4 +1,7 @@
 from .models import (
+    DenseRnnConfig,
+    DenseRnnForCausalLM,
+    DenseRnnModel,
     GPTConfig,
     GPTForCausalLM,
     GPTLayer,

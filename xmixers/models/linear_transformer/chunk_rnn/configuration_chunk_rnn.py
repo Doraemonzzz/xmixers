@@ -20,29 +20,29 @@ class ChunkRnnConfig(PretrainedConfig):
         use_cache=True,
         init_std=0.02,
         tie_word_embeddings=False,
-        ##### model config
-        # attention config
+        ########## model config
+        ##### token mixer config
         embed_dim=1024,
         expand_ratio=8,
         bias=False,
         token_mixer_norm_type="layernorm",
         token_mixer_type="chunk_rnn",
-        # chunk params
+        ##### chunk params
         chunk_type: int = 0,
         gradient_type: int = 0,
         use_init_weights: bool = False,
         use_scale: bool = False,
         chunk_size: int = 128,
-        # lrpe
+        ##### lrpe
         use_lrpe: bool = True,
         lrpe_type: int = 1,
         base: int = 10000,
-        # glu config
+        ##### channel mixer config
         mid_dim=1024,
         channel_mixer_type="glu",
         channel_mixer_activation="silu",
         use_gate_linear=True,
-        # others
+        ##### others
         max_position_embeddings=1024,
         num_layers=24,
         use_output_gate=False,
@@ -50,7 +50,8 @@ class ChunkRnnConfig(PretrainedConfig):
         q_activation="silu",
         causal=True,
         use_embed_scale=False,
-        # init
+        pad_embed_dim=True,
+        ##### init
         init_type=0,
         token_mixer_init_type=0,
         rescale_type=0,

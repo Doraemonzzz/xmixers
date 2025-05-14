@@ -38,6 +38,7 @@ class nGPTConfig(PretrainedConfig):
         token_mixer_init_type=0,
         init_type=0,
         use_embed_scale=False,
+        pad_embed_dim=True,
         **kwargs,
     ):
         super().__init__(

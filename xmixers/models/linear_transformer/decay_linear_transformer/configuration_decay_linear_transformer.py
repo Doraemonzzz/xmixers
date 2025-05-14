@@ -32,6 +32,7 @@ class DecayLinearTransformerConfig(PretrainedConfig):
         gate_pos="pre",
         token_mixer_norm_type="rmsnorm",
         use_tpe=True,
+        use_lightning=False,
         ##### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
@@ -48,6 +49,7 @@ class DecayLinearTransformerConfig(PretrainedConfig):
         use_embed_scale=False,
         causal=True,
         ce_type="xopes_flce",
+        pad_embed_dim=True,
         ##### decay parameters
         decay_type="hgrn2",  # choose from ["hgrn2", "gla", "mamba", "mamba_no_a_no_t", "mamba_no_a", "mamba_no_t", "lightnet", "tnl", "tnll", "lssp", "hgrn3"] # lssp: log sum soft plus
         A_init_range=(1, 16),

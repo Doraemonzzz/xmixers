@@ -514,6 +514,7 @@ def get_token_mixer(config, layer_idx):
             num_layers=config.num_layers,
             init_std=config.init_std,
             gain=config.gain,
+            use_lightning=config.use_lightning,
         )
     elif config.token_mixer_type in ["gsa"]:
         return cls(

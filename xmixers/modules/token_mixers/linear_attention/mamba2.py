@@ -194,9 +194,11 @@ class Mamba2(nn.Module):
         self.D._no_weight_decay = True
 
     def _init_weights(self):
+        self.setup_mamba_params()
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
+        self.setup_mamba_params()
         return _initialize_weights(self, module)
 
     def forward(

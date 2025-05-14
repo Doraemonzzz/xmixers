@@ -82,6 +82,7 @@ class LmHeadHybridConfig(PretrainedConfig):
         gain=0.02,
         alpha=0.5,
         use_linear_head=True,
+        pad_embed_dim=True,
         **kwargs,
     ):
         super().__init__(

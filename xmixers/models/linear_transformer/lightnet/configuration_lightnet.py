@@ -50,6 +50,7 @@ class LightNetConfig(PretrainedConfig):
         use_embed_scale=False,
         causal=True,
         ce_type="xopes_flce",
+        pad_embed_dim=True,
         ##### init
         init_type=1,
         token_mixer_init_type=4,

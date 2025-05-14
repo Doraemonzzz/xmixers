@@ -87,6 +87,7 @@ class NaiveHybridConfig(PretrainedConfig):
         rescale_type=2,
         gain=0.01,
         channel_mixer_init_type=0,
+        pad_embed_dim=True,
         **kwargs,
     ):
         super().__init__(

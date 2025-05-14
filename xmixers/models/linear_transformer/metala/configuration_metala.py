@@ -38,6 +38,7 @@ class MetaLaConfig(PretrainedConfig):
         q_activation="silu",
         causal=True,
         use_embed_scale=False,
+        pad_embed_dim=True,
         # init
         init_type=0,
         token_mixer_init_type=0,

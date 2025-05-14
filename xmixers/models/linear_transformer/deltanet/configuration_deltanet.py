@@ -55,6 +55,7 @@ class DeltaNetConfig(PretrainedConfig):
         num_layers=12,
         use_embed_scale=False,
         ce_type="xopes_flce",
+        pad_embed_dim=True,
         ##### init
         init_type=1,
         token_mixer_init_type=4,

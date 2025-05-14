@@ -77,6 +77,7 @@ class LLaMAConfig(PretrainedConfig):
         token_mixer_init_type=4,
         rescale_type=2,
         gain=0.01,
+        pad_embed_dim=True,
         **kwargs,
     ):
         super().__init__(
