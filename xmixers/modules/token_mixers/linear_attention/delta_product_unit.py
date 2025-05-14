@@ -146,8 +146,10 @@ class DeltaProductUnit(nn.Module):
         k = self.k_proj(x)
         v = self.v_proj(x)
 
-        if self.zero.shape[0] == 0 or self.zero.shape[1] != n * (self.rank - 1):
-            self.zero = torch.zeros(b, n * (self.rank - 1), h, d // h).to(q)
+        if self.zero.shape[0] == 0 or self.zero.shape[:2] != torch.Size(
+            [b, n * (self.rank - 1)]
+        ):
+            self.zero = torch.zeros(b, n * (self.rank - 1), h, self.head_dim).to(q)
         # b n h
         if self.use_decay:
             # l + (1 - l) * sigmoid(x)

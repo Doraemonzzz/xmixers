@@ -162,7 +162,7 @@ class DeltaUnit(nn.Module):
                 beta = beta * 2
         else:
             # if no beta, use 2 to get householder matrix
-            if self.beta.shape[0] == 0 or self.beta.shape[1] != n:
+            if self.beta.shape[0] == 0 or self.beta.shape[:2] != torch.Size([b, n]):
                 self.bet = torch.ones(b, n, h).to(q) * 2
             beta = self.bet
         # act

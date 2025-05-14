@@ -198,7 +198,7 @@ class DenseRnn(nn.Module):
         else:
             f = self.f_proj(x)
 
-        if self.zero.shape[0] == 0 or self.zero.shape[1] != n:
+        if self.zero.shape[0] == 0 or self.zero.shape[:2] != torch.Size([b, n]):
             self.zero = torch.zeros(b, n, h, d // h).to(q)
         # l + (1 - l) * sigmoid(x)
         if lower_bound is not None:
