@@ -81,7 +81,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
-        if config.pad_embed_dim:
+        if hasattr(config, "pad_embed_dim") and config.pad_embed_dim:
             config.vocab_size = pad_embed_dim(config.vocab_size)
         self.config = config
         self.vocab_size = config.vocab_size

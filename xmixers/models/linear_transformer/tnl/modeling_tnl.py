@@ -90,7 +90,7 @@ class TnlModel(TnlPreTrainedModel):
         super().__init__(config)
         # hf origin
         self.padding_idx = config.pad_token_id
-        if config.pad_embed_dim:
+        if hasattr(config, "pad_embed_dim") and config.pad_embed_dim:
             config.vocab_size = pad_embed_dim(config.vocab_size)
         self.config = config
         self.vocab_size = config.vocab_size
@@ -171,7 +171,7 @@ class TnlModel(TnlPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        () if use_cache else None
 
         if self.log_decay.shape[0] == 0:
             self.log_decay = get_log_slopes_general(
@@ -207,7 +207,7 @@ class TnlModel(TnlPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache = layer_outputs[-1]
+                layer_outputs[-1]
 
         hidden_states = self.final_norm(hidden_states)
 
@@ -215,16 +215,20 @@ class TnlModel(TnlPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                for v in [
+                    hidden_states,
+                    past_key_values,
+                    all_hidden_states,
+                    all_self_attns,
+                ]
                 if v is not None
             )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )

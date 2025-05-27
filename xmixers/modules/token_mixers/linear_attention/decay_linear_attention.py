@@ -477,12 +477,14 @@ class DecayLinearAttention(nn.Module):
                 decay_type = "vector"
                 ld = None
                 ldk = log_f
+
             output, recurrent_state = lightning_attn_func(
                 q=q,
                 k=k,
                 v=v,
                 ld=ld,
                 ldk=ldk,
+                initial_state=recurrent_state,
                 decay_type=decay_type,
             )
         else:
