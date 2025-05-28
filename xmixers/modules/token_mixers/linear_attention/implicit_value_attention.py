@@ -1,4 +1,3 @@
-# Hgru3: Hgru2 with negative decay
 import math
 from typing import Optional
 
@@ -6,32 +5,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from fla.ops.gla import chunk_gla, fused_recurrent_gla
-from fla.ops.simple_gla import chunk_simple_gla, fused_recurrent_simple_gla
 from torch.distributed.tensor import DTensor
 from transformers.cache_utils import Cache
-from xopes.ops import cumsum_fn
+from xopes.ops import implicit_attn_func
 
 from xmixers.modules.activations import get_activation_fn
-from xmixers.modules.normalizations import get_norm_fn
+from xmixers.modules.normalizations import get_norm_fn, l2_norm
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
 
-class Hgru3(nn.Module):
+class ImplicitValueAttention(nn.Module):
     def __init__(
         self,
         embed_dim: int,
-        expand_ratio: int,
+        num_heads: int,
         bias: bool = False,
         layer_idx: int = 0,
-        use_output_gate: bool = True,
+        use_output_gate: bool = False,
         token_mixer_norm_type: str = "rmsnorm",
         q_activation: str = "silu",
         k_activation: str = "silu",
         threshold: float = 0.99,
         causal: bool = True,
-        use_dense_memory: bool = False,
-        scalar_decay: bool = False,
         token_mixer_init_type: int = 4,
         rescale_type: int = 2,
         num_layers: int = 12,
@@ -51,37 +46,36 @@ class Hgru3(nn.Module):
         assert causal, f"Only causal={causal} is supported"
 
         self.layer_idx = layer_idx
-        self.expand_ratio = expand_ratio
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
         self.causal = causal
-        self.use_dense_memory = use_dense_memory
         self.use_output_gate = use_output_gate
+        self.threshold = threshold
 
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.scalar_decay = scalar_decay
-        self.decay_dim = embed_dim
-        if self.scalar_decay:
-            self.decay_dim = embed_dim // expand_ratio
-            self.f_proj = nn.Linear(embed_dim, self.decay_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+        self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
-        self.threshold = threshold
-
-        num_groups = embed_dim // expand_ratio
+        token_mixer_norm_type = (
+            f"{token_mixer_norm_type}_fused_gate"
+            if token_mixer_norm_type
+            else token_mixer_norm_type
+        )
         self.norm = get_norm_fn(token_mixer_norm_type)(
             embed_dim,
             bias=bias,
             gate_act=gate_act,
             gate_pos=gate_pos,
-            num_groups=num_groups,
+            num_groups=num_heads,
         )
 
         if self.use_output_gate:
             self.output_gate = nn.Sequential(
-                nn.Linear(embed_dim, expand_ratio, bias=bias),
-                nn.Linear(expand_ratio, embed_dim, bias=bias),
+                nn.Linear(embed_dim, self.head_dim, bias=bias),
+                nn.Linear(self.head_dim, embed_dim, bias=bias),
             )
 
         self.token_mixer_init_type = token_mixer_init_type
@@ -98,7 +92,7 @@ class Hgru3(nn.Module):
     def setup_decay(self):
         # take x = 0 as median, 1 / (1 + exp(-(median + delta))) = a => 1 + exp(-delta) = 1 / a => exp(-delta) = (1 / a - 1) -> exp(delta) = a / (1 - a) => delta = log(a / (1 - a))
         a = self.threshold
-        delta = torch.ones(self.decay_dim) * math.log(a / (1 - a))
+        delta = torch.ones(self.num_heads) * math.log(a / (1 - a))
         if hasattr(self, "delta"):
             if isinstance(self.delta, DTensor):
                 self.delta.data.copy_(
@@ -128,75 +122,57 @@ class Hgru3(nn.Module):
         use_cache: Optional[bool] = False,
         **kwargs,
     ):
+        b, n, d = x.shape
         # x: b n d
         # linear map
         q = self.q_proj(x)
-        v = self.v_proj(x)
-        if self.scalar_decay:
-            log_f = F.logsigmoid(self.f_proj(x + self.delta))
-            k = self.k_act(k)
-        else:
-            log_f = F.logsigmoid(self.k_proj(x + self.delta))
-            k = 1 - torch.exp(log_f)
+        k = self.k_proj(x)
+        o = self.v_proj(x)
+        f = self.f_proj(x) + self.delta
+
+        q, k, o = map(
+            lambda x: rearrange(x, "... (h d) -> ... h d", d=self.head_dim),
+            [q, k, o],
+        )
 
         # act
-        q = self.q_act(q)
-
-        # h is num_head, d is head dimension
-        q, k, v = map(
-            lambda x: rearrange(x, "... (h d) -> ... h d", d=self.expand_ratio),
-            [q, k, v],
-        )
-        if not self.scalar_decay:
-            f = rearrange(log_f, "... (h d) -> ... h d", d=self.expand_ratio)
-
-        sign_f = torch.sign(f - 0.5)
-        if self.scalar_decay:
-            sign_f = sign_f.unsqueeze(-1)
-        theta = cumsum_fn(sign_f, dim=1) * math.pi
-        sin = torch.sin(theta)
-        cos = torch.cos(theta)
-        q = torch.cat([q * cos, q * sin], dim=-1)
-        k = torch.cat([k * cos, k * sin], dim=-1)
-        if not self.scalar_decay:
-            log_f = torch.cat([log_f, log_f], dim=-1)
+        q = l2_norm(self.q_act(q))
+        k = l2_norm(self.k_act(k))
+        log_f = F.logsigmoid(f)
 
         recurrent_state = None
+        q_offset = 0
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
-            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"]
+            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
+            q_offset = past_key_values.get_seq_length(self.layer_idx)
+
+        use_attn_mask = (
+            attention_mask is not None and not attention_mask.all() and (n > 1)
+        )
+        # left padding
+        if use_attn_mask:
+            start = q_offset
+            attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
+            k = k.masked_fill(attention_mask_ == 0, 0)
+            log_f = log_f.masked_fill(attention_mask_.squeeze(-1) == 0, 0)
 
         if self.causal:
-            dtype = q.dtype
-            if self.scalar_decay:
-                if self.training or use_cache:
-                    fn = chunk_simple_gla
-                else:
-                    fn = fused_recurrent_simple_gla
-            else:
-                if self.training or use_cache:
-                    fn = chunk_gla
-                else:
-                    fn = fused_recurrent_gla
-
-            output, recurrent_state = fn(
+            output, recurrent_state = implicit_attn_func(
                 q=q,
-                k=k.to(dtype),
-                v=v.to(dtype),
-                g=log_f.to(dtype),
+                k=k,
+                o=o,
+                ld=log_f,
                 initial_state=recurrent_state,
-                output_final_state=use_cache,
-                head_first=False,
+                implicit_type="inverse_v",
             )
-
-            output = output.to(x.dtype)
         else:
             assert False
 
         if past_key_values is not None:
             past_key_values.update(
-                recurrent_state=recurrent_state,
+                recurrent_state=[recurrent_state],
                 layer_idx=self.layer_idx,
-                offset=x.shape[-2],
+                offset=n,
             )
 
         # reshape
@@ -208,6 +184,6 @@ class Hgru3(nn.Module):
             output = self.norm(output)
 
         # out proj
-        output = self.out_proj(output)
+        output = self.o_proj(output)
 
         return output, past_key_values

@@ -8,6 +8,7 @@ from .hgru1 import Hgru1
 from .hgru2 import Hgru2
 from .hgru2_scalar_decay import Hgru2ScalarDecay
 from .hgru3 import Hgru3
+from .implicit_value_attention import ImplicitValueAttention
 from .lightnet_attention import LightNetAttention
 from .linear_attention import LinearAttention
 from .mamba2 import Mamba2

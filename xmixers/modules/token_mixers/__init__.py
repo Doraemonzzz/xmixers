@@ -10,6 +10,7 @@ from .linear_attention import (
     Hgru2,
     Hgru2ScalarDecay,
     Hgru3,
+    ImplicitValueAttention,
     LightNetAttention,
     LinearAttention,
     Mamba2,
@@ -67,6 +68,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "ttt": TTT,
     "mamba2": Mamba2,
     "delta_product_unit": DeltaProductUnit,
+    "implicit_value_attn": ImplicitValueAttention,
     # long conv
     "gtu": Gtu,
 }
@@ -682,4 +684,24 @@ def get_token_mixer(config, layer_idx):
             gate_act=config.gate_act,
             gate_pos=config.gate_pos,
             rank=config.rank,
+        )
+    elif config.token_mixer_type in ["implicit_value_attn"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            use_output_gate=config.use_output_gate,
+            token_mixer_norm_type=config.token_mixer_norm_type,
+            q_activation=config.q_activation,
+            k_activation=config.k_activation,
+            threshold=config.threshold,
+            causal=config.causal,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            init_std=config.init_std,
+            gain=config.gain,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
         )

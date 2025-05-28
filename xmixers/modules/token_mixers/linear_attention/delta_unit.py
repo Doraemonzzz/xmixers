@@ -115,7 +115,7 @@ class DeltaUnit(nn.Module):
         self.num_heads = num_heads
         self.init_std = init_std
         self.gain = gain
-        self.apply(self._initialize_weights)
+        self._init_weights()
         self.f = torch.empty(0)
         self.zero = torch.empty(0)
         self.beta = torch.empty(0)

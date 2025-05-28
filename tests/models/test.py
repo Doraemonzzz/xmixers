@@ -13,6 +13,7 @@ from xmixers.models import (
     Hgrn1Config,
     Hgrn2Config,
     Hgrn3Config,
+    ImplicitLinearTransformerConfig,
     LightNetConfig,
     LinearTransformerConfig,
     LLaMAConfig,
@@ -217,6 +218,9 @@ def get_config(model_type):
         config.rank = 2
         config.use_decay = True
         config.scalar_decay = True
+    elif model_type == "implicit_value_attn":
+        config = ImplicitLinearTransformerConfig()
+        config.token_mixer_type = "implicit_value_attn"
 
     return config
 
@@ -374,6 +378,7 @@ if __name__ == "__main__":
             "hgrn1",
             "mamba2",
             "scalar_decay_delta_product_net",
+            "implicit_value_attn",
         ],
     )
     args = parser.parse_args()

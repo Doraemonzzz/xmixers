@@ -11,6 +11,12 @@ from .gsa import GsaConfig, GsaForCausalLM, GsaLayer, GsaModel
 from .hgrn1 import Hgrn1Config, Hgrn1ForCausalLM, Hgrn1Layer, Hgrn1Model
 from .hgrn2 import Hgrn2Config, Hgrn2ForCausalLM, Hgrn2Layer, Hgrn2Model
 from .hgrn3 import Hgrn3Config, Hgrn3ForCausalLM, Hgrn3Layer, Hgrn3Model
+from .implicit_linear_transformer import (
+    ImplicitLinearTransformerConfig,
+    ImplicitLinearTransformerForCausalLM,
+    ImplicitLinearTransformerLayer,
+    ImplicitLinearTransformerModel,
+)
 from .lightnet import LightNetConfig, LightNetForCausalLM, LightNetLayer, LightNetModel
 from .linear_transformer import (
     LinearTransformerConfig,

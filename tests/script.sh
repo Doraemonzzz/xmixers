@@ -55,6 +55,7 @@ model_type=decay_linear_transformer_gla
 # model_type=hgrn1
 # model_type=mamba2
 # model_type=scalar_decay_delta_product_net
+model_type=implicit_value_attn
 
 dtype=bf16
 # dtype=fp32

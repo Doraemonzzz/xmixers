@@ -94,8 +94,7 @@ class Hgru3(nn.Module):
         self.embed_dim = embed_dim
         self.init_std = init_std
         self.gain = gain
-        self.setup_decay()
-        self.apply(self._initialize_weights)
+        self._init_weights()
 
     def extra_repr(self):
         return print_module(self)

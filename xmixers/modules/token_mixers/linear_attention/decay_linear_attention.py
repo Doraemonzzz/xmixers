@@ -140,7 +140,6 @@ class DecayLinearAttention(nn.Module):
             "dt_init_floor": dt_init_floor,
             "dt_limit": dt_limit,
         }
-        self.setup_decay(**self.decay_kwargs)
         self._init_weights()
 
     def _init_weights(self):
