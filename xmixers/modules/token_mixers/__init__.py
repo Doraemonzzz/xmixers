@@ -433,6 +433,8 @@ def get_token_mixer(config, layer_idx):
             gain=config.gain,
             gate_act=config.gate_act,
             gate_pos=config.gate_pos,
+            use_offset=config.use_offset,
+            threshold=config.threshold,
         )
     elif config.token_mixer_type in ["chunk_rnn"]:
         return cls(

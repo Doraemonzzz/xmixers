@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 
 import torch
@@ -13,6 +14,7 @@ from fla.ops.generalized_delta_rule import (
     chunk_dplr_delta_rule,
     fused_recurrent_dplr_delta_rule,
 )
+from torch.distributed.tensor import DTensor
 from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
@@ -48,6 +50,8 @@ class DeltaUnit(nn.Module):
         gain: float = 0.01,
         gate_act: str = "sigmoid",
         gate_pos: str = "pre",
+        use_offset: bool = False,
+        threshold: float = 0.99,
         **kwargs,
     ):
         super().__init__()
@@ -62,6 +66,8 @@ class DeltaUnit(nn.Module):
         self.layer_idx = layer_idx
         self.causal = causal
         self.use_output_gate = use_output_gate
+        self.use_offset = use_offset
+        self.threshold = threshold
 
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -99,11 +105,15 @@ class DeltaUnit(nn.Module):
         if self.use_decay:
             if self.scalar_decay:
                 self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+                if self.use_offset:
+                    self.decay_dim = num_heads
             else:
                 self.f_proj = nn.Sequential(
                     nn.Linear(embed_dim, self.head_dim, bias=bias),
                     nn.Linear(self.head_dim, embed_dim, bias=bias),
                 )
+                if self.use_offset:
+                    self.decay_dim = embed_dim
 
         self.qkv_norm_type = qkv_norm_type
         self.norm_q = norm_q
@@ -121,10 +131,32 @@ class DeltaUnit(nn.Module):
         self.beta = torch.empty(0)
         self.init_state = torch.empty(0)
 
+    def setup_decay(self):
+        if not self.use_offset:
+            return
+        # take x = 0 as median, 1 / (1 + exp(-(median + delta))) = a => 1 + exp(-delta) = 1 / a => exp(-delta) = (1 / a - 1) -> exp(delta) = a / (1 - a) => delta = log(a / (1 - a))
+        a = self.threshold
+        # !!! important: don't use bias as hf fail to save it
+        offset = torch.ones(self.decay_dim) * math.log(a / (1 - a))
+        if hasattr(self, "offset"):
+            if isinstance(self.offset, DTensor):
+                self.offset.data.copy_(
+                    DTensor.from_local(
+                        offset,
+                        device_mesh=self.offset.device_mesh,
+                    )
+                )
+            else:
+                self.offset.data.copy_(offset)
+        else:
+            self.offset = nn.Parameter(offset, requires_grad=True)
+
     def _init_weights(self):
+        self.setup_decay()
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
+        self.setup_decay()
         return _initialize_weights(self, module)
 
     def forward(
@@ -148,11 +180,17 @@ class DeltaUnit(nn.Module):
         if self.use_decay:
             # l + (1 - l) * sigmoid(x)
             if lower_bound is not None:
-                f = F.sigmoid(self.f_proj(x))
+                f = self.f_proj(x)
+                if self.use_offset:
+                    f = f + self.offset
+                f = F.sigmoid(f)
                 f = lower_bound + (1 - lower_bound) * f
                 log_f = torch.log(f)
             else:
-                log_f = F.logsigmoid(self.f_proj(x))
+                f = self.f_proj(x)
+                if self.use_offset:
+                    f = f + self.offset
+                log_f = F.logsigmoid(f)
         else:
             log_f = None
         # b n h

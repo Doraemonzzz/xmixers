@@ -42,6 +42,8 @@ class DeltaNetConfig(PretrainedConfig):
         gate_pos="pre",
         use_input_gate=False,
         rank=2,
+        use_offset=False,
+        threshold=0.99,
         ##### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
