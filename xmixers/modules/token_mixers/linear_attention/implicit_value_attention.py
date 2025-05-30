@@ -26,6 +26,7 @@ class ImplicitValueAttention(nn.Module):
         q_activation: str = "silu",
         k_activation: str = "silu",
         threshold: float = 0.99,
+        use_offset: bool = False,
         causal: bool = True,
         token_mixer_init_type: int = 4,
         rescale_type: int = 2,
@@ -51,11 +52,14 @@ class ImplicitValueAttention(nn.Module):
         self.causal = causal
         self.use_output_gate = use_output_gate
         self.threshold = threshold
+        self.use_offset = use_offset
 
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+        self.f1_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+        self.beta_proj = nn.Linear(embed_dim, num_heads, bias=bias)
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
@@ -90,6 +94,8 @@ class ImplicitValueAttention(nn.Module):
         return print_module(self)
 
     def setup_decay(self):
+        if not self.use_offset:
+            return
         # take x = 0 as median, 1 / (1 + exp(-(median + delta))) = a => 1 + exp(-delta) = 1 / a => exp(-delta) = (1 / a - 1) -> exp(delta) = a / (1 - a) => delta = log(a / (1 - a))
         a = self.threshold
         delta = torch.ones(self.num_heads) * math.log(a / (1 - a))
@@ -127,18 +133,19 @@ class ImplicitValueAttention(nn.Module):
         # linear map
         q = self.q_proj(x)
         k = self.k_proj(x)
-        o = self.v_proj(x)
-        f = self.f_proj(x) + self.delta
+        v = self.v_proj(x)
+        f = self.f_proj(x)
+        if self.use_offset:
+            f = f + self.delta
 
-        q, k, o = map(
+        q, k, v = map(
             lambda x: rearrange(x, "... (h d) -> ... h d", d=self.head_dim),
-            [q, k, o],
+            [q, k, v],
         )
 
-        # act
-        q = l2_norm(self.q_act(q))
-        k = l2_norm(self.k_act(k))
-        log_f = F.logsigmoid(f)
+        q = l2_norm(q)
+        k = l2_norm(k)
+        log_f = F.logsigmoid(f.float())
 
         recurrent_state = None
         q_offset = 0
@@ -157,14 +164,17 @@ class ImplicitValueAttention(nn.Module):
             log_f = log_f.masked_fill(attention_mask_.squeeze(-1) == 0, 0)
 
         if self.causal:
+            # TODO: grad norm nan
             output, recurrent_state = implicit_attn_func(
                 q=q,
                 k=k,
-                o=o,
+                o=v,
                 ld=log_f,
                 initial_state=recurrent_state,
                 implicit_type="inverse_v",
+                normalize=True,
             )
+            output = output.to(x.dtype)
         else:
             assert False
 

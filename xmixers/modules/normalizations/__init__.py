@@ -4,7 +4,7 @@ from .dynamic_tanh import DynamicTanh, DynamicTanhFusedGate
 from .group_norm import GroupNorm
 from .group_rms_norm import GroupRMSNorm, GroupRMSNormFusedGate
 from .group_srms_norm import GroupSRMSNorm
-from .l2_norm import l2_norm
+from .l2_norm import l2_norm, rms_norm_fn
 from .layer_norm import LayerNorm
 from .offset_scale import OffsetScale
 from .rms_norm import GatedRMSNorm, RMSNorm, RMSNormFusedGate

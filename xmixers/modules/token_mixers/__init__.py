@@ -698,6 +698,7 @@ def get_token_mixer(config, layer_idx):
             q_activation=config.q_activation,
             k_activation=config.k_activation,
             threshold=config.threshold,
+            use_offset=config.use_offset,
             causal=config.causal,
             token_mixer_init_type=config.token_mixer_init_type,
             rescale_type=config.rescale_type,

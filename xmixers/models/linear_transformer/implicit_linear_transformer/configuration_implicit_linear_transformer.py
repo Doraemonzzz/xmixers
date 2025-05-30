@@ -43,6 +43,7 @@ class ImplicitLinearTransformerConfig(PretrainedConfig):
         q_activation="silu",
         k_activation="silu",
         threshold=0.99,
+        use_offset=False,
         causal=True,
         use_embed_scale=False,
         ce_type="xopes_flce",
