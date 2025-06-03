@@ -40,6 +40,7 @@ class DenseRnnConfig(PretrainedConfig):
         gate_pos="pre",
         threshold=0.99,
         use_offset=False,
+        num_blocks=1,
         ##### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,

@@ -4,7 +4,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
+from einops import rearrange, repeat
 from fla.ops.generalized_delta_rule import (
     chunk_dplr_delta_rule,
     fused_recurrent_dplr_delta_rule,
@@ -78,6 +78,7 @@ class DenseRnn(nn.Module):
         gate_pos: str = "pre",
         threshold: float = 0.99,
         use_offset: bool = False,
+        num_blocks: int = 1,
         **kwargs,
     ):
         super().__init__()
@@ -143,9 +144,11 @@ class DenseRnn(nn.Module):
         self.num_heads = num_heads
         self.init_std = init_std
         self.gain = gain
+        self.num_blocks = num_blocks
         self._init_weights()
         self.f = torch.empty(0)
-        self.zero = torch.empty(0)
+        self.zero_qk = torch.empty(0)
+        self.zero_v = torch.empty(0)
 
     def _init_weights(self):
         self.setup_decay()
@@ -199,8 +202,12 @@ class DenseRnn(nn.Module):
         else:
             f = self.f_proj(x)
 
-        if self.zero.shape[0] == 0 or self.zero.shape[:2] != torch.Size([b, n]):
-            self.zero = torch.zeros(b, n, h, d // h).to(q)
+        if self.zero_qk.shape[0] == 0 or self.zero_qk.shape[:2] != torch.Size([b, n]):
+            self.zero_qk = torch.zeros(
+                b, n, h * self.num_blocks, d // h // self.num_blocks
+            ).to(q)
+        if self.zero_v.shape[0] == 0 or self.zero_v.shape[:2] != torch.Size([b, n]):
+            self.zero_v = torch.zeros(b, n, h * self.num_blocks, d // h).to(q)
         # l + (1 - l) * sigmoid(x)
         if lower_bound is not None:
             f = lower_bound + (1 - lower_bound) * F.sigmoid(f)
@@ -224,6 +231,14 @@ class DenseRnn(nn.Module):
             lambda x: rearrange(x, "... (h d) -> ... h d", d=self.head_dim),
             [q, k, v, log_f],
         )
+
+        if self.num_blocks > 1:
+            q = rearrange(q, "b n h (k d) -> b n (h k) d", k=self.num_blocks)
+            k = rearrange(k, "b n h (k d) -> b n (h k) d", k=self.num_blocks)
+            log_f = rearrange(log_f, "b n h (k d) -> b n (h k) d", k=self.num_blocks)
+            v = repeat(v, "b n h e -> b n (h k) e", k=self.num_blocks)
+            if self.use_beta:
+                beta = repeat(beta, "b n h d -> b n (h k) d", k=self.num_blocks)
 
         if self.norm_q:
             q = l2_norm(q)
@@ -273,14 +288,13 @@ class DenseRnn(nn.Module):
         #     lambda x: rearrange(x, "b (c n) ... -> b (n c) ... ", c=3),
         #     [log_f, a, b, k, v, q],
         # )
-
         k_ = k * (-beta)
         a = torch.cat([k_ * torch.exp(log_f), k_], dim=1)
         b = torch.cat([k, k], dim=1)
-        k = torch.cat([self.zero, k], dim=1)
-        v = torch.cat([self.zero, v], dim=1)
-        q = torch.cat([self.zero, q], dim=1)
-        log_f = torch.cat([log_f, self.zero], dim=1)
+        q = torch.cat([self.zero_qk, q], dim=1)
+        k = torch.cat([self.zero_qk, k], dim=1)
+        v = torch.cat([self.zero_v, v], dim=1)
+        log_f = torch.cat([log_f, self.zero_qk], dim=1)
         log_f, a, b, k, v, q = map(
             lambda x: rearrange(x, "b (c n) ... -> b (n c) ... ", c=2),
             [log_f, a, b, k, v, q],
@@ -311,6 +325,11 @@ class DenseRnn(nn.Module):
 
         output = rearrange(output, "b (n c) ... -> b (c n) ...", c=2)
         output = output[:, -n:]
+
+        if self.num_blocks > 1:
+            output = rearrange(
+                output, "b n (h k) d -> b n h k d", k=self.num_blocks
+            ).sum(dim=-2)
 
         if past_key_values is not None:
             past_key_values.update(
