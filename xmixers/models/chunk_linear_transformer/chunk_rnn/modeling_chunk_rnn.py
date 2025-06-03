@@ -3,7 +3,6 @@
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from transformers.cache_utils import Cache
@@ -21,8 +20,14 @@ logger = logging.get_logger(__name__)
 
 
 from xmixers.modules import get_channel_mixer, get_norm_fn, get_token_mixer
-from xmixers.utils import XmixersCache, _init_weights, print_module
-from xmixers.utils.loss_utils import compute_loss
+from xmixers.utils import (
+    XmixersCache,
+    _init_weights,
+    _post_init_weights,
+    pad_embed_dim,
+    print_module,
+)
+from xmixers.utils.loss_utils import Loss
 
 from .configuration_chunk_rnn import ChunkRnnConfig
 
@@ -32,13 +37,10 @@ class ChunkRnnLayer(nn.Module):
         super().__init__()
 
         self.token_mixer = get_token_mixer(config, layer_idx)
-
         self.token_norm = get_norm_fn(config.norm_type)(
             config.embed_dim, bias=config.bias
         )
-
         self.channel_mixer = get_channel_mixer(config)
-
         self.channel_norm = get_norm_fn(config.norm_type)(
             config.embed_dim, bias=config.bias
         )
@@ -49,7 +51,7 @@ class ChunkRnnLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,  # (b, m)
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        lower_bound: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         # token mixer
         residual = x
@@ -58,7 +60,7 @@ class ChunkRnnLayer(nn.Module):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            lower_bound=lower_bound,
+            **kwargs,
         )
         x = x + residual
 
@@ -104,11 +106,6 @@ class ChunkRnnModel(ChunkRnnPreTrainedModel):
         )
         self.final_norm = get_norm_fn(config.norm_type)(
             config.embed_dim, bias=config.bias
-        )
-
-        # log lower bound
-        self.log_lower_bounds = nn.Parameter(
-            torch.ones(config.num_layers, config.embed_dim), requires_grad=True
         )
 
         # Initialize weights and apply final processing
@@ -177,13 +174,7 @@ class ChunkRnnModel(ChunkRnnPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        # lower bound
-        lower_bounds = F.softmax(self.log_lower_bounds, dim=0)
-        lower_bounds = torch.cumsum(lower_bounds, dim=0)
-        lower_bounds -= lower_bounds[0, ...].clone()
-
         for idx, layer in enumerate(self.layers):
-            lower_bound = lower_bounds[idx]
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -194,7 +185,7 @@ class ChunkRnnModel(ChunkRnnPreTrainedModel):
                     attention_mask,
                     past_key_values,
                     use_cache,
-                    lower_bound,
+                    **kwargs,
                 )
             else:
                 hidden_states, past_key_values = layer(
@@ -202,7 +193,7 @@ class ChunkRnnModel(ChunkRnnPreTrainedModel):
                     attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
-                    lower_bound=lower_bound,
+                    **kwargs,
                 )
 
         hidden_states = self.final_norm(hidden_states)
@@ -240,9 +231,14 @@ class ChunkRnnForCausalLM(ChunkRnnPreTrainedModel, GenerationMixin):
 
         # the lm_head weight is automatically tied to the embed tokens weight
         self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=config.bias)
-
+        self.loss = Loss()
         # Initialize weights and apply final processing
         self.post_init()
+
+    def post_init_weights(
+        self,
+    ):
+        _post_init_weights(self)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -274,6 +270,7 @@ class ChunkRnnForCausalLM(ChunkRnnPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -324,6 +321,7 @@ class ChunkRnnForCausalLM(ChunkRnnPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -333,13 +331,15 @@ class ChunkRnnForCausalLM(ChunkRnnPreTrainedModel, GenerationMixin):
             and self.training
         )
 
-        logits, loss = compute_loss(
-            lm_head=self.lm_head,
+        # since we may use forward_pre_hook, we can't use key word arguments
+        logits, loss = self.loss(
+            self.lm_head.weight,
+            hidden_states,
+            labels,
+            self.lm_head.bias,
+            num_logits_to_keep,
+            fuse_linear_and_cross_entropy,
             ce_type=self.config.ce_type,
-            hidden_states=hidden_states,
-            labels=labels,
-            num_logits_to_keep=num_logits_to_keep,
-            fuse_linear_and_cross_entropy=fuse_linear_and_cross_entropy,
         )
 
         if not return_dict:

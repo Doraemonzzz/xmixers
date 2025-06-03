@@ -1,4 +1,3 @@
-from .chunk_rnn import ChunkRnn
 from .decay_linear_attention import DecayLinearAttention
 from .delta_product_unit import DeltaProductUnit
 from .delta_unit import DeltaUnit

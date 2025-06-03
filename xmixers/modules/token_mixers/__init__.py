@@ -1,6 +1,6 @@
+from .chunk_linear_attention import ChunkRnn
 from .linear_attention import (
     TTT,
-    ChunkRnn,
     DecayLinearAttention,
     DeltaProductUnit,
     DeltaUnit,
@@ -439,24 +439,25 @@ def get_token_mixer(config, layer_idx):
     elif config.token_mixer_type in ["chunk_rnn"]:
         return cls(
             embed_dim=config.embed_dim,
-            expand_ratio=config.expand_ratio,
+            num_heads=config.num_heads,
             bias=config.bias,
             layer_idx=layer_idx,
             use_output_gate=config.use_output_gate,
-            norm_type=config.norm_type,
+            token_mixer_norm_type=config.token_mixer_norm_type,
             q_activation=config.q_activation,
+            k_activation=config.k_activation,
             causal=config.causal,
-            rescale_type=config.rescale_type,
             token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
             num_layers=config.num_layers,
             init_std=config.init_std,
             gain=config.gain,
-            token_mixer_norm_type=config.token_mixer_norm_type
-            if hasattr(config, "token_mixer_norm_type")
-            else config.norm_type,
+            gate_act=config.gate_act,
+            gate_pos=config.gate_pos,
+            threshold=config.threshold,
             chunk_type=config.chunk_type,
             gradient_type=config.gradient_type,
-            use_init_weights=config.use_init_weights,
+            use_initial_state=config.use_initial_state,
             use_scale=config.use_scale,
             chunk_size=config.chunk_size,
             use_lrpe=config.use_lrpe,

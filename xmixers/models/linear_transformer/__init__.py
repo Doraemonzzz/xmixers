@@ -1,4 +1,3 @@
-from .chunk_rnn import ChunkRnnConfig, ChunkRnnForCausalLM, ChunkRnnLayer, ChunkRnnModel
 from .decay_linear_transformer import (
     DecayLinearTransformerConfig,
     DecayLinearTransformerForCausalLM,

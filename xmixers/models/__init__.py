@@ -1,3 +1,9 @@
+from .chunk_linear_transformer import (
+    ChunkRnnConfig,
+    ChunkRnnForCausalLM,
+    ChunkRnnLayer,
+    ChunkRnnModel,
+)
 from .hybrid import (
     LmHeadHybridConfig,
     LmHeadHybridForCausalLM,
@@ -9,10 +15,6 @@ from .hybrid import (
     NaiveHybridModel,
 )
 from .linear_transformer import (
-    ChunkRnnConfig,
-    ChunkRnnForCausalLM,
-    ChunkRnnLayer,
-    ChunkRnnModel,
     DecayLinearTransformerConfig,
     DecayLinearTransformerForCausalLM,
     DecayLinearTransformerModel,
