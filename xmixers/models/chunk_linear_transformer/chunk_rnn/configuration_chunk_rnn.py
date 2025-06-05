@@ -33,6 +33,10 @@ class ChunkRnnConfig(PretrainedConfig):
         use_initial_state: bool = False,
         use_scale: bool = False,
         chunk_size: int = 128,
+        threshold=0.99,
+        decay_type: str = "pos",
+        decay_fn: str = "mean",
+        scalar_decay: bool = False,
         ##### lrpe
         use_lrpe: bool = True,
         lrpe_type: int = 1,
@@ -53,7 +57,6 @@ class ChunkRnnConfig(PretrainedConfig):
         use_embed_scale=False,
         gate_act="sigmoid",
         gate_pos="pre",
-        threshold=0.99,
         ce_type="xopes_flce",
         pad_embed_dim=True,
         ##### init

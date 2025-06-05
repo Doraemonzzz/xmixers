@@ -3,14 +3,13 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange, repeat
 from torch.distributed.tensor import DTensor
 from transformers.cache_utils import Cache
 from xopes.ops import chunk_rnn_parallel_fn, chunk_rnn_sequential_fn
 
 from xmixers.modules.activations import get_activation_fn
-from xmixers.modules.normalizations import get_norm_fn
+from xmixers.modules.normalizations import get_norm_fn, rms_norm_fn
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
 from ...pes import Lrpe
@@ -36,6 +35,9 @@ class ChunkRnn(nn.Module):
         gate_act: str = "sigmoid",
         gate_pos: str = "pre",
         threshold: float = 0.99,
+        decay_type: str = "pos",
+        decay_fn: str = "mean",
+        scalar_decay: bool = False,
         # chunk params
         chunk_type: int = 0,
         gradient_type: int = 0,
@@ -67,13 +69,23 @@ class ChunkRnn(nn.Module):
         self.chunk_size = chunk_size
         self.chunk_type = chunk_type
         self.gradient_type = gradient_type
-        self.decay_dim = num_heads
+        self.scalar_decay = scalar_decay
+        self.decay_type = decay_type
+        self.decay_fn = decay_fn
 
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.f_proj = nn.Linear(embed_dim, self.num_heads, bias=bias)
+        if self.scalar_decay:
+            self.decay_dim = num_heads
+            self.f_proj = nn.Linear(embed_dim, self.num_heads, bias=bias)
+        else:
+            self.decay_dim = embed_dim
+            self.f_proj = nn.Sequential(
+                nn.Linear(embed_dim, self.head_dim, bias=bias),
+                nn.Linear(self.head_dim, embed_dim, bias=bias),
+            )
 
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
@@ -155,6 +167,22 @@ class ChunkRnn(nn.Module):
         else:
             self.delta = nn.Parameter(delta, requires_grad=True)
 
+        if self.decay_fn == "mlp":
+            decay_weight = torch.ones(self.chunk_size)
+            if hasattr(self, "decay_weight"):
+                if isinstance(self.decay_weight, DTensor):
+                    self.decay_weight.data.copy_(
+                        DTensor.from_local(
+                            decay_weight, device_mesh=self.decay_weight.device_mesh
+                        )
+                    )
+                else:
+                    self.decay_weight.data.copy_(decay_weight)
+            else:
+                self.decay_weight = nn.Parameter(decay_weight, requires_grad=True)
+        else:
+            self.decay_weight = torch.empty(0)
+
     def _init_weights(self):
         self.setup_decay()
         self.apply(self._initialize_weights)
@@ -177,16 +205,24 @@ class ChunkRnn(nn.Module):
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
-        log_f = F.logsigmoid(self.f_proj(x) + self.delta)
+        f = self.f_proj(x) + self.delta
 
-        # act
-        q = self.q_act(q)
-        k = self.k_act(k)
+        # # act
+        # q = self.q_act(q)
+        # k = self.k_act(k)
 
         q, k, v = map(
             lambda x: rearrange(x, "b n (h d) -> b n h d", d=self.head_dim),
             [q, k, v],
         )
+        if self.scalar_decay:
+            f = f.unsqueeze(-1)
+        else:
+            f = rearrange(f, "b n (h d) -> b n h d", d=self.head_dim)
+
+        q = rms_norm_fn(q)
+        k = rms_norm_fn(k)
+        v = rms_norm_fn(v)
 
         # lrpe
         q_offset = 0
@@ -212,20 +248,25 @@ class ChunkRnn(nn.Module):
         )
         # TODO: softmax attn mask has not been treated
         # left padding
-        if use_attn_mask:
-            start = q_offset
-            attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
-            v = v.masked_fill(attention_mask_ == 0, 0)
-            log_f = log_f.masked_fill(attention_mask_ == 0, 0)
+        # if use_attn_mask:
+        #     start = q_offset
+        #     attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
+        #     v = v.masked_fill(attention_mask_ == 0, 0)
+        #     log_f = log_f.masked_fill(attention_mask_ == 0, 0)
 
         if self.causal:
             output, recurrent_state = self.gradient_fn(
                 q=q,
                 k=k,
                 v=v,
-                log_f=log_f,
+                f=f,
+                decay_weight=self.decay_weight,
+                decay_type=self.decay_type,
+                decay_fn=self.decay_fn,
                 initial_state=recurrent_state,
                 chunk_size=self.chunk_size,
+                attention_mask=attention_mask,
+                start=q_offset,
             )
         else:
             assert False
