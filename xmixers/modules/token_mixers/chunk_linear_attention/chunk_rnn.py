@@ -207,10 +207,6 @@ class ChunkRnn(nn.Module):
         v = self.v_proj(x)
         f = self.f_proj(x) + self.delta
 
-        # # act
-        # q = self.q_act(q)
-        # k = self.k_act(k)
-
         q, k, v = map(
             lambda x: rearrange(x, "b n (h d) -> b n h d", d=self.head_dim),
             [q, k, v],
