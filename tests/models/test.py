@@ -18,6 +18,7 @@ from xmixers.models import (
     LinearTransformerConfig,
     LLaMAConfig,
     Mamba2XmixersConfig,
+    MesaNetConfig,
     TnlConfig,
     TTTConfig,
 )
@@ -221,6 +222,8 @@ def get_config(model_type):
     elif model_type == "implicit_value_attn":
         config = ImplicitLinearTransformerConfig()
         config.token_mixer_type = "implicit_value_attn"
+    elif model_type == "mesa_net":
+        config = MesaNetConfig()
 
     return config
 
@@ -379,6 +382,7 @@ if __name__ == "__main__":
             "mamba2",
             "scalar_decay_delta_product_net",
             "implicit_value_attn",
+            "mesa_net",
         ],
     )
     args = parser.parse_args()

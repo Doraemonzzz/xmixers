@@ -24,6 +24,7 @@ from .linear_transformer import (
     LinearTransformerModel,
 )
 from .mamba2 import Mamba2ForCausalLM, Mamba2Layer, Mamba2Model, Mamba2XmixersConfig
+from .mesa_net import MesaNetConfig, MesaNetForCausalLM, MesaNetLayer, MesaNetModel
 from .metala import MetaLaConfig, MetaLaForCausalLM, MetaLaLayer, MetaLaModel
 from .polar_rnn import PolarRnnConfig, PolarRnnForCausalLM, PolarRnnLayer, PolarRnnModel
 from .tnl import TnlConfig, TnlForCausalLM, TnlLayer, TnlModel

@@ -11,6 +11,7 @@ from .implicit_value_attention import ImplicitValueAttention
 from .lightnet_attention import LightNetAttention
 from .linear_attention import LinearAttention
 from .mamba2 import Mamba2
+from .mesa_unit import MesaUnit
 from .meta_la import MetaLa
 from .polar_rnn import PolarRnn
 from .tnl_attention import TnlAttention
