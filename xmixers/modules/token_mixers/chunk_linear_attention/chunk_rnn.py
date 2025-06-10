@@ -211,6 +211,7 @@ class ChunkRnn(nn.Module):
             lambda x: rearrange(x, "b n (h d) -> b n h d", d=self.head_dim),
             [q, k, v],
         )
+
         if self.scalar_decay:
             f = f.unsqueeze(-1)
         else:

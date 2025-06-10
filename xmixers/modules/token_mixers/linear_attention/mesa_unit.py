@@ -121,7 +121,11 @@ class MesaUnit(nn.Module):
             self.delta = nn.Parameter(delta, requires_grad=True)
 
         init_lamb_value = torch.log(
-            torch.exp(torch.tensor(self.lambda_initial_value - self.lambda_lower_bound))
+            torch.exp(
+                torch.exp(
+                    torch.tensor(self.lambda_initial_value - self.lambda_lower_bound)
+                )
+            )
             - 1.0
         )
         init_lamb_params = torch.empty(self.embed_dim, dtype=torch.float32).fill_(
@@ -195,8 +199,6 @@ class MesaUnit(nn.Module):
             log_f = log_f.masked_fill(attention_mask_.squeeze(-1) == 0, 0)
 
         if self.causal:
-            q.dtype
-
             if (self.training or use_cache) and (v.shape[1] > 1):
                 output, recurrent_state_kk, recurrent_state_kv = chunk_mesa_net(
                     q=q,
@@ -214,11 +216,11 @@ class MesaUnit(nn.Module):
                     recurrent_state_kk,
                     recurrent_state_kv,
                 ) = mesa_net_decoding_one_step(
-                    q=q.squeeze(0),
-                    k=k.squeeze(0),
-                    v=v.squeeze(0),
-                    g=log_f.squeeze(0),
-                    beta=beta.squeeze(0),
+                    q=q.squeeze(1),
+                    k=k.squeeze(1),
+                    v=v.squeeze(1),
+                    g=log_f.squeeze(1),
+                    beta=beta.squeeze(1),
                     lamb=lamb,
                     prev_h_kk=recurrent_state_kk,
                     prev_h_kv=recurrent_state_kv,
