@@ -226,7 +226,7 @@ class MesaUnit(nn.Module):
                     prev_h_kv=recurrent_state_kv,
                     max_CG_iteration=self.max_cg_step_decoding,
                 )
-                output = output.unsqueeze(0).to(q)
+                output = output.unsqueeze(1).to(q)
         else:
             assert False
 
@@ -234,7 +234,7 @@ class MesaUnit(nn.Module):
             past_key_values.update(
                 recurrent_state=[recurrent_state_kk, recurrent_state_kv],
                 layer_idx=self.layer_idx,
-                offset=x.shape[-2],
+                offset=n,
             )
 
         # reshape
