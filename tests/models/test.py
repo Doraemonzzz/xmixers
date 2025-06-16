@@ -224,6 +224,9 @@ def get_config(model_type):
         config.token_mixer_type = "implicit_value_attn"
     elif model_type == "mesa_net":
         config = MesaNetConfig()
+    elif model_type == "poly_net":
+        config = LLaMAConfig()
+        config.token_mixer_type = "poly_attn"
 
     return config
 
@@ -383,6 +386,7 @@ if __name__ == "__main__":
             "scalar_decay_delta_product_net",
             "implicit_value_attn",
             "mesa_net",
+            "poly_net",
         ],
     )
     args = parser.parse_args()

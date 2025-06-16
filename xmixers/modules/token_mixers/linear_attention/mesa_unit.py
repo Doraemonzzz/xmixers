@@ -64,8 +64,8 @@ class MesaUnit(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.f_proj = nn.Linear(embed_dim, self.decay_dim, bias=bias)
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
         self.bet_proj = nn.Linear(embed_dim, num_heads, bias=bias)
 
         self.q_act = get_activation_fn(q_activation)
@@ -121,11 +121,7 @@ class MesaUnit(nn.Module):
             self.delta = nn.Parameter(delta, requires_grad=True)
 
         init_lamb_value = torch.log(
-            torch.exp(
-                torch.exp(
-                    torch.tensor(self.lambda_initial_value - self.lambda_lower_bound)
-                )
-            )
+            torch.exp(torch.tensor(self.lambda_initial_value - self.lambda_lower_bound))
             - 1.0
         )
         init_lamb_params = torch.empty(self.embed_dim, dtype=torch.float32).fill_(
@@ -210,6 +206,7 @@ class MesaUnit(nn.Module):
                     output_final_state=True,
                     max_CG_iteration=self.max_cg_step_training,
                 )
+                output = output.to(x.dtype)
             else:
                 (
                     output,

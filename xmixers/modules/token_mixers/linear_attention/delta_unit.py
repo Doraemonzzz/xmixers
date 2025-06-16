@@ -19,7 +19,7 @@ from transformers.cache_utils import Cache
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn, l2_norm
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
+from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
 
 class DeltaUnit(nn.Module):
@@ -130,6 +130,9 @@ class DeltaUnit(nn.Module):
         self.zero = torch.empty(0)
         self.beta = torch.empty(0)
         self.init_state = torch.empty(0)
+
+    def extra_repr(self):
+        return print_module(self)
 
     def setup_decay(self):
         if not self.use_offset:

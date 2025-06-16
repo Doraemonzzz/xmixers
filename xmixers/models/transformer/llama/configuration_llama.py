@@ -46,6 +46,9 @@ class LLaMAConfig(PretrainedConfig):
         chunk_size=128,
         token_mixer_top_k=2,
         share_kv=False,
+        poly_order=4,
+        poly_type=1,
+        window_head_dim=128,
         ###### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,

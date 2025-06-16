@@ -30,6 +30,7 @@ from .vanilla_attention import (
     MultiLatentAttention,
     MultiProductAttention,
     NaiveSparseAttention,
+    PolyAttention,
     SimpleSparseAttention,
     StickBreakingAttention,
     TensorProductAttention,
@@ -51,6 +52,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "forgetting_attn": ForgettingAttention,
     "sb_attn": StickBreakingAttention,
     "mfa": MultiFactorAttention,
+    "poly_attn": PolyAttention,
     # linear attn
     "hgru1": Hgru1,
     "hgru2": Hgru2,
@@ -738,4 +740,22 @@ def get_token_mixer(config, layer_idx):
             lambda_lower_bound=config.lambda_lower_bound,
             max_cg_step_training=config.max_cg_step_training,
             max_cg_step_decoding=config.max_cg_step_decoding,
+        )
+    elif config.token_mixer_type in ["poly_attn"]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            kv_heads=config.kv_heads,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            window_size=config.window_size,
+            window_head_dim=config.window_head_dim,
+            init_std=config.init_std,
+            gain=config.gain,
+            poly_order=config.poly_order,
+            chunk_size=config.chunk_size,
+            poly_type=config.poly_type,
         )

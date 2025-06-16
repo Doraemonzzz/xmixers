@@ -5,9 +5,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
+from fla.ops.gated_delta_rule import (
+    chunk_gated_delta_rule,
+    fused_recurrent_gated_delta_rule,
+)
 from torch.distributed.tensor import DTensor
 from transformers.cache_utils import Cache
-from xopes.ops import implicit_attn_func
+from xopes.ops import lightning_attn_func
 
 from xmixers.modules.activations import get_activation_fn
 from xmixers.modules.normalizations import get_norm_fn, l2_norm
@@ -57,10 +61,10 @@ class ImplicitValueAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
-        self.f1_proj = nn.Linear(embed_dim, num_heads, bias=bias)
-        self.beta_proj = nn.Linear(embed_dim, num_heads, bias=bias)
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+        self.bet_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+
         self.q_act = get_activation_fn(q_activation)
         self.k_act = get_activation_fn(k_activation)
         token_mixer_norm_type = (
@@ -137,20 +141,24 @@ class ImplicitValueAttention(nn.Module):
         f = self.f_proj(x)
         if self.use_offset:
             f = f + self.delta
+        beta = 2 * F.sigmoid(self.bet_proj(x))
 
         q, k, v = map(
             lambda x: rearrange(x, "... (h d) -> ... h d", d=self.head_dim),
             [q, k, v],
         )
 
-        q = l2_norm(q)
+        q = self.q_act(q)
+        k = self.k_act(k)
         k = l2_norm(k)
         log_f = F.logsigmoid(f.float())
 
-        recurrent_state = None
+        recurrent_state1 = None
+        recurrent_state2 = None
         q_offset = 0
         if past_key_values is not None and len(past_key_values) > self.layer_idx:
-            recurrent_state = past_key_values[self.layer_idx]["recurrent_state"][0]
+            recurrent_state1 = past_key_values[self.layer_idx]["recurrent_state"][0]
+            recurrent_state2 = past_key_values[self.layer_idx]["recurrent_state"][1]
             q_offset = past_key_values.get_seq_length(self.layer_idx)
 
         use_attn_mask = (
@@ -160,27 +168,59 @@ class ImplicitValueAttention(nn.Module):
         if use_attn_mask:
             start = q_offset
             attention_mask_ = attention_mask[:, start:].unsqueeze(-1).unsqueeze(-1)
-            k = k.masked_fill(attention_mask_ == 0, 0)
+            v = v.masked_fill(attention_mask_ == 0, 0)
             log_f = log_f.masked_fill(attention_mask_.squeeze(-1) == 0, 0)
 
+        scale = 1.0
+        dtype = x.dtype
         if self.causal:
-            # TODO: grad norm nan
-            output, recurrent_state = implicit_attn_func(
-                q=q,
-                k=k,
-                o=v,
-                ld=log_f,
-                initial_state=recurrent_state,
-                implicit_type="inverse_v",
-                normalize=True,
+            if (self.training or use_cache) and (n > 1):
+                fn = chunk_gated_delta_rule
+            else:
+                fn = fused_recurrent_gated_delta_rule
+
+            q_ = k * torch.exp(log_f.unsqueeze(-1))
+            zero = torch.zeros(b, 1, self.num_heads, self.head_dim, device=x.device)
+            q_ = torch.cat(
+                [
+                    q_[:, 1:],
+                    zero,
+                ],
+                dim=1,
             )
-            output = output.to(x.dtype)
-        else:
-            assert False
+
+            # output s[n+1], inference not correct
+            output, recurrent_state1 = fn(
+                q=q_.to(dtype),
+                k=k.to(dtype),
+                v=v.to(dtype),
+                beta=beta.to(dtype),
+                g=log_f.to(dtype),
+                initial_state=recurrent_state1,
+                output_final_state=use_cache,
+                scale=scale,
+            )
+
+            v = v.to(dtype) - torch.cat(
+                [
+                    zero,
+                    output[:, :-1],
+                ],
+                dim=1,
+            ).to(dtype)
+
+            output, recurrent_state2 = lightning_attn_func(
+                q=q,
+                k=k * beta.unsqueeze(-1),
+                v=v,
+                ld=log_f,
+                initial_state=recurrent_state2,
+                decay_type="scalar",
+            )
 
         if past_key_values is not None:
             past_key_values.update(
-                recurrent_state=[recurrent_state],
+                recurrent_state=[recurrent_state1, recurrent_state2],
                 layer_idx=self.layer_idx,
                 offset=n,
             )
