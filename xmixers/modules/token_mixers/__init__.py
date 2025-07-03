@@ -706,6 +706,7 @@ def get_token_mixer(config, layer_idx):
             token_mixer_norm_type=config.token_mixer_norm_type,
             q_activation=config.q_activation,
             k_activation=config.k_activation,
+            use_decay=config.use_decay,
             threshold=config.threshold,
             use_offset=config.use_offset,
             causal=config.causal,

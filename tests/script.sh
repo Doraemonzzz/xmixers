@@ -60,7 +60,7 @@ model_type=implicit_value_attn
 # model_type=poly_net
 
 dtype=bf16
-# dtype=fp32
+dtype=fp32
 
 mkdir -p $folder/log
 

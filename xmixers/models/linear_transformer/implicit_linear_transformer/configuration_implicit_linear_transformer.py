@@ -30,6 +30,7 @@ class ImplicitLinearTransformerConfig(PretrainedConfig):
         gate_act="sigmoid",
         gate_pos="pre",
         token_mixer_norm_type="rmsnorm",
+        use_decay=True,
         ##### channel mixer config
         mid_dim=1024,
         channel_mixer_type="glu",
