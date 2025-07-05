@@ -49,7 +49,7 @@ model_type=llama
 # model_type=alibi
 # model_type=fox
 # model_type=fox_window
-# model_type=sb_attn
+model_type=sb_attn
 # model_type=mfa
 # model_type=mfa_kv_share
 # model_type=hgrn1
@@ -58,12 +58,12 @@ model_type=llama
 # model_type=implicit_value_attn
 # model_type=mesa_net
 # model_type=poly_net
-model_type=kernel_regression_attn
+# model_type=kernel_regression_attn
 # model_type=kernel_regression_attn_no_decay
 # model_type=kernel_regression_attn_no_kr
 
-dtype=bf16
-# dtype=fp32
+# dtype=bf16
+dtype=fp32
 
 mkdir -p $folder/log
 

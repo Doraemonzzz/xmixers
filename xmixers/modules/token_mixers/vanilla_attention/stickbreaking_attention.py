@@ -1,13 +1,15 @@
 # stick-breaking attention: https://arxiv.org/abs/2410.17980 and https://github.com/IBM/dolomite-engine/blob/main/dolomite_engine/hf_models/modeling_utils/sequence_mixer_blocks/stickbreaking_attention.py
+import math
 from typing import Optional
 
 import torch
 import torch.nn as nn
 from einops import rearrange
+from torch.distributed.tensor import DTensor
 from torch.nn import functional as F
 from transformers.cache_utils import Cache
 
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
+from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
 try:
     from stickbreaking_attention.sb_attn import sb_attn
@@ -15,6 +17,8 @@ try:
 except:
     sb_attn = None
     sb_attn_varlen = None
+
+from xmixers.modules.normalizations import get_norm_fn
 
 
 def decoding_stickbreaking(q, k, v, scale=None):
@@ -40,11 +44,11 @@ def decoding_stickbreaking(q, k, v, scale=None):
     return out, 1 - att.sum(dim=-1)
 
 
-def sb_attn(q, k, v, mask=None, cum_weight=None):
+def sb_attn(q, k, v, mask=None, cum_weight=None, **kwargs):
     """
     Stick-breaking attention weights.
     """
-    n = q.shape[1]
+    n = q.shape[2]
     if mask is None:
         mask = torch.ones(n, n).triu(0).to(q).bool()
     if cum_weight is None:
@@ -63,9 +67,8 @@ def sb_attn(q, k, v, mask=None, cum_weight=None):
     log_att = log_z + re_cum_log_beta
     att = log_att.exp()
     o, rem = att @ v, 1 - att.sum(dim=-1)
-    o = o + rem[..., None] * v
 
-    return o, None
+    return o, rem
 
 
 class StickBreakingAttention(nn.Module):
@@ -77,6 +80,7 @@ class StickBreakingAttention(nn.Module):
         bias: bool = False,
         layer_idx: int = 0,
         token_mixer_init_type: int = 4,
+        token_mixer_norm_type: str = "grouprmsnorm",
         rescale_type: int = 2,
         num_layers: int = 12,
         window_size: int = -1,
@@ -104,6 +108,10 @@ class StickBreakingAttention(nn.Module):
         self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.norm = get_norm_fn(token_mixer_norm_type)(
+            embed_dim,
+            num_heads,
+        )
 
         self.token_mixer_init_type = token_mixer_init_type
         self.rescale_type = rescale_type
@@ -115,10 +123,30 @@ class StickBreakingAttention(nn.Module):
         self.cum_weight = torch.empty(0)
         self._init_weights()
 
+    def extra_repr(self):
+        return print_module(self)
+
+    def setup_head_bias(self):
+        head_bias = torch.zeros(self.num_heads, self.head_dim)
+        if hasattr(self, "head_bias"):
+            if isinstance(self.head_bias, DTensor):
+                self.head_bias.data.copy_(
+                    DTensor.from_local(
+                        head_bias,
+                        device_mesh=self.head_bias.device_mesh,
+                    )
+                )
+            else:
+                self.head_bias.data.copy_(head_bias)
+        else:
+            self.head_bias = nn.Parameter(head_bias, requires_grad=True)
+
     def _init_weights(self):
+        self.setup_head_bias()
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
+        self.setup_head_bias()
         return _initialize_weights(self, module)
 
     def forward(
@@ -162,28 +190,36 @@ class StickBreakingAttention(nn.Module):
             v = v.masked_fill(attention_mask_ == 0, 0)
 
         if self.mask.shape[0] < n:
-            self.mask = torch.ones(n, n).triu(0).to(q).bool()
-            self.cum_weight = torch.ones(n, n).tril(-1).to(q)
+            m = 2 ** (math.ceil(math.log2(n)))
+            self.mask = torch.ones(m, m).triu(0).to(q).bool()
+            self.cum_weight = torch.ones(m, m).tril(-1).to(q)
 
         q, k, v = map(lambda x: rearrange(x, "... n h d -> ... h n d"), [q, k, v])
+        scale = q.shape[-1] ** -0.5
         if q.shape[2] == k.shape[2]:
-            output, _ = sb_attn(
+            output, rem = sb_attn(
                 q=q,
                 k=k,
                 v=v,
-                mask=self.mask,
-                cum_weight=self.cum_weight,
+                inv_temp=scale,
+                mask=self.mask[:n, :n],
+                cum_weight=self.cum_weight[:n, :n],
             )
         else:
-            output, _ = decoding_stickbreaking(
+            output, rem = decoding_stickbreaking(
                 q=q,
                 k=k,
                 v=v,
+                scale=scale,
             )
+
+        output = output + rem[..., None] * self.head_bias[None, :, None, :]
+
         output = rearrange(output, "... h n d -> ... n h d")
 
         # reshape
         output = rearrange(output, "... n h d -> ... n (h d)")
+        output = self.norm(output)
 
         # outproj
         output = self.o_proj(output)

@@ -108,6 +108,7 @@ def get_token_mixer(config, layer_idx):
             bias=config.bias,
             layer_idx=layer_idx,
             token_mixer_init_type=config.token_mixer_init_type,
+            token_mixer_norm_type=config.token_mixer_norm_type,
             rescale_type=config.rescale_type,
             num_layers=config.num_layers,
             window_size=config.window_size,

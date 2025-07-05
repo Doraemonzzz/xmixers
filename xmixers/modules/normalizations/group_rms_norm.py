@@ -63,9 +63,6 @@ class GroupRMSNorm(torch.nn.Module):
             False,
             self.num_groups,
             False,
-            gate,
-            self.gate_act,
-            self.gate_pos,
         )
 
     def extra_repr(self) -> str:

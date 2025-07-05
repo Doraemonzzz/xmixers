@@ -28,6 +28,7 @@ class FlexGPTConfig(PretrainedConfig):
         kv_heads=-1,
         bias=False,
         window_size=-1,
+        token_mixer_norm_type="grouprmsnorm",
         ###### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
