@@ -227,6 +227,21 @@ def get_config(model_type):
     elif model_type == "poly_net":
         config = LLaMAConfig()
         config.token_mixer_type = "poly_attn"
+    elif model_type == "kernel_regression_attn":
+        config = LLaMAConfig()
+        config.token_mixer_type = "kernel_regression_attn"
+        config.use_decay = True
+        config.threshold = 0.99
+    elif model_type == "kernel_regression_attn_no_decay":
+        config = LLaMAConfig()
+        config.token_mixer_type = "kernel_regression_attn"
+        config.use_decay = False
+        config.threshold = 0.99
+    elif model_type == "kernel_regression_attn_no_kr":
+        config = LLaMAConfig()
+        config.token_mixer_type = "kernel_regression_attn"
+        config.use_kernel_regression = False
+        config.scale_type = 1
 
     return config
 
@@ -387,6 +402,9 @@ if __name__ == "__main__":
             "implicit_value_attn",
             "mesa_net",
             "poly_net",
+            "kernel_regression_attn",
+            "kernel_regression_attn_no_decay",
+            "kernel_regression_attn_no_kr",
         ],
     )
     args = parser.parse_args()

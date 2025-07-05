@@ -3,6 +3,7 @@ from .flex_attention import FlexAttention
 from .forgetting_attention import ForgettingAttention
 from .fsq_kv_attention import FsqKvAttention
 from .fsq_kv_multi_product_attention import FsqKvMultiProductAttention
+from .kernel_regression_attention import KernelRegressionAttention
 from .multi_factor_attention import MultiFactorAttention
 from .multi_latent_attention import MultiLatentAttention
 from .multi_product_attention import MultiProductAttention

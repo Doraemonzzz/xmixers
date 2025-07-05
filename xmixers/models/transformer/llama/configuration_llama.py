@@ -49,6 +49,10 @@ class LLaMAConfig(PretrainedConfig):
         poly_order=4,
         poly_type=1,
         window_head_dim=128,
+        use_decay=False,
+        use_kernel_regression=True,
+        scale_type=0,
+        threshold=0.99,
         ###### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,

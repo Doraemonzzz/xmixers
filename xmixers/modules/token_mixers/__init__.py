@@ -26,6 +26,7 @@ from .vanilla_attention import (
     ForgettingAttention,
     FsqKvAttention,
     FsqKvMultiProductAttention,
+    KernelRegressionAttention,
     MultiFactorAttention,
     MultiLatentAttention,
     MultiProductAttention,
@@ -53,6 +54,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "sb_attn": StickBreakingAttention,
     "mfa": MultiFactorAttention,
     "poly_attn": PolyAttention,
+    "kernel_regression_attn": KernelRegressionAttention,
     # linear attn
     "hgru1": Hgru1,
     "hgru2": Hgru2,
@@ -759,4 +761,24 @@ def get_token_mixer(config, layer_idx):
             poly_order=config.poly_order,
             chunk_size=config.chunk_size,
             poly_type=config.poly_type,
+        )
+    elif config.token_mixer_type in [
+        "kernel_regression_attn",
+    ]:
+        return cls(
+            embed_dim=config.embed_dim,
+            num_heads=config.num_heads,
+            kv_heads=config.kv_heads,
+            bias=config.bias,
+            layer_idx=layer_idx,
+            token_mixer_init_type=config.token_mixer_init_type,
+            rescale_type=config.rescale_type,
+            num_layers=config.num_layers,
+            window_size=config.window_size,
+            use_decay=config.use_decay,
+            use_kernel_regression=config.use_kernel_regression,
+            scale_type=config.scale_type,
+            threshold=config.threshold,
+            init_std=config.init_std,
+            gain=config.gain,
         )
