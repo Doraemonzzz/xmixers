@@ -31,6 +31,7 @@ from .vanilla_attention import (
     MultiLatentAttention,
     MultiProductAttention,
     NaiveSparseAttention,
+    PathAttention,
     PolyAttention,
     SimpleSparseAttention,
     StickBreakingAttention,
@@ -55,6 +56,7 @@ AUTO_TOKEN_MIXER_MAPPING = {
     "mfa": MultiFactorAttention,
     "poly_attn": PolyAttention,
     "kernel_regression_attn": KernelRegressionAttention,
+    "path_attn": PathAttention,
     # linear attn
     "hgru1": Hgru1,
     "hgru2": Hgru2,
@@ -114,6 +116,8 @@ def get_token_mixer(config, layer_idx):
             window_size=config.window_size,
             init_std=config.init_std,
             gain=config.gain,
+            use_offset=config.use_offset,
+            threshold=config.threshold,
         )
     elif config.token_mixer_type in ["nsa"]:
         return cls(
@@ -765,6 +769,7 @@ def get_token_mixer(config, layer_idx):
         )
     elif config.token_mixer_type in [
         "kernel_regression_attn",
+        "path_attn",
     ]:
         return cls(
             embed_dim=config.embed_dim,

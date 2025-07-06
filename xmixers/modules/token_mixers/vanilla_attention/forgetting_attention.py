@@ -1,4 +1,5 @@
 # flex attention: https://pytorch.org/blog/flexattention/
+import math
 from typing import Optional
 
 import torch
@@ -7,10 +8,11 @@ import torch.nn.functional as F
 from einops import rearrange
 from fla.ops.attn.decoding import attn_decoding_one_step
 from fla.ops.forgetting_attn.parallel import parallel_forgetting_attn
+from torch.distributed.tensor import DTensor
 from transformers.cache_utils import Cache
 from xopes.ops import cumsum_fn
 
-from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
+from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
 from .utils import _pad_input, _unpad_input
 
@@ -29,6 +31,8 @@ class ForgettingAttention(nn.Module):
         window_size: int = -1,
         init_std: float = 0.02,
         gain: float = 0.01,
+        threshold: float = 0.99,
+        use_offset: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -47,6 +51,9 @@ class ForgettingAttention(nn.Module):
             kv_dim = embed_dim
         else:
             kv_dim = self.kv_heads * self.head_dim
+        self.threshold = threshold
+        self.use_offset = use_offset
+
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
@@ -61,10 +68,34 @@ class ForgettingAttention(nn.Module):
         self.gain = gain
         self._init_weights()
 
+    def extra_repr(self):
+        return print_module(self)
+
+    def setup_decay(self):
+        if not self.use_offset:
+            return
+        # take x = 0 as median, 1 / (1 + exp(-(median + delta))) = a => 1 + exp(-delta) = 1 / a => exp(-delta) = (1 / a - 1) -> exp(delta) = a / (1 - a) => delta = log(a / (1 - a))
+        a = self.threshold
+        delta = torch.ones(self.num_heads) * math.log(a / (1 - a))
+        if hasattr(self, "delta"):
+            if isinstance(self.delta, DTensor):
+                self.delta.data.copy_(
+                    DTensor.from_local(
+                        delta,
+                        device_mesh=self.delta.device_mesh,
+                    )
+                )
+            else:
+                self.delta.data.copy_(delta)
+        else:
+            self.delta = nn.Parameter(delta, requires_grad=True)
+
     def _init_weights(self):
+        self.setup_decay()
         self.apply(self._initialize_weights)
 
     def _initialize_weights(self, module):
+        self.setup_decay()
         return _initialize_weights(self, module)
 
     def forward(
@@ -80,7 +111,11 @@ class ForgettingAttention(nn.Module):
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
-        log_f = F.logsigmoid(self.f_proj(x))
+        if self.use_offset:
+            f = self.f_proj(x) + self.delta
+        else:
+            f = self.f_proj(x)
+        log_f = F.logsigmoid(f)
 
         q, k, v = map(
             lambda x: rearrange(x, "... n (h d) -> ... n h d", d=self.head_dim),
@@ -99,7 +134,7 @@ class ForgettingAttention(nn.Module):
             )["attn_state"]
 
         cu_seqlens = None
-        # if inference:
+
         if attention_mask is not None and not attention_mask.all():
             q, (k, v, log_f), indices_q, cu_seqlens, max_seq_lens = _unpad_input(
                 q=q,

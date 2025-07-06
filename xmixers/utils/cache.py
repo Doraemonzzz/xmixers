@@ -8,6 +8,7 @@ import transformers
 
 class XmixersCache(transformers.cache_utils.Cache):
     def __init__(self, seen_tokens: int = 0):
+        super().__init__()
         self.states: List[Dict[str, Any]] = []
         self._seen_tokens = []
 

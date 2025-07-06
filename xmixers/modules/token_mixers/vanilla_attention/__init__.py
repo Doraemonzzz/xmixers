@@ -9,6 +9,7 @@ from .multi_latent_attention import MultiLatentAttention
 from .multi_product_attention import MultiProductAttention
 from .n_attention import nAttention
 from .naive_sparse_attention import NaiveSparseAttention
+from .path_attention import PathAttention
 from .poly_attention import PolyAttention
 from .simple_sparse_attention import SimpleSparseAttention
 from .stickbreaking_attention import StickBreakingAttention
