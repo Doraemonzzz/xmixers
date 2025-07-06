@@ -1,5 +1,8 @@
+from typing import Tuple
+
 import torch
 import torch.nn.functional as F
+from einops import rearrange
 from xopes.ops import cumsum_fn
 
 try:
@@ -13,22 +16,27 @@ except:
 
 _pad_input = pad_input
 
-# credit to: https://github.com/fla-org/flash-linear-attention/blob/main/fla/layers/attn.py
-def _upad_input(q, k, v, attention_mask, q_len):
+# credit to: https://github.com/fla-org/flash-linear-attention/blob/main/fla/layers/utils.py
+def _unpad_input(
+    q: torch.Tensor,
+    states: Tuple[torch.Tensor],
+    attention_mask: torch.Tensor,
+    q_len: int,
+    keepdim: bool = False,
+):
     seqlens = attention_mask.sum(-1, dtype=torch.int32)
     indices_k = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_k = seqlens.max().item()
     cu_seqlens_k = F.pad(cumsum_fn(seqlens, dim=0), (1, 0))
 
     num_heads = q.shape[-2]
-    batch_size, seq_len, num_key_value_heads, head_dim = k.shape
+    batch_size, seq_len, num_key_value_heads, head_dim = states[0].shape
 
-    k = index_first_axis(
-        k.reshape(batch_size * seq_len, num_key_value_heads, head_dim), indices_k
+    states = (
+        index_first_axis(rearrange(state, "b s ... -> (b s) ..."), indices_k)
+        for state in states
     )
-    v = index_first_axis(
-        v.reshape(batch_size * seq_len, num_key_value_heads, head_dim), indices_k
-    )
+
     if q_len == seq_len:
         q = index_first_axis(
             q.reshape(batch_size * seq_len, num_heads, head_dim), indices_k
@@ -49,8 +57,7 @@ def _upad_input(q, k, v, attention_mask, q_len):
 
     return (
         q,
-        k,
-        v,
+        states,
         indices_q,
         (cu_seqlens_q, cu_seqlens_k),
         (max_seqlen_q, max_seqlen_k),

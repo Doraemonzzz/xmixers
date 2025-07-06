@@ -5,10 +5,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
+from fla.ops.attn.decoding import attn_decoding_one_step
+from fla.ops.forgetting_attn.parallel import parallel_forgetting_attn
 from transformers.cache_utils import Cache
-from xopes.ops.flash_attn import forgetting_attn_fn
+from xopes.ops import cumsum_fn
 
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
+
+from .utils import _pad_input, _unpad_input
 
 
 class ForgettingAttention(nn.Module):
@@ -94,34 +98,41 @@ class ForgettingAttention(nn.Module):
                 offset=n,
             )["attn_state"]
 
-        causal = True if self.training or q.shape[-3] == k.shape[-3] else False
-
-        scale = self.head_dim**-0.5
-        head_first = True
-        q, k, v = map(lambda x: rearrange(x, "... n h d -> ... h n d"), [q, k, v])
-        log_f = rearrange(log_f, "... n h -> ... h n")
-
+        cu_seqlens = None
+        # if inference:
         if attention_mask is not None and not attention_mask.all():
-            seq_start = n - attention_mask.sum(dim=-1)
-            output = forgetting_attn_fn(
+            q, (k, v, log_f), indices_q, cu_seqlens, max_seq_lens = _unpad_input(
                 q=q,
-                k=k,
-                v=v,
-                log_fgate=log_f,
-                head_first=head_first,
-                seq_start=seq_start,
-                sm_scale=scale,
+                states=(k, v, log_f),
+                attention_mask=attention_mask,
+                q_len=n,
             )
+            _, cu_seqlens_k = cu_seqlens
+            cu_seqlens = cu_seqlens_k
+            max_seqlen_q, max_seqlen_k = max_seq_lens
+            if max_seqlen_q != max_seqlen_k:
+                assert max_seqlen_q == 1, "only support q_len == 1 for decoding"
+                output = attn_decoding_one_step(q, k, v, log_f, cu_seqlens=cu_seqlens)
+            else:
+                output = parallel_forgetting_attn(
+                    q.unsqueeze(0),
+                    k.unsqueeze(0),
+                    v.unsqueeze(0),
+                    log_f.unsqueeze(0),
+                    cu_seqlens=cu_seqlens,
+                )
+
+            output = _pad_input(output.squeeze(0), indices_q, b, n)
         else:
-            output = forgetting_attn_fn(
-                q=q,
-                k=k,
-                v=v,
-                log_fgate=log_f,
-                head_first=head_first,
-                sm_scale=scale,
-            )
-        output = rearrange(output, "... h n d -> ... n h d")
+            if n == 1:
+                attention_mask_ = torch.ones(b, k.shape[1], dtype=torch.int32).to(
+                    q.device
+                )
+                seqlens = attention_mask_.sum(-1, dtype=torch.int32)
+                cu_seqlens = F.pad(cumsum_fn(seqlens, dim=0), (1, 0))
+                output = attn_decoding_one_step(q, k, v, log_f, cu_seqlens=cu_seqlens)
+            else:
+                output = parallel_forgetting_attn(q, k, v, log_f, cu_seqlens=cu_seqlens)
 
         # reshape
         output = rearrange(output, "... n h d -> ... n (h d)")

@@ -11,7 +11,7 @@ from transformers.cache_utils import Cache
 from xmixers.modules.pes import Lrpe
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
-from .utils import _pad_input, _upad_input
+from .utils import _pad_input, _unpad_input
 
 try:
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -172,8 +172,8 @@ class MultiLatentAttention(nn.Module):
                 k = k.squeeze(0)
                 v = v.squeeze(0)
             else:
-                q, k, v, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
-                    q=q, k=k, v=v, attention_mask=attention_mask, q_len=n
+                q, (k, v), indices_q, cu_seq_lens, max_seq_lens = _unpad_input(
+                    q=q, states=(k, v), attention_mask=attention_mask, q_len=n
                 )
                 cu_seqlens_q, cu_seqlens_k = cu_seq_lens
                 max_seqlen_q, max_seqlen_k = max_seq_lens
