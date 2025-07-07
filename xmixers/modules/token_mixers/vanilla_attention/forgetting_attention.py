@@ -10,7 +10,6 @@ from fla.ops.attn.decoding import attn_decoding_one_step
 from fla.ops.forgetting_attn.parallel import parallel_forgetting_attn
 from torch.distributed.tensor import DTensor
 from transformers.cache_utils import Cache
-from xopes.ops import cumsum_fn
 
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
@@ -160,12 +159,27 @@ class ForgettingAttention(nn.Module):
             output = _pad_input(output.squeeze(0), indices_q, b, n)
         else:
             if n == 1:
-                attention_mask_ = torch.ones(b, k.shape[1], dtype=torch.int32).to(
+                attention_mask = torch.ones(b, k.shape[1], dtype=torch.int32).to(
                     q.device
                 )
-                seqlens = attention_mask_.sum(-1, dtype=torch.int32)
-                cu_seqlens = F.pad(cumsum_fn(seqlens, dim=0), (1, 0))
-                output = attn_decoding_one_step(q, k, v, log_f, cu_seqlens=cu_seqlens)
+
+                q, (k, v, log_f), indices_q, cu_seqlens, max_seq_lens = _unpad_input(
+                    q=q,
+                    states=(k, v, log_f),
+                    attention_mask=attention_mask,
+                    q_len=n,
+                )
+                _, cu_seqlens_k = cu_seqlens
+                cu_seqlens = cu_seqlens_k
+                max_seqlen_q, max_seqlen_k = max_seq_lens
+                output = attn_decoding_one_step(
+                    q.unsqueeze(0),
+                    k.unsqueeze(0),
+                    v.unsqueeze(0),
+                    log_f.unsqueeze(0),
+                    cu_seqlens=cu_seqlens,
+                )
+                output = _pad_input(output.squeeze(0), indices_q, b, n)
             else:
                 output = parallel_forgetting_attn(q, k, v, log_f, cu_seqlens=cu_seqlens)
 

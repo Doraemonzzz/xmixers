@@ -22,7 +22,6 @@ from fla.ops.attn.decoding import attn_decoding_one_step
 from fla.ops.path_attn.parallel import parallel_path_attention
 from torch.distributed.tensor import DTensor
 from transformers.cache_utils import Cache
-from xopes.ops import cumsum_fn
 
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_params
 
@@ -207,7 +206,53 @@ class PathAttention(nn.Module):
                 )
                 past_key_values.update(layer_idx=self.layer_idx, offset=n)
 
-                if attention_mask is not None:
+                if attention_mask is None:
+                    attention_mask = torch.ones(b, k.shape[1], dtype=torch.int32).to(
+                        q.device
+                    )
+
+                if self.use_decay:
+                    (
+                        q,
+                        (k, v, log_f),
+                        indices_q,
+                        cu_seqlens,
+                        max_seq_lens,
+                    ) = _unpad_input(
+                        q=q,
+                        states=(k, v, log_f),
+                        attention_mask=attention_mask,
+                        q_len=n,
+                    )
+                    max_seqlen_q, max_seqlen_k = max_seq_lens
+                else:
+                    q, (k, v), indices_q, cu_seqlens, max_seq_lens = _unpad_input(
+                        q=q, states=(k, v), attention_mask=attention_mask, q_len=n
+                    )
+                    max_seqlen_q, max_seqlen_k = max_seq_lens
+                _, cu_seqlens = cu_seqlens
+                assert max_seqlen_q == 1, "only support q_len == 1 for decoding"
+                output = attn_decoding_one_step(
+                    q.unsqueeze(0),
+                    k.unsqueeze(0),
+                    v.unsqueeze(0),
+                    log_f.unsqueeze(0) if log_f is not None else None,
+                    cu_seqlens=cu_seqlens,
+                )  # reduced to fox's decoding
+                output = _pad_input(output.squeeze(0), indices_q, b, n)
+            else:  # Prefilling
+                if attention_mask is None:
+                    attention_mask = torch.ones(b, k.shape[1], dtype=torch.int32).to(
+                        q.device
+                    )
+
+                if n == 1:
+                    past_key_values.update(
+                        attn_state=(k, v, log_f) if log_f is not None else (k, v),
+                        layer_idx=self.layer_idx,
+                        offset=n,
+                    )
+
                     if self.use_decay:
                         (
                             q,
@@ -227,6 +272,7 @@ class PathAttention(nn.Module):
                             q=q, states=(k, v), attention_mask=attention_mask, q_len=n
                         )
                         max_seqlen_q, max_seqlen_k = max_seq_lens
+
                     _, cu_seqlens = cu_seqlens
                     assert max_seqlen_q == 1, "only support q_len == 1 for decoding"
                     output = attn_decoding_one_step(
@@ -237,33 +283,6 @@ class PathAttention(nn.Module):
                         cu_seqlens=cu_seqlens,
                     )  # reduced to fox's decoding
                     output = _pad_input(output.squeeze(0), indices_q, b, n)
-                else:
-                    attention_mask_ = torch.ones(b, k.shape[1], dtype=torch.int32).to(
-                        q.device
-                    )
-                    seqlens = attention_mask_.sum(-1, dtype=torch.int32)
-                    cu_seqlens = F.pad(cumsum_fn(seqlens, dim=0), (1, 0))
-                    output = attn_decoding_one_step(
-                        q, k, v, log_f, cu_seqlens=cu_seqlens
-                    )
-            else:  # Prefilling
-                if attention_mask is None:
-                    attention_mask = torch.ones(b, k.shape[1], dtype=torch.int32).to(
-                        q.device
-                    )
-
-                if n == 1:
-                    seqlens = attention_mask.sum(-1, dtype=torch.int32)
-                    cu_seqlens = F.pad(cumsum_fn(seqlens, dim=0), (1, 0))
-                    output = attn_decoding_one_step(
-                        q, k, v, log_f, cu_seqlens=cu_seqlens
-                    )
-
-                    past_key_values.update(
-                        attn_state=(k, v, log_f) if log_f is not None else (k, v),
-                        layer_idx=self.layer_idx,
-                        offset=n,
-                    )
                 else:
                     v_cache = v.clone()
                     log_f_cache = log_f.clone() if self.use_decay else None

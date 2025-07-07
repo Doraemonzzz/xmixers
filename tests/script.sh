@@ -61,7 +61,7 @@ model_type=fox
 # model_type=kernel_regression_attn
 # model_type=kernel_regression_attn_no_decay
 # model_type=kernel_regression_attn_no_kr
-# model_type=path_attn
+model_type=path_attn
 # model_type=path_attn_no_decay
 model_type=fox_offset
 

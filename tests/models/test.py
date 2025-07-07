@@ -294,7 +294,6 @@ def main(args):
     tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    b = 1
     m = len(tokenizer)
     n = 32
 
@@ -310,14 +309,15 @@ def main(args):
 
     print("-" * 5, "Start test generate without attention mask", "-" * 5)
 
-    for n in [32]:
-        input = torch.randint(0, m, (b, n)).to(device)
-        with torch.amp.autocast(device_type="cuda", dtype=dtype):
-            with torch.inference_mode():
-                o1 = hf_model(input)["logits"]
+    for b in [1, 2]:
+        for n in [32]:
+            input = torch.randint(0, m, (b, n)).to(device)
+            with torch.amp.autocast(device_type="cuda", dtype=dtype):
+                with torch.inference_mode():
+                    o1 = hf_model(input)["logits"]
 
-            o2 = generate(hf_model, input)
-        print(f"n: {n}, diff: {torch.norm(o1 - o2)}")
+                o2 = generate(hf_model, input)
+            print(f"b: {b}, n: {n}, diff: {torch.norm(o1 - o2)}")
 
     print("-" * 5, "End test generate without attention mask", "-" * 5)
 
