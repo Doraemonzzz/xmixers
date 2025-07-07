@@ -787,4 +787,5 @@ def get_token_mixer(config, layer_idx):
             threshold=config.threshold,
             init_std=config.init_std,
             gain=config.gain,
+            use_qk_norm=config.use_qk_norm,
         )

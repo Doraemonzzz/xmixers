@@ -261,6 +261,10 @@ def get_config(model_type):
         config.token_mixer_type = "forgetting_attn"
         config.use_offset = True
         config.threshold = 0.99
+    elif model_type == "kernel_regression_attn_qk_norm":
+        config = LLaMAConfig()
+        config.token_mixer_type = "kernel_regression_attn"
+        config.use_qk_norm = True
 
     return config
 
@@ -424,6 +428,7 @@ if __name__ == "__main__":
             "kernel_regression_attn",
             "kernel_regression_attn_no_decay",
             "kernel_regression_attn_no_kr",
+            "kernel_regression_attn_qk_norm",
             "path_attn",
             "path_attn_no_decay",
             "fox_offset",

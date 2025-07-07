@@ -19,7 +19,7 @@ import math
 import torch.nn.functional as F
 from xopes.ops import kernel_regression_func
 
-from xmixers.modules.normalizations import l2_norm
+from xmixers.modules.normalizations import get_norm_fn, l2_norm
 from xmixers.utils import XMIXERS_DEBUG, _initialize_weights, print_module, print_params
 
 from .utils import _pad_input, _unpad_input
@@ -47,6 +47,7 @@ class KernelRegressionAttention(nn.Module):
         threshold: float = 0.99,
         init_std: float = 0.02,
         gain: float = 0.01,
+        use_qk_norm: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -73,11 +74,18 @@ class KernelRegressionAttention(nn.Module):
         self.o_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.use_kernel_regression = use_kernel_regression
         self.use_decay = use_decay
+        self.use_qk_norm = use_qk_norm
 
         if self.use_kernel_regression:
             self.bet_proj = nn.Linear(embed_dim, num_heads, bias=bias)
             if self.use_decay:
                 self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+
+        if self.use_qk_norm:
+            self.q_norm = get_norm_fn("grouprmsnorm")(
+                embed_dim,
+                num_heads,
+            )
 
         self.use_lrpe = use_lrpe
         if self.use_lrpe:
@@ -142,6 +150,9 @@ class KernelRegressionAttention(nn.Module):
         if self.use_decay:
             f = self.f_proj(x) + self.delta
 
+        if self.use_qk_norm:
+            q = self.q_norm(q)
+
         q, k, v = map(
             lambda x: rearrange(x, "... n (h d) -> ... n h d", d=self.head_dim),
             [q, k, v],
@@ -158,6 +169,9 @@ class KernelRegressionAttention(nn.Module):
             scale = q.shape[-1] ** -0.5
         elif self.scale_type == 1:
             scale = 1
+
+        if self.use_qk_norm:
+            scale = q.shape[-1] ** -0.5
 
         # lrpe
         recurrent_state = None
