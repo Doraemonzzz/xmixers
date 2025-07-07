@@ -64,7 +64,7 @@ model_type=fox
 model_type=path_attn
 # model_type=path_attn_no_decay
 model_type=fox_offset
-model_type=kernel_regression_attn_qk_norm
+# model_type=kernel_regression_attn_qk_norm
 
 dtype=bf16
 # dtype=fp32

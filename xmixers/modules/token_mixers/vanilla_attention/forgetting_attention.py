@@ -146,7 +146,13 @@ class ForgettingAttention(nn.Module):
             max_seqlen_q, max_seqlen_k = max_seq_lens
             if max_seqlen_q != max_seqlen_k:
                 assert max_seqlen_q == 1, "only support q_len == 1 for decoding"
-                output = attn_decoding_one_step(q, k, v, log_f, cu_seqlens=cu_seqlens)
+                output = attn_decoding_one_step(
+                    q.unsqueeze(0),
+                    k.unsqueeze(0),
+                    v.unsqueeze(0),
+                    log_f.unsqueeze(0),
+                    cu_seqlens=cu_seqlens,
+                )
             else:
                 output = parallel_forgetting_attn(
                     q.unsqueeze(0),
