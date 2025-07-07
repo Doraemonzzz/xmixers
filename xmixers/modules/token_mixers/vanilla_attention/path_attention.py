@@ -61,6 +61,7 @@ class PathAttention(nn.Module):
         init_std: float = 0.02,
         gain: float = 0.01,
         use_decay: bool = False,
+        use_beta: bool = True,
         **kwargs,
     ):
         super().__init__()
@@ -81,6 +82,7 @@ class PathAttention(nn.Module):
             kv_dim = self.kv_heads * self.head_dim
         self.threshold = threshold
         self.use_decay = use_decay
+        self.use_beta = use_beta
 
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.k_proj = nn.Linear(embed_dim, kv_dim, bias=bias)
@@ -90,7 +92,8 @@ class PathAttention(nn.Module):
             nn.Linear(embed_dim, self.head_dim, bias=bias),
             nn.Linear(self.head_dim, kv_dim, bias=bias),
         )
-        self.bet_proj = nn.Linear(embed_dim, num_heads, bias=bias)
+        if self.use_beta:
+            self.bet_proj = nn.Linear(embed_dim, num_heads, bias=bias)
         if self.use_decay:
             self.f_proj = nn.Linear(embed_dim, num_heads, bias=bias)
 
@@ -145,7 +148,10 @@ class PathAttention(nn.Module):
         k = self.k_proj(x)
         v = self.v_proj(x)
         w = self.w_proj(x)
-        beta = 2 * F.sigmoid(self.bet_proj(x))
+        if self.use_beta:
+            beta = 2 * F.sigmoid(self.bet_proj(x))
+        else:
+            beta = 2 * torch.ones(b, n, self.num_heads, device=x.device)
         log_f = None
         if self.use_decay:
             f = self.f_proj(x) + self.delta

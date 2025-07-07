@@ -256,6 +256,13 @@ def get_config(model_type):
         config.threshold = 0.99
         config.num_heads = 16
         config.embed_dim = 1024
+    elif model_type == "path_attn_no_beta":
+        config = LLaMAConfig()
+        config.token_mixer_type = "path_attn"
+        config.use_beta = False
+        config.threshold = 0.99
+        config.num_heads = 16
+        config.embed_dim = 1024
     elif model_type == "fox_offset":
         config = FlexGPTConfig()
         config.token_mixer_type = "forgetting_attn"
@@ -431,6 +438,7 @@ if __name__ == "__main__":
             "kernel_regression_attn_qk_norm",
             "path_attn",
             "path_attn_no_decay",
+            "path_attn_no_beta",
             "fox_offset",
         ],
     )

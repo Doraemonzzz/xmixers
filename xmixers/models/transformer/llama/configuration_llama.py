@@ -55,6 +55,7 @@ class LLaMAConfig(PretrainedConfig):
         threshold=0.99,
         token_mixer_norm_type="grouprmsnorm",
         use_qk_norm=False,
+        use_beta=True,
         ###### channel mixer config
         channel_mixer_type="glu",
         mid_dim=1024,
