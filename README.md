@@ -29,4 +29,4 @@ pip install -e .
 
 ## Training
 
-To reproduce the results of the paper, we conducted training using the [flame](https://github.com/Doraemonzzz/flame) framework. First, we configured the environment in accordance with flame's requirements, then used flame's training script, and only needed to replace "config" with the corresponding name.
+To reproduce the results of the paper, we conducted training using the [flame](https://github.com/Doraemonzzz/flame?tab=readme-ov-file#training-xmixers-models) framework. First, we configured the environment in accordance with flame's requirements, then used flame's training script, and only needed to replace "config" with the corresponding name.
