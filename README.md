@@ -4,115 +4,29 @@
 💬 <a href="https://discord.gg/ZpqcpSDE8g" target="_blank">Discord</a> •
 </p>
 
-# Introduction
+## Introduction
 This repository aims to implement SOTA efficient token/channel mixers. Any technologies related to non-Vanilla Transformer are welcome. If you are interested in this repository, please join our [Discord](https://discord.gg/ZpqcpSDE8g).
 
-# Roadmap
-- Token Mixers
-    - Linear Attention
-    - Linear RNN
-    - Long Convolution
-- Channel Mixers
+## Install
 
-# ToDo
-- [ ] Pad embed dim;
-  - [ ] hybrid, transformer, hybrid;
-- [ ] Update use bias to use offset;
+Install Torch(>=2.6.0), [fla](https://github.com/fla-org/flash-linear-attention), [xopes](https://github.com/Doraemonzzz/xopes.git) first, then install xmixers:
 
-# Finished Model
-- [x] Mpa
-- [x] T6
-- [x] Mla
-- [x] Hgrn2
-  - left varlen
-- [x] Hgrn2-scalar-decay
-  - left varlen
-- [x] Linear Transformer
-- [x] Llama
-- [x] Tnl
-- [x] Deltanet
-- [x] Vector Decay Deltanet
-- [x] Scalar Decay Deltanet
-- [ ] TTT
-  - [] Inference
-- [x] GSA
-- [ ] Titan
-- [x] NSA
-  - [ ] Inference
-- [x] Alibi
-- [x] GPT
-- [ ] Stick-breaking
-- [x] Forgetting Transformer
-- [x] Fsq kv
-- [x] Fsq kv mpa
-
-# Change to xopes
-- [x] Tnl
-- [x] Hgrn2
-- [x] Hgrn2-scalar-decay
-- [x] Linear Transformer
-- [x] Lightnet
-- [ ] Mamba2, need rm extra residual.
-
-# Pretrained weights
-
-- GPT
-  - Doreamonzzz/xmixers_gpt_120m_50b
-- LLaMA
-  - Doreamonzzz/xmixers_llama_120m_50b
--
-
-# ToDo
-- [ ] Add use cache for all module.
-- [ ] Add init state for linear attention.
-- [ ] Update attn mask treat for attention, mpa, tpa, mla;
-- [x] Update init weights for every model.
-- [ ] Rm bias for layernorm since it will raise nan error.
-  - [ ] linear attention
-    - [x] hgru2
-    - [x] hgru3
-  - [ ] vanilla attention
-    - [x] attention
-- [ ] Add causal.
-- [ ] Update _initialize_weights, _init_weights.
-  - [x] linear attention
-  - [x] vanilla attention
-  - [ ] long conv
-- [ ] Update cache for token mixer.
-  - linear attention
-    - [x] hgru3
-    - [ ] linear attention
-    - [ ] tnl attention
-  - long conv
-    - [ ] gtu
-  - vanilla attention
-    - [x] attention
-    - [ ] flex attention
-    - [x] mpa
-    - [ ] n_attention
-- [ ] Add special init.
-- [ ] Add causal.
-- [x] Clear next_decoder_cache.
-- [ ] Add varlen for softmax attn.
-
-## Model
-- [x] LLaMA.
-- [x] GPT.
-
-## Basic
-- [ ] Add data type for class and function.
-
-## Ops
-- [x] long_conv_1d_op.
-
-## Token Mixers
-- [x] Gtu.
-
-# Note
 ```
-[Feature Add]
-[Bug Fix]
-[Benchmark Add]
-[Document Add]
-[README Add]
+git clone https://github.com/Doraemonzzz/xmixers.git
+cd xmixers
+pip install -e .
 ```
+
+## Models
+
+| Paper                                                     | Code                                                         | Config                                                       |
+| --------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Elucidating the Design Space of Decay in Linear Attention | [Link](https://github.com/Doraemonzzz/xmixers/blob/main/xmixers/modules/token_mixers/linear_attention/decay_linear_attention.py), core code: line 247 to 262. | [Core method link](https://github.com/Doraemonzzz/flame/tree/main/configs/xmixers/decay_linear_transformer/decay_parameterize/hgrn3), [Ablation link](https://github.com/Doraemonzzz/flame/tree/main/configs/xmixers/decay_linear_transformer/decay_parameterize) |
+|                                                           |                                                              |                                                              |
+|                                                           |                                                              |                                                              |
+
+
+
+## Training
+
+To reproduce the results of the paper, we conducted training using the [flame](https://github.com/Doraemonzzz/flame) framework. First, we configured the environment in accordance with flame's requirements, then used flame's training script, and only needed to replace "config" with the corresponding name.
